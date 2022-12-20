@@ -13,11 +13,11 @@ import scipy.io
 from pathlib import Path
 
 # readin
-TEMP_FILE_DIR = "temp/"
+TEMP_FILE_DIR = "static/"
 
 
-def em_format(cc: float, position: np.ndarray, orientation: np.ndarray):
-    rx, ry, rz = orientation
+def em_format(particle):
+    rx, ry, rz = particle.direction
     # convert orientation vector into euler angles
     # PlaceObject uses "zxz" euler angles, but saved in the order "zzx"
     rotation_matrix = np.array([[0, 0, rx], [0, 0, ry], [0, 0, rz]])
@@ -25,14 +25,14 @@ def em_format(cc: float, position: np.ndarray, orientation: np.ndarray):
     euler_formatted = [euler[0], euler[2], euler[1]]
     # print("")
     return [
-        cc,
+        particle.cc_score,
         0.0,
         0,
         0,
         0,
         0,
         0,
-        *position,
+        *particle.position,
         0,
         0,
         0,
@@ -103,6 +103,7 @@ def read_imod(filename: str):
     """
     imod_inp = imodmodel.read(filename)
     return np.transpose(np.array([imod_inp[q] for q in ["x", "y", "z"]]))
+
 
 def read_emfile(filename: str):
     header, em_inp = emfile.read(filename)

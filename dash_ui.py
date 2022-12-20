@@ -10,7 +10,6 @@ import scipy.io
 import plotly.graph_objects as go
 import os
 import base64
-import pathlib
 from pathlib import Path
 
 # import io
@@ -28,12 +27,14 @@ import dash_daq as daq
 # flask server to save files
 from flask import Flask  # , send_from_directory
 
+import tracemalloc
+
 
 from classes import SubTomogram, Cleaner
 import read_write
 
 WHITE = "#FFFFFF"
-GREY  = "#646464"
+GREY = "#646464"
 BLACK = "#000000"
 
 server = Flask(__name__)
@@ -80,6 +81,12 @@ def colour_range(num_points):
     ]
 
 
+def mesh3d_trace(df, colour, opacity):
+    return go.Mesh3d(
+        x=df["x"], y=df["y"], z=df["z"], opacity=opacity, color=colour, alphahull=-1
+    )
+
+
 def scatter3d_trace(df, colour, opacity):
     return go.Scatter3d(
         x=df["x"],
@@ -92,7 +99,7 @@ def scatter3d_trace(df, colour, opacity):
     )
 
 
-def cone_trace(df, colour, opacity):
+def cone_trace(df, colour, opacity, sizeref=10):
     return go.Cone(
         x=df["x"],
         y=df["y"],
@@ -102,40 +109,32 @@ def cone_trace(df, colour, opacity):
         w=df["w"],
         text=df["n"],
         sizemode="scaled",
-        sizeref=10,
+        sizeref=sizeref,
         colorscale=[[0, colour], [1, colour]],
         showscale=False,
         opacity=opacity,
     )
 
-particle1 = ""
-particle2 = ""
-@app.callback(
-    Output("div-graph-data", "children"),
-    Input("graph-picking", "clickData"),
-    State("collapse-clean", "is_open")
-    )
-def display_params(clicked_point, currently_cleaning):
-    if not currently_cleaning: return
-    global particle1, particle2, subtomograms
-    clicked_particle_id = clicked_point["points"][0]["text"]
-    particle = 2
-    #case 1: no particles have been chosen
-    if particle1 == "":
-        particle1 = particle
-        return
-    #case 2: both particles already chosen, user wants a new pair
-    elif particle2 != "":
-        particle1 = particle
-        particle2 = ""
-        return
-    #case 3: user has chosen 2nd particle, display parameters between the pair
-    particle2 = particle
-    return particle1.calculate_params(particle2)
+
+# second_point_msg = "Pick a second point to see corresponding parameters"
+
+# @app.callback(
+#     Output("div-graph-data", "children"),
+#     Input("graph-picking", "clickData"),
+#     # State("collapse-clean", "is_open"),
+#     State("dropdown-tomo", "value"),
+# )
+# def display_params(clicked_point, tomo_id):
+#     if not clicked_point:
+#         return
+#     global particle1, particle2, subtomograms
+#     clicked_particle_pos = [clicked_point["points"][0][c] for c in ["x", "y", "z"]]
+#     return(subtomograms[tomo_id].show_particle_data(clicked_particle_pos))
 
 
 @app.callback(
     Output("graph-picking", "figure"),
+    Output("div-graph-data", "children"),
     Input("dropdown-tomo", "value"),
     Input("graph-picking", "clickData"),
     Input("switch-cone-plot", "on"),
@@ -149,20 +148,25 @@ def plot_tomo(
     global subtomograms
     # print("plot_tomo")
 
+    params_message = ""
+
     # Warning: must return a graph object in both of these, or breaks dash
     if not tomo_selection or not tomo_selection in subtomograms.keys():
-        return empty_graph
-    
+        return empty_graph, params_message
+
+    subtomo = subtomograms[tomo_selection]
+
     # clicked point lingers between calls, causing unwanted toggling when e.g.
     # switching to cones, and selected points can carry over to the next graph
     # prevent by clearing clicked_point if not actually from clicking a point
     if ctx.triggered_id != "graph-picking":
         clicked_point = ""
-
-    subtomo = subtomograms[tomo_selection]
+    else:
+        clicked_particle_pos = [clicked_point["points"][0][c] for c in ["x", "y", "z"]]
+        params_message = subtomo.show_particle_data(clicked_particle_pos)
 
     should_make_cones = make_cones and not subtomo.position_only
-    
+
     try:
         subtomo.reference_df
         has_ref = True
@@ -170,22 +174,28 @@ def plot_tomo(
         has_ref = False
 
     fig = go.Figure()
-    fig.update_scenes(xaxis_visible=False, yaxis_visible=False,zaxis_visible=False)
+    fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
     fig.update_layout(margin={"l": 20, "r": 20, "t": 20, "b": 20})
     fig["layout"]["uirevision"] = "a"
 
     # if subtomo not yet cleaned, just plot all points
     if len(subtomo.auto_cleaned_particles) == 0:
         if should_make_cones:
-            fig.add_trace(
-                cone_trace(subtomo.all_particles_df(), WHITE), 0.6
+            # have to fix dash cones error again
+            scale = 10 if params_message else 1
+            nonchecking_df = pd.concat(
+                (subtomo.nonchecking_particles_df(), subtomo.cone_fix_df())
             )
+            checking_df = pd.concat(
+                (subtomo.checking_particles_df(), subtomo.cone_fix_df())
+            )
+            fig.add_trace(cone_trace(nonchecking_df, WHITE, 0.6, scale))
+            fig.add_trace(cone_trace(checking_df, BLACK, 1))
         else:
-            fig.add_trace(
-                scatter3d_trace(subtomo.all_particles_df(), WHITE, 0.6
-            ))
+            fig.add_trace(scatter3d_trace(subtomo.all_particles_df(), WHITE, 0.6))
+            fig.add_trace(scatter3d_trace(subtomo.checking_particles_df(), BLACK, 1))
 
-        return fig
+        return fig, params_message
 
     if clicked_point:
         subtomo.toggle_selected(clicked_point["points"][0]["text"])
@@ -216,27 +226,29 @@ def plot_tomo(
 
         if should_make_cones:
             # cone fix
-            array = pd.concat([subtomo.cone_fix_df, array])
+            array = pd.concat([subtomo.cone_fix_df(), array])
             fig.add_trace(cone_trace(array, colour, opacity))
             if has_ref:
                 fig.add_trace(scatter3d_trace(subtomo.reference_df, GREY, 0.2))
         else:
-            fig.add_trace(go.Scatter3d(scatter3d_trace(array, colour, opacity)))
+            fig.add_trace(scatter3d_trace(array, colour, opacity))
+            # fig.add_trace(mesh3d_trace(array, colour, opacity))
             if has_ref:
                 fig.add_trace(scatter3d_trace(subtomo.reference_df, GREY, 0.2))
-    return fig
+    return fig, params_message
 
 
 @app.callback(
     Output("dropdown-filetype", "value"),
     Input("upload-data", "filename"),
 )
-def update_dropdown(filename):
-    if not filename: raise PreventUpdate
-    x = pathlib.Path(filename).suffix
+def update_filetype_dropdown(filename):
+    if not filename:
+        raise PreventUpdate
+    x = Path(filename).suffix
     print(x)
     try:
-        ext = pathlib.Path(filename).suffix
+        ext = Path(filename).suffix
     except:
         raise PreventUpdate
     return ext
@@ -248,8 +260,9 @@ def update_dropdown(filename):
     State("dropdown-tomo", "value"),
     Input("dropdown-tomo", "disabled"),
     Input("button-next-subtomogram", "n_clicks"),
+    Input("button-previous-subtomogram", "n_clicks"),
 )
-def update_dropdown(current_val, disabled, clicks):
+def update_dropdown(current_val, disabled, _, __):
     # unfortunately need to merge two callbacks here, dash does not allow multiple
     # callbacks with the same output so use ctx to distinguish between cases
     try:
@@ -262,22 +275,31 @@ def update_dropdown(current_val, disabled, clicks):
     if ctx.triggered_id == "dropdown-tomo":
         return subtomo_keys, subtomo_key_0
 
-    # moving to next item in dropdown when next subtomogram button pressed
-    else:
-        if not current_val:
-            return subtomo_keys, ""
-        current_index = subtomo_keys.index(current_val)
-        # loop back to start if at end of list
-        if len(subtomo_keys) == current_index + 1:
-            return subtomo_keys, subtomo_key_0
-        else:
-            return subtomo_keys, subtomo_keys[subtomo_keys.index(current_val) + 1]
+    # moving to next/prev item in dropdown when next/prev subtomogram button pressed
+    if not current_val:
+        return subtomo_keys, ""
+    current_index = subtomo_keys.index(current_val)
+
+    match ctx.triggered_id:
+        case "button-next-subtomogram":
+            # loop back to start if at end of list
+            if len(subtomo_keys) == current_index + 1:
+                new_val = subtomo_key_0
+            else:
+                new_val = subtomo_keys[subtomo_keys.index(current_val) + 1]
+        case "button-previous-subtomogram":
+            if current_index == 0:
+                new_val = subtomo_keys[-1]
+            else:
+                new_val = subtomo_keys[subtomo_keys.index(current_val) - 1]
+    return subtomo_keys, new_val
 
 
 @app.callback(
     Output("label-read", "children"),
     Output("dropdown-tomo", "disabled"),
     Output("collapse-upload", "is_open"),
+    Output("collapse-graph-control", "is_open"),
     Output("collapse-clean", "is_open"),
     Output("collapse-proximity", "is_open"),
     Input("button-read", "n_clicks"),
@@ -285,11 +307,12 @@ def update_dropdown(current_val, disabled, clicks):
     State("upload-data", "contents"),
     State("slider-num-images", "value"),
     State("radio-cleantype", "value"),
+    long_callback=True
     # State("dropdown-filetype", "value")
 )
 def read_subtomograms(clicks, filename, contents, num_images, cleaning_type):
     if not filename:
-        return "", True, True, False, False
+        return "", True, True, False, False, False
 
     global subtomograms
     subtomograms = dict()
@@ -320,17 +343,17 @@ def read_subtomograms(clicks, filename, contents, num_images, cleaning_type):
                 "cycle000"
             ]["geometry"]
         except:
-            return "Matlab File Unreadable", True, True, False, False
+            return "Matlab File Unreadable", True, True, False, False, False
     elif ".mod" in filename:
         try:
             imod_data = read_write.read_imod(temp_file_path)
         except:
-            return "Invalid file", True, True, False, False
+            return "Invalid file", True, True, False, False, False
         subtomo = SubTomogram.tomo_from_imod(Path(filename).stem, imod_data)
         subtomograms[subtomo.name] = subtomo
-        return "Tomogram read", False, False, *clean_open
+        return "Tomogram read", False, False, True, *clean_open
     else:
-        return "Unrecognised file extension", True, True, False, False
+        return "Unrecognised file extension", True, True, False, False, False
 
     print(geom.keys())
 
@@ -353,7 +376,7 @@ def read_subtomograms(clicks, filename, contents, num_images, cleaning_type):
 
         subtomograms[gkey] = subtomo
 
-    return "Tomograms read", False, False, *clean_open
+    return "Tomograms read", False, False, True, *clean_open
 
 
 def clean_subtomo(subtomo, clean_params):
@@ -361,13 +384,15 @@ def clean_subtomo(subtomo, clean_params):
 
     subtomo.set_clean_params(clean_params)
 
+    subtomo.reset_cleaning()
+
     subtomo.autoclean()
 
     print(subtomo.particle_fate_table())
 
     print("time for {}:".format(subtomo.name), time() - t0)
 
-    subtomo.gen_array_grouping()
+    subtomo.generate_particle_df()
 
 
 def prox_clean_subtomo(subtomo, dist_min, dist_max):
@@ -458,7 +483,7 @@ def run_prox_cleaning(
 @app.callback(
     Output("button-next-subtomogram", "disabled"),
     Output("collapse-clean", "is_open"),
-    Output("collapse-graph-control", "is_open"),
+    Output("collapse-save", "is_open"),
     State("inp-dist-goal", "value"),
     State("inp-dist-tol", "value"),
     State("inp-ori-goal", "value"),
@@ -471,6 +496,7 @@ def run_prox_cleaning(
     Input("button-full-clean", "n_clicks"),
     Input("button-preview-clean", "n_clicks"),
     prevent_initial_call=True,
+    long_callback=True,
 )
 def run_cleaning(
     dist_goal: float,
@@ -499,7 +525,7 @@ def run_cleaning(
             clicks or clicks2,
         ]
     ):
-        # print("Not all cleaning parameters set")
+        print("Not all cleaning parameters set")
         return True, True, False
     # print(inp_file)
     # subtomo = SubTomogram(name, particles)
@@ -517,9 +543,11 @@ def run_cleaning(
     )
 
     if ctx.triggered_id == "button-preview-clean":
+        print("Preview")
         clean_subtomo(list(subtomograms.values())[0], clean_params)
         return False, True, True
     else:
+        print("Full")
         for subtomo in subtomograms.values():
             clean_subtomo(subtomo, clean_params)
     return False, False, True
@@ -561,7 +589,7 @@ param_table = html.Table(
         html.Tr(
             [
                 html.Td("Orientation"),
-                inp_num("ori-goal", 2),
+                inp_num("ori-goal", 15),
                 html.Td("±"),
                 inp_num("ori-tol", 10),
             ]
@@ -767,12 +795,6 @@ graph_controls_table = html.Table(
         ),
         html.Tr(
             [
-                html.Td("Keep selected particles", id="label-keep-particles"),
-                daq.BooleanSwitch(id="switch-keep-particles", on=True),
-            ]
-        ),
-        html.Tr(
-            [
                 html.Td("Cone Plot", id="label-cone-plot"),
                 daq.BooleanSwitch(id="switch-cone-plot", on=False),
             ]
@@ -781,6 +803,35 @@ graph_controls_table = html.Table(
             [
                 html.Td("Show Removed Particles", id="label-show-removed"),
                 daq.BooleanSwitch(id="switch-show-removed", on=False),
+            ]
+        ),
+        html.Tr(
+            [
+                html.Td(
+                    dbc.Button(
+                        "Previous Subtomogram",
+                        id="button-previous-subtomogram",
+                    ),
+                )
+            ]
+        ),
+    ],
+    style={  #'float':'left',
+        "overflow": "hidden",
+        "margin": "3px",
+        "width": "100%"
+        #'borderWidth': '1px',
+        #'borderStyle': 'dashed',
+        #'borderRadius': '5px'
+    },
+)
+
+save_table = html.Table(
+    [
+        html.Tr(
+            [
+                html.Td("Keep selected particles", id="label-keep-particles"),
+                daq.BooleanSwitch(id="switch-keep-particles", on=True),
             ]
         ),
         html.Tr(
@@ -801,8 +852,8 @@ graph_controls_table = html.Table(
             ]
         ),
         html.Tr(html.Td(dbc.Button("Save Particles", id="button-save"))),
-        dcc.Link("Download Output File", id="link-download", href="a"),
-        dcc.Download(id="download-file")
+        # dcc.Link("Download Output File", id="link-download", href="a"),
+        dcc.Download(id="download-file"),
     ],
     style={  #'float':'left',
         "overflow": "hidden",
@@ -813,7 +864,6 @@ graph_controls_table = html.Table(
         #'borderRadius': '5px'
     },
 )
-
 
 cleaning_type_div = emptydiv = html.Div(
     [
@@ -836,6 +886,7 @@ graph_controls_card = collapsing_card(
     card("Graph Controls", graph_controls_table), "graph-control"
 )
 
+save_card = collapsing_card(card("Save Result", save_table), "save")
 
 graph = dcc.Graph(id="graph-picking", figure=empty_graph)
 
@@ -858,6 +909,7 @@ app.layout = html.Div(
                         html.Td(cleaning_params_card),
                         html.Td(proximity_params_card),
                         html.Td(graph_controls_card),
+                        html.Td(save_card),
                     ]
                 )
             )
@@ -868,7 +920,8 @@ app.layout = html.Div(
                 dbc.Button(
                     "Next Subtomogram",
                     id="button-next-subtomogram",
-                    style={"width": "100%"},
+                    size="lg",
+                    style={"width": "100%", "height": "100px"},
                 )
             )
         ),
@@ -899,7 +952,7 @@ def graph_visibility(t_id):
 
 
 @app.callback(
-    #Output("link-download", "href"),
+    # Output("link-download", "href"),
     Output("download-file", "data"),
     State("input-save-filename", "value"),
     State("upload-data", "filename"),
@@ -907,6 +960,7 @@ def graph_visibility(t_id):
     State("checklist-save-additional", "value"),
     Input("button-save", "n_clicks"),
     prevent_initial_call=True,
+    long_callback=True,
 )
 def save_result(output_name, input_name, keep_selected, save_additional, clicks):
     if not output_name:
@@ -918,7 +972,7 @@ def save_result(output_name, input_name, keep_selected, save_additional, clicks)
         return None
 
     if ".em (Place Object)" in save_additional:
-        read_write.write_emfile(subtomograms, False)
+        read_write.write_emfile(subtomograms, "out", keep_selected)
     read_write.modify_emc_mat(
         subtomograms,
         TEMP_FILE_DIR + output_name,
@@ -933,4 +987,6 @@ def save_result(output_name, input_name, keep_selected, save_additional, clicks)
     return dcc.send_file(out_file)
 
 
+tracemalloc.start()
 app.run_server(debug=True, use_reloader=False)
+tracemalloc.stop()

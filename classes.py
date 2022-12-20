@@ -67,6 +67,7 @@ class Cleaner:
 
     @staticmethod
     def ang_range_dotprod(angle_ideal, angle_tolerance):
+        # print("ideal angle: ", angle_ideal, "tolerance: ", angle_tolerance)
         if not within(angle_ideal, [0, 180]):
             angle_ideal = angle_ideal % 180
             print("Angle between adjacent particles must be between 0 and 180 degrees")
@@ -86,6 +87,8 @@ class Cleaner:
         elif max_ang > 180:
             min_ang = min(min_ang, 360 - max_ang)
             max_ang = 180
+
+        # print("result:", [np.degrees(np.arccos(np.cos(np.radians(ang)))) for ang in [max_ang, min_ang]])
 
         return [np.cos(np.radians(ang)) for ang in [max_ang, min_ang]]
 
@@ -167,26 +170,27 @@ class Particle:
         self.neighbours = good_orientation
 
     def filter_neighbour_position(self, pos_range):
-        nearby_particles = {
+        good_displacement = {
             neighbour
             for neighbour in self.neighbours
             if within(self.dot_displacement(neighbour), pos_range)
         }
-        self.neighbours = nearby_particles
+        self.neighbours = good_displacement
 
     def dot_direction(self, particle):
+        "Dot product of two particles' orientations"
         return np.vdot(self.direction, particle.direction)
 
     def dot_displacement(self, particle):
+        "Dot product of particle's orientation with its displacement from second particle"
         return np.vdot(particle.direction, normalise(self.displacement_from(particle)))
 
     def choose_protein_array(self):
         all_protein_arrays = self.subtomo.protein_arrays
         neighbours = self.neighbours
-        local_protein_arrays = {
-            neighbour.protein_array for neighbour in self.neighbours
-        }
+        local_protein_arrays = {neighbour.protein_array for neighbour in neighbours}
         local_protein_arrays.discard(0)
+        # print("options", local_protein_arrays)
 
         # possibilities:
         # all particles have no protein_array (assign new)
@@ -196,20 +200,25 @@ class Particle:
         # if no local particles are part of an array, define a new one for them
         if len(local_protein_arrays) == 0:
             new_protein_array = max(all_protein_arrays.keys()) + 1
+            # print("making new", new_protein_array)
             all_protein_arrays[new_protein_array] = set()
             for particle in {self, *neighbours}:
                 particle.set_protein_array(new_protein_array)
         # if one local particle is part of an array, add the rest to it
         elif len(local_protein_arrays) > 0:
+            # print("Choosing min", min(local_protein_arrays))
             for particle in {self, *neighbours}:
                 particle.set_protein_array(min(local_protein_arrays))
-        # if particles belong to multiple arrays already, assimilate them all
+
+        # next, if particles belong to multiple arrays already, assimilate them all
         # into a single array
         if len(local_protein_arrays) > 1:
+            # print("Assimilating")
             self.assimilate_protein_arrays(local_protein_arrays)
 
     def set_protein_array(self, ar: int):
-        # object.__setattr__(self, "protein_array", ar)
+        if self.protein_array:
+            self.subtomo.protein_arrays[self.protein_array].discard(self)
         self.protein_array = ar
         self.subtomo.protein_arrays[ar].add(self)
 
@@ -229,7 +238,7 @@ class Particle:
         """
         # choose a random array to assimilate the rest into
         all_arrays = self.subtomo.protein_arrays
-        particles = self.particles
+        particles = self.subtomo.all_particles
         assimilate_to = assimilate_arrays.pop()
         for particle in particles:
             if particle.protein_array in assimilate_arrays:
@@ -238,17 +247,22 @@ class Particle:
             del all_arrays[array]
 
     def make_neighbours(self, particle2):
+        "Define two particles as neighbours"
         self.neighbours.add(particle2)
         particle2.neighbours.add(self)
-    
+
     def calculate_params(self, particle2):
+        "Return set of useful parameters about two particles"
         distance = self.distance2(particle2) ** 0.5
-        orientation = self.dot_direction(particle2)
-        displacement = self.dot_displacement(particle2)
-        return distance, orientation, displacement
+        orientation = np.degrees(np.arccos(self.dot_direction(particle2)))
+        displacement = np.degrees(np.arccos(self.dot_displacement(particle2)))
+        return "Distance: {:.1f}\nOrientation: {:.1f}°\nDisplacement: {:.1f}°".format(
+            distance, orientation, displacement
+        )
 
     @staticmethod
     def from_geom_mat(subtomo, garr: np.ndarray, cc_thresh):
+        "Read set of particles from matlab array"
         particles = set()
         for idx, pdata in enumerate(garr):
             # if pdata[0] < cc_thresh:
@@ -262,16 +276,18 @@ class Particle:
 
     @staticmethod
     def from_imod(imod_data, subtomo):
+        "Read set of particles from imod model"
         particles = set()
         blank_orientation = [0, 0, 1]
         for x in imod_data:
             particles.add(Particle(0, 9999, x, blank_orientation, particles, subtomo))
         return particles
 
-    @staticmethod
-    def from_em(em_df, subtomo):
-        particles = set()
-        pass
+    # @staticmethod
+    # def from_em(em_df, subtomo):
+    #     particles = set()
+    #     pass
+
 
 class SubTomogram:
     name: str
@@ -282,6 +298,8 @@ class SubTomogram:
     selected_n: set()
     # manual_cleaned_particles: set()
 
+    checking_particles: list
+
     position_only: bool
 
     protein_arrays: defaultdict
@@ -289,7 +307,7 @@ class SubTomogram:
     particles_fate: defaultdict
 
     particle_df_dict: dict()
-    cone_fix_df: pd.DataFrame
+    cone_fix: pd.DataFrame
 
     # keep_selected: bool
 
@@ -310,6 +328,8 @@ class SubTomogram:
         self.auto_cleaned_particles = set()
         self.particles_fate = defaultdict(lambda: set())
         self.reference_points = set()
+        self.checking_particles = []
+        self.cone_fix = None
 
     @staticmethod
     def tomo_from_mat(name, mat_geom):
@@ -325,13 +345,13 @@ class SubTomogram:
         subtomo.set_particles(Particle.from_imod(imod_struct, subtomo))
         subtomo.position_only = True
         return subtomo
-    
-    @staticmethod
-    def tomo_from_em(name, em_df):
-        subtomo = SubTomogram(name)
-        particles = Particle.from_em(em_df, subtomo)
-        subtomo.position_only = False
-        return subtomo
+
+    # @staticmethod
+    # def tomo_from_em(name, em_df):
+    #     subtomo = SubTomogram(name)
+    #     particles = Particle.from_em(em_df, subtomo)
+    #     subtomo.position_only = False
+    #     return subtomo
 
     # @staticmethod
     # def tomo_from_imod(name, imod_filename):
@@ -375,7 +395,7 @@ class SubTomogram:
     def proximity_clean(self, drange):
         self.auto_cleaned_particles = set()
         prox_range = drange
-        print(prox_range)
+        # print(prox_range)
         ref_regions = SubTomogram.assign_regions(
             self.reference_points, max(prox_range) ** 0.5
         )
@@ -401,6 +421,12 @@ class SubTomogram:
         self.particle_df_dict = {
             1: pd.DataFrame(particle_data, columns=["x", "y", "z", "n"])
         }
+
+    def reset_cleaning(self):
+        keys = set(self.protein_arrays.keys()).copy()
+        for n in keys:
+            self.delete_array(n)
+        self.protein_arrays[0] = set()
 
     def find_particle_neighbours(self, drange):
         particles = self.all_particles
@@ -440,6 +466,13 @@ class SubTomogram:
             ",".join({str(n) for n in self.selected_n}),
         )
 
+    def get_particle_from_position(self, position):
+        rough_pos = np.around(position, decimals=0)
+        for particle in self.all_particles:
+            if all(np.around(particle.position, decimals=0) == rough_pos):
+                return particle
+        return 0
+
     def set_particles(self, particles):
         self.all_particles = particles
         # self.sample_particle = next(iter(particles))
@@ -471,48 +504,69 @@ class SubTomogram:
             if not particle.protein_array in self.selected_n
         }
 
-    def all_particles_df(self):
+    @staticmethod
+    def particles_to_df(particles):
         particle_data = [
             [*particle.position, *particle.direction, particle.protein_array]
-            for particle in self.all_particles
+            for particle in particles
         ]
         return pd.DataFrame(particle_data, columns=["x", "y", "z", "u", "v", "w", "n"])
 
+    def all_particles_df(self):
+        return SubTomogram.particles_to_df(self.all_particles)
+
+    def nonchecking_particles_df(self):
+        unchecking = self.all_particles.difference(set(self.checking_particles))
+        return SubTomogram.particles_to_df(unchecking)
+
+    def checking_particles_df(self):
+        return SubTomogram.particles_to_df(set(self.checking_particles))
+
     def autoclean(self):
-        self.all_particles = {particle for particle in self.all_particles if particle.cc_score > self.cleaning_params.cc_threshold}
+        self.all_particles = {
+            particle
+            for particle in self.all_particles
+            if particle.cc_score > self.cleaning_params.cc_threshold
+        }
         self.find_particle_neighbours(self.cleaning_params.dist_range)
         for particle in self.all_particles:
+            # if already assigned protein array, has
+            # already been verified by neighbour
+            # if particle.protein_array:
+            #     continue
             neighbours = particle.neighbours
 
             if len(neighbours) < self.cleaning_params.min_neighbours:
                 self.particles_fate["low_neighbours"].add(particle)
-                particle.set_protein_array(0)
                 continue
             # check correct orientation
             particle.filter_neighbour_orientation(self.cleaning_params.ori_range)
             if len(particle.neighbours) < self.cleaning_params.min_neighbours:
                 self.particles_fate["wrong_ori"].add(particle)
-                particle.set_protein_array(0)
                 continue
             # check correct positioning
             particle.filter_neighbour_position(self.cleaning_params.pos_range)
             if len(particle.neighbours) < self.cleaning_params.min_neighbours:
                 self.particles_fate["wrong_disp"].add(particle)
-                particle.set_protein_array(0)
                 continue
-            # if good, allocate protein_array for later checks
 
+            # if good, assign to protein array
             particle.choose_protein_array()
-            [
-                self.auto_cleaned_particles.add(p)
-                for p in [particle, *particle.neighbours]
-            ]
 
-        for protein_array in self.protein_arrays.values():
+        # can't check size of array until all particles allocated
+
+        # can't delete arrays within loop, changes size of dict
+        bad_arrays = set()
+        for akey, protein_array in self.protein_arrays.items():
             if len(protein_array) < self.cleaning_params.min_array_size:
+                bad_arrays.add(akey)
                 for particle in protein_array:
-                    self.auto_cleaned_particles.discard(particle)
                     self.particles_fate["small_array"].add(particle)
+            else:
+                for particle in protein_array:
+                    self.auto_cleaned_particles.add(particle)
+        for akey in bad_arrays:
+            self.delete_array(akey)
 
     def particle_fate_table(self):
         pf = self.particles_fate
@@ -532,15 +586,12 @@ class SubTomogram:
         )
         return out_table
 
-    def gen_array_grouping(self):
+    def cone_fix_df(self):
+        if self.cone_fix is not None:
+            return self.cone_fix
 
         particle_df = self.all_particles_df()
-
-        # split into one dataframe for each array
-        self.particle_df_dict = dict(iter(particle_df.groupby("n")))
-
-        # the rest of this function is an extremely hacky fix for an extremely
-        # daft problem with plotly, see cone_fix_readme.txt
+        # see cone_fix_readme.txt for explanation
 
         # locate lower corner of plot, and find overall size
         max_series = particle_df.max()
@@ -566,13 +617,40 @@ class SubTomogram:
         for ind in ["u", "v", "w", "n"]:
             cone_fix_df[ind] = orient
 
-        self.cone_fix_df = cone_fix_df
+        self.cone_fix = cone_fix_df
+
+    def generate_particle_df(self):
+
+        particle_df = self.all_particles_df()
+        # split into one dataframe for each array
+        self.particle_df_dict = dict(iter(particle_df.groupby("n")))
 
     def toggle_selected(self, n):
         if n in self.selected_n:
             self.selected_n.remove(n)
         else:
             self.selected_n.add(n)
+
+    def show_particle_data(self, position):
+        new_particle = self.get_particle_from_position(position)
+        if len(self.checking_particles) != 1:
+            self.checking_particles = [new_particle]
+            return "Pick a second point"
+
+        self.checking_particles.append(new_particle)
+
+        if self.checking_particles[0] == self.checking_particles[1]:
+            return "Please choose two separate points"
+
+        return self.checking_particles[0].calculate_params(self.checking_particles[1])
+
+    def delete_array(self, n):
+        # can't change size of array while iterating
+        array_particles = self.protein_arrays[n].copy()
+        for particle in array_particles:
+            particle.set_protein_array(0)
+            self.auto_cleaned_particles.discard(particle)
+        self.protein_arrays.pop(n)
 
 
 def normalise(vec: np.ndarray):
