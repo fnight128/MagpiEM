@@ -12,6 +12,13 @@ from scipy.spatial.transform import Rotation as R
 import scipy.io
 from pathlib import Path
 
+MAT_KEY = "cycle000"
+
+if MAT_KEY == "cycle000":
+    MAT_KEY2 = "geometry"
+else:
+    MAT_KEY2 = "Avg_geometry"
+
 # readin
 TEMP_FILE_DIR = "static/"
 
@@ -53,7 +60,7 @@ def modify_emc_mat(
         table_rows = list()
         try:
             mat_out = scipy.io.loadmat(inp_path, simplify_cells=True)
-            mat_inp = mat_out["subTomoMeta"]["cycle000"]["geometry"]
+            mat_inp = mat_out["subTomoMeta"][MAT_KEY][MAT_KEY2]
         except:
             print("Unable to open original matlab file, was it moved?")
             return ""
@@ -67,7 +74,7 @@ def modify_emc_mat(
         output_data[tomo_id] = table_rows
 
     try:
-        mat_out["subTomoMeta"]["cycle000"]["geometry"] = output_data
+        mat_out["subTomoMeta"][MAT_KEY][MAT_KEY2] = output_data
         scipy.io.savemat(out_path, mdict=mat_out)
     except:
         print("Unable to save file")

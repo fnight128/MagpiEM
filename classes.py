@@ -10,6 +10,7 @@ import math
 from prettytable import PrettyTable
 from collections import defaultdict
 from time import time
+from scipy.spatial.transform import Rotation as R
 
 ADJ_RANGE = [-1, 0, 1]
 ADJ_AREA_GEN = [[i, j, k] for i in ADJ_RANGE for j in ADJ_RANGE for k in ADJ_RANGE]
@@ -134,6 +135,10 @@ class Particle:
 
     protein_array: int = 0
 
+    strip: int
+
+    parallel_neighbours: set()
+
     def __init__(self, p_id, cc, position, orientation, particle_set, subtomo):
         self.particle_id = p_id
         self.cc_score = cc
@@ -142,18 +147,27 @@ class Particle:
         self.particles = particle_set
         self.subtomo = subtomo
         self.neighbours = set()
+        self.parallel_neighbours = set()
 
     def __hash__(self):
         return int.from_bytes(str(self.position).encode("utf-8"), "little")
 
     def __str__(self):
-        return "x:{:.2f}, y:{:.2f}, z:{:.2f}".format(*self.position)
+        return "Particle: x:{:.2f}, y:{:.2f}, z:{:.2f}".format(*self.position)
+
+    def __eq__(self, other):
+        if type(other) != Particle:
+            return False
+        same_id = self.particle_id == other.particle_id
+        same_pos = all(np.around(self.displacement_from(other), 3))
+        same_tomo = self.subtomo.name == other.subtomo.name
+        return same_id and same_pos and same_tomo
 
     def output_dict(self):
         return {"cc": self.cc_score, "pos": self.position, "ori": self.direction}
 
     def displacement_from(self, particle):
-        "Displacement vector between two particles"
+        "Displacement vector from particle2 to self"
         return self.position - particle.position
 
     def distance2(self, particle):
@@ -179,16 +193,22 @@ class Particle:
 
     def dot_direction(self, particle):
         "Dot product of two particles' orientations"
-        return np.vdot(self.direction, particle.direction)
+        dotd = np.vdot(self.direction, particle.direction)
+        if dotd > 1.0: return 1.0
+        else: return dotd
 
     def dot_displacement(self, particle):
         "Dot product of particle's orientation with its displacement from second particle"
         return np.vdot(particle.direction, normalise(self.displacement_from(particle)))
 
-    def choose_protein_array(self):
+    def choose_protein_array(self, parallel=False):
         all_protein_arrays = self.subtomo.protein_arrays
-        neighbours = self.neighbours
-        local_protein_arrays = {neighbour.protein_array for neighbour in neighbours}
+        if parallel:
+            neighbours = self.parallel_neighbours
+            local_protein_arrays = {neighbour.protein_array for neighbour in neighbours if len(neighbour.parallel_neighbours) < 3}
+        else:
+            neighbours = self.neighbours
+            local_protein_arrays = {neighbour.protein_array for neighbour in neighbours}
         local_protein_arrays.discard(0)
         # print("options", local_protein_arrays)
 
@@ -251,9 +271,14 @@ class Particle:
         self.neighbours.add(particle2)
         particle2.neighbours.add(self)
 
+    def make_parallel_neighbours(self, particle2):
+        self.parallel_neighbours.add(particle2)
+        particle2.parallel_neighbours.add(self)
+
     def calculate_params(self, particle2):
         "Return set of useful parameters about two particles"
         distance = self.distance2(particle2) ** 0.5
+        print(self.dot_direction(particle2))
         orientation = np.degrees(np.arccos(self.dot_direction(particle2)))
         displacement = np.degrees(np.arccos(self.dot_displacement(particle2)))
         return "Distance: {:.1f}\nOrientation: {:.1f}°\nDisplacement: {:.1f}°".format(
@@ -287,6 +312,47 @@ class Particle:
     # def from_em(em_df, subtomo):
     #     particles = set()
     #     pass
+
+    def set_position(self, pos: np.ndarray):
+        self.position = pos
+
+    def translate(self, displacement):
+        self.position += displacement
+
+    def count_neighbours(self, dist_range):
+        for particle2 in self.subtomo.all_particles:
+            if within(self.distance2(particle2), dist_range):
+                self.make_neighbours(particle2)
+        return len(self.neighbours)
+
+    def has_perfect_neighbours(self, dist_range):
+        for neighbour in self.neighbours:
+            if neighbour.count_neighbours(dist_range) != 6:
+                return False
+            # if len(neighbour.neighbours) < 6:
+            #     neighbour.count_neighbours(dist_range)
+            # if len(neighbour.neighbours) < 6:
+            #    # neighbour is imperfect -> centre is imperfect
+            #    return False
+        else:
+            return True
+
+    def distance2_from_position(self, position):
+        return np.linalg.norm(self.position - position)
+
+    def get_next_neighbour(self, neighbour1):
+        displacement_from_n1 = self.displacement_from(neighbour1)
+        new_position = self.position + displacement_from_n1
+        print("")
+        for neighbour2 in self.neighbours:
+            if neighbour2.distance2_from_position(new_position) < 30:
+                print("new position", new_position)
+                print(neighbour1, "->", self, "->", neighbour2)
+                print("displacement", displacement_from_n1)
+                print("distance from new particle ", neighbour2.distance2_from_position(new_position))
+                return neighbour2
+        else:
+            return
 
 
 class SubTomogram:
@@ -620,7 +686,6 @@ class SubTomogram:
         self.cone_fix = cone_fix_df
 
     def generate_particle_df(self):
-
         particle_df = self.all_particles_df()
         # split into one dataframe for each array
         self.particle_df_dict = dict(iter(particle_df.groupby("n")))
@@ -651,6 +716,177 @@ class SubTomogram:
             particle.set_protein_array(0)
             self.auto_cleaned_particles.discard(particle)
         self.protein_arrays.pop(n)
+
+    def rotate_positions(self, rotat: R):
+        for particle in self.all_particles:
+            particle.set_position(rotat.apply(particle.position))
+
+    def translate_particles(self, displacement):
+        for particle in self.all_particles:
+            particle.translate(displacement)
+
+    def find_great_particle(self, dist_range):
+        for particle in self.all_particles:
+            # first, ensure has 6 neighbours
+            if particle.count_neighbours(dist_range) != 6:
+                continue
+            # then, check all neighbours have 6 neighbours too to ensure quality
+            if particle.has_perfect_neighbours(dist_range):
+                return particle
+                break
+        else:
+            assert False, "No good particle found"
+
+    def rotate_particles_zxplane(self):
+        # only runs once, and only hundreds of particles (not thousands)
+        # to search through, so more efficient to just brute force
+        # search rather than using regions as normally would
+        dist_range = [45**2, 65**2]
+        self.find_particle_neighbours(dist_range)
+        great_particle = self.find_great_particle(dist_range)
+
+        # move particles so chosen particle is at [0,0,0], to centre rotations
+        self.translate_particles(-great_particle.position)
+
+        # find a vector to align to z
+        neighbour1 = great_particle.neighbours.pop()
+        norm_displacement = normalise(great_particle.displacement_from(neighbour1))
+
+        print("norm disp", norm_displacement)
+
+        cross = np.cross(norm_displacement, [0, 0, 1])
+        cross_magnitude = np.linalg.norm(cross)
+        normalised_cross = cross / cross_magnitude
+
+        # get angles from vector algebra
+        # cos_ang = norm_displacement[2]
+        sin_ang = cross_magnitude
+
+        rvec = normalised_cross * np.arcsin(sin_ang)
+
+        print("rvec", rvec)
+
+        simplifying_rotation = R.from_rotvec(rvec)
+
+        # simplifying_rotation = simplifying_rotation.inv()
+        print("rotation", simplifying_rotation)
+
+        # for particle in self.all_particles:
+        #     particle.set_protein_array(1)
+
+        # great_particle.set_protein_array(2)
+        # neighbour1.set_protein_array(2)
+
+        # rotate all particles to this new frame with the displacement along z
+        self.rotate_positions(simplifying_rotation)
+
+        # now do the same, rotating about the z axis to get another displacement
+        # in the x-y plane
+        neighbour2 = great_particle.neighbours.pop()
+        # need to make sure next example particle is not along z too
+        approx_disp1 = np.around(
+            great_particle.displacement_from(neighbour1), decimals=-2
+        )
+        approx_disp2 = np.around(
+            great_particle.displacement_from(neighbour2), decimals=-1
+        )
+        if all(approx_disp1 == approx_disp2):
+            # only 1 bad option, so if it's bad, just choose any other
+            # random one instead
+            temp_particle = great_particle.neighbours.pop()
+            great_particle.make_neighbours(neighbour2)
+            neighbour2 = temp_particle
+
+        # now rotate so this displacement has no y component
+        norm_displacement2 = normalise(great_particle.displacement_from(neighbour2))
+        # flattened_length = np.hypot(norm_displacement2[0], norm_displacement2[1])
+        # ideal_displacement2 = normalise(np.array([flattened_length, 0, norm_displacement2[2]]))
+
+        # angle = np.arccos(np.vdot(norm_displacement2, ideal_displacement2))
+        # this is not the right angle!
+
+        angle = -np.arctan(norm_displacement2[1] / norm_displacement2[0])
+        angle_mod = 2 * np.pi - angle
+        print("angle", np.degrees(angle))
+        print("2pi-angle", np.degrees(angle_mod))
+
+        rvec2 = np.array([0, 0, angle])
+
+        rotation2 = R.from_rotvec(rvec2)
+
+        neighbour2.set_protein_array(2)
+        self.rotate_positions(rotation2)
+
+        print("centre", great_particle.position)
+        print("n1", neighbour1.position)
+        print("n2", neighbour2.position)
+
+        # self.assign_particles_strips()
+
+        # self.generate_particle_df()
+
+    def group_particles_by_displacement_zdirection(self):
+        # avg_dist = 55
+        # first, identify a direc
+
+        model_particles = set()
+
+        for particle in self.all_particles:
+
+            # first, find displacements roughly parallel to z
+            particle.parallel_neighbours = {
+                neighbour
+                for neighbour in particle.neighbours
+                if np.abs(normalise(particle.displacement_from(neighbour))[2]) > 0.9
+            }
+
+            # remove clumps at ends of ellipsoid
+            # if len(particle.neighbours) > 2: continue
+
+            if len(particle.parallel_neighbours) == 1:
+                model_particles.add(particle)
+                
+        
+        print("")
+        print("going through models")
+        for particle in model_particles:
+            print(particle)
+            neighbour = list(particle.parallel_neighbours)[0]
+            current_particle = particle
+            while current_particle:
+                next_particle = current_particle.get_next_neighbour(neighbour)
+                if not next_particle:
+                    break
+                neighbour = current_particle
+                current_particle = next_particle
+                current_particle.make_parallel_neighbours(neighbour)
+
+        for particle in self.all_particles:
+            if len(particle.parallel_neighbours) < 3:
+                particle.choose_protein_array(parallel=True)
+
+        self.generate_particle_df()
+    
+    def find_particle_ellipse(self):
+        pass
+
+    def assign_particles_strips(self):
+        dist = 54
+        half_dist = dist / 2
+        for particle in self.all_particles:
+            particle.set_protein_array(
+                np.round((particle.position[0] - half_dist) % dist)
+            )
+
+    def fit_ellipsoid(self):
+        pass
+
+
+# Ax^2 + By^2 + Cz^2 + 2Dxy + 2Exz + 2Fyz + 2Gx + 2Hy + 2Iz = 1
+
+
+def ellipse_approximation(data, A, B, C, D, E, F, G, H, I):
+    pass
 
 
 def normalise(vec: np.ndarray):

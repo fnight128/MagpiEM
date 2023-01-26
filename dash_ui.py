@@ -11,13 +11,14 @@ import plotly.graph_objects as go
 import os
 import base64
 from pathlib import Path
+import diskcache
 
 # import io
 import glob
 from time import time
 
 # import dash
-from dash import dcc, html, State, ctx
+from dash import dcc, html, State, ctx, DiskcacheManager
 import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import load_figure_template
 from dash.exceptions import PreventUpdate
@@ -37,13 +38,21 @@ WHITE = "#FFFFFF"
 GREY = "#646464"
 BLACK = "#000000"
 
+MAT_KEY = read_write.MAT_KEY
+MAT_KEY2 = read_write.MAT_KEY2
+
+cache = diskcache.Cache("./cache")
+disk_cache_manager = DiskcacheManager(cache)
+
 server = Flask(__name__)
 app = DashProxy(
     server=server,
     external_stylesheets=[dbc.themes.SOLAR],
     transforms=[MultiplexerTransform()],
+    background_callback_manager=disk_cache_manager,
 )
 load_figure_template("SOLAR")
+
 
 TEMP_FILE_DIR = "static/"
 
@@ -65,7 +74,7 @@ subtomograms = dict()
     # Output("card-graph-control"),
     Input("upload-data", "filename"),
 )
-def update_output(filename):
+def update_uploaded_file(filename):
     if not filename:
         return "Choose File", ""
     else:
@@ -87,7 +96,7 @@ def mesh3d_trace(df, colour, opacity):
     )
 
 
-def scatter3d_trace(df, colour, opacity):
+def scatter3d_trace(df, colour, opacity=1):
     return go.Scatter3d(
         x=df["x"],
         y=df["y"],
@@ -99,7 +108,7 @@ def scatter3d_trace(df, colour, opacity):
     )
 
 
-def cone_trace(df, colour, opacity, sizeref=10):
+def cone_trace(df, colour, opacity=1, sizeref=10):
     return go.Cone(
         x=df["x"],
         y=df["y"],
@@ -239,6 +248,37 @@ def plot_tomo(
 
 
 @app.callback(
+    Output("graph-picking", "figure"),
+    Input("button-rotate", "n_clicks"),
+    State("dropdown-tomo", "value"),
+    prevent_initial_call=True,
+)
+def plot_rotation(_, tomo_id):
+    global subtomograms
+    for subtomo in subtomograms.values():
+        subtomo.rotate_particles_zxplane()
+        subtomo.group_particles_by_displacement_zdirection()
+        # subtomo.group_particles_by_displacement()
+
+    fig = go.Figure()
+
+    # fig.add_trace(scatter3d_trace(subtomo.all_particles_df(), BLACK))
+
+    array_dict = subtomo.particle_df_dict
+    hex_vals = colour_range(len(array_dict))
+    colour_dict = dict()
+    for idx, akey in enumerate(array_dict.keys()):
+        hex_val = BLACK if akey == 0 else hex_vals[idx]
+        colour_dict.update({akey: hex_val})
+
+    for akey, array in array_dict.items():
+        fig.add_trace(scatter3d_trace(array, colour_dict[akey]))
+
+    fig.write_html("fig.html")
+    return fig
+
+
+@app.callback(
     Output("dropdown-filetype", "value"),
     Input("upload-data", "filename"),
 )
@@ -302,6 +342,7 @@ def update_dropdown(current_val, disabled, _, __):
     Output("collapse-graph-control", "is_open"),
     Output("collapse-clean", "is_open"),
     Output("collapse-proximity", "is_open"),
+    Output("collapse-extend-lattice", "is_open"),
     Input("button-read", "n_clicks"),
     State("upload-data", "filename"),
     State("upload-data", "contents"),
@@ -312,15 +353,18 @@ def update_dropdown(current_val, disabled, _, __):
 )
 def read_subtomograms(clicks, filename, contents, num_images, cleaning_type):
     if not filename:
-        return "", True, True, False, False, False
+        return "", True, True, False, False, False, False
 
     global subtomograms
     subtomograms = dict()
 
-    if cleaning_type == "Clean based on orientation":
-        clean_open = [True, False]
-    else:
-        clean_open = [False, True]
+    cleaning_types = {
+        "Clean based on orientation": [True, False, False],
+        "Clean based on reference particles": [False, True, False],
+        "Extend lattice": [False, False, True],
+    }
+
+    clean_open = cleaning_types[cleaning_type]
 
     # ensure temp directory clear
     files = glob.glob(TEMP_FILE_DIR + "*")
@@ -339,21 +383,23 @@ def read_subtomograms(clicks, filename, contents, num_images, cleaning_type):
 
     if ".mat" in filename:
         try:
+            print(MAT_KEY)
+            print(scipy.io.loadmat(temp_file_path, simplify_cells=True)["subTomoMeta"].keys())
             geom = scipy.io.loadmat(temp_file_path, simplify_cells=True)["subTomoMeta"][
-                "cycle000"
-            ]["geometry"]
+                MAT_KEY
+            ][MAT_KEY2]
         except:
-            return "Matlab File Unreadable", True, True, False, False, False
+            return "Matlab File Unreadable", True, True, False, False, False, False
     elif ".mod" in filename:
         try:
             imod_data = read_write.read_imod(temp_file_path)
         except:
-            return "Invalid file", True, True, False, False, False
+            return "Invalid file", True, True, False, False, False, False
         subtomo = SubTomogram.tomo_from_imod(Path(filename).stem, imod_data)
         subtomograms[subtomo.name] = subtomo
         return "Tomogram read", False, False, True, *clean_open
     else:
-        return "Unrecognised file extension", True, True, False, False, False
+        return "Unrecognised file extension", True, True, False, False, False, False
 
     print(geom.keys())
 
@@ -737,8 +783,12 @@ upload_table = html.Table(
         ),
         html.Tr(
             dcc.RadioItems(
-                ["Clean based on orientation", "Clean based on reference particles"],
-                "Clean based on orientation",
+                [
+                    "Clean based on orientation",
+                    "Clean based on reference particles",
+                    "Extend lattice",
+                ],
+                "Extend lattice",
                 id="radio-cleantype",
             )
         ),
@@ -755,7 +805,7 @@ upload_table = html.Table(
                             1: "5 Images",
                             2: "All Images",
                         },
-                        value=2,
+                        value=0,
                         id="slider-num-images",
                     )
                 )
@@ -826,6 +876,12 @@ graph_controls_table = html.Table(
     },
 )
 
+extend_lattice_table = html.Table(
+    [
+        dbc.Button("Rotate coordinates", id="button-rotate", color="secondary"),
+    ]
+)
+
 save_table = html.Table(
     [
         html.Tr(
@@ -865,7 +921,7 @@ save_table = html.Table(
     },
 )
 
-cleaning_type_div = emptydiv = html.Div(
+emptydiv = html.Div(
     [
         # nonexistent outputs for callbacks with no visible effect
         html.Div(id="div-null", style={"display": "none"}),
@@ -878,6 +934,9 @@ cleaning_params_card = collapsing_card(
 )
 proximity_params_card = collapsing_card(
     card("Proximity Cleaning", prox_table), "proximity"
+)
+extend_lattice_card = collapsing_card(
+    card("Extend Lattice", extend_lattice_table), "extend-lattice"
 )
 upload_card = collapsing_card(
     card("Choose File", upload_table), "upload", start_open=True
@@ -908,6 +967,7 @@ app.layout = html.Div(
                         html.Td(upload_card),
                         html.Td(cleaning_params_card),
                         html.Td(proximity_params_card),
+                        html.Td(extend_lattice_card),
                         html.Td(graph_controls_card),
                         html.Td(save_card),
                     ]
