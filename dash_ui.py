@@ -12,7 +12,8 @@ import os
 import base64
 from pathlib import Path
 
-# import io
+import webbrowser
+
 import glob
 from time import time
 
@@ -26,8 +27,6 @@ import dash_daq as daq
 
 # flask server to save files
 from flask import Flask  # , send_from_directory
-
-import tracemalloc
 
 
 from classes import SubTomogram, Cleaner
@@ -253,6 +252,15 @@ def update_filetype_dropdown(filename):
         raise PreventUpdate
     return ext
 
+@app.callback(
+    Output("label-keep-particles", "children"),
+    Input("switch-keep-particles", "on")
+    )
+def update_keeping_particles(keeping):
+    if keeping:
+        return "Keep selected particles"
+    else:
+        return "Keep unselected particles"
 
 @app.callback(
     Output("dropdown-tomo", "options"),
@@ -280,18 +288,17 @@ def update_dropdown(current_val, disabled, _, __):
         return subtomo_keys, ""
     current_index = subtomo_keys.index(current_val)
 
-    match ctx.triggered_id:
-        case "button-next-subtomogram":
-            # loop back to start if at end of list
-            if len(subtomo_keys) == current_index + 1:
-                new_val = subtomo_key_0
-            else:
-                new_val = subtomo_keys[subtomo_keys.index(current_val) + 1]
-        case "button-previous-subtomogram":
-            if current_index == 0:
-                new_val = subtomo_keys[-1]
-            else:
-                new_val = subtomo_keys[subtomo_keys.index(current_val) - 1]
+    if ctx.triggered_id == "button-next-subtomogram":
+        # loop back to start if at end of list
+        if len(subtomo_keys) == current_index + 1:
+            new_val = subtomo_key_0
+        else:
+            new_val = subtomo_keys[subtomo_keys.index(current_val) + 1]
+    elif ctx.triggered_id == "button-previous-subtomogram":
+        if current_index == 0:
+            new_val = subtomo_keys[-1]
+        else:
+            new_val = subtomo_keys[subtomo_keys.index(current_val) - 1]
     return subtomo_keys, new_val
 
 
@@ -357,13 +364,13 @@ def read_subtomograms(clicks, filename, contents, num_images, cleaning_type):
 
     print(geom.keys())
 
-    match num_images:
-        case 0:
-            counter = 1
-        case 1:
-            counter = 5
-        case 2:
-            counter = -1
+    if num_images == 0:
+        counter = 1
+    elif num_images == 1:
+        counter = 5
+    elif num_images == 2:
+        counter = -1
+
     for gkey in geom.keys():
 
         if counter == 0:
@@ -589,7 +596,7 @@ param_table = html.Table(
         html.Tr(
             [
                 html.Td("Orientation"),
-                inp_num("ori-goal", 15),
+                inp_num("ori-goal", 5),
                 html.Td("±"),
                 inp_num("ori-tol", 10),
             ]
@@ -987,6 +994,5 @@ def save_result(output_name, input_name, keep_selected, save_additional, clicks)
     return dcc.send_file(out_file)
 
 
-tracemalloc.start()
+webbrowser.open("http://localhost:8050/")
 app.run_server(debug=True, use_reloader=False)
-tracemalloc.stop()

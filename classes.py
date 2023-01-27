@@ -184,8 +184,9 @@ class Particle:
     def dot_displacement(self, particle):
         "Dot product of particle's orientation with its displacement from second particle"
         dot = np.vdot(particle.direction, normalise(self.displacement_from(particle)))
-        #temp fix for occasional values > 1
-        if dot > 1: dot = 1
+        # temp fix for occasional values > 1
+        if dot > 1:
+            dot = 1
         return dot
 
     def choose_protein_array(self):
