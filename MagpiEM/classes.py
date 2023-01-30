@@ -176,7 +176,7 @@ class Particle:
             if within(self.dot_displacement(neighbour), pos_range)
         }
         self.neighbours = good_displacement
-    
+
     @staticmethod
     def dot_product(v1, v2):
         "Dot product of two vectors. Fixed to 1 for anomalous high values"
@@ -192,7 +192,9 @@ class Particle:
 
     def dot_displacement(self, particle):
         "Dot product of particle's orientation with its displacement from second particle"
-        return Particle.dot_product(particle.direction, normalise(self.displacement_from(particle)))
+        return Particle.dot_product(
+            particle.direction, normalise(self.displacement_from(particle))
+        )
 
     def choose_protein_array(self):
         all_protein_arrays = self.subtomo.protein_arrays
