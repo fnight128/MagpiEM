@@ -110,21 +110,6 @@ def main():
             opacity=opacity,
         )
 
-    # second_point_msg = "Pick a second point to see corresponding parameters"
-
-    # @app.callback(
-    #     Output("div-graph-data", "children"),
-    #     Input("graph-picking", "clickData"),
-    #     # State("collapse-clean", "is_open"),
-    #     State("dropdown-tomo", "value"),
-    # )
-    # def display_params(clicked_point, tomo_id):
-    #     if not clicked_point:
-    #         return
-    #     global particle1, particle2, subtomograms
-    #     clicked_particle_pos = [clicked_point["points"][0][c] for c in ["x", "y", "z"]]
-    #     return(subtomograms[tomo_id].show_particle_data(clicked_particle_pos))
-
     @app.callback(
         Output("graph-picking", "figure"),
         Output("div-graph-data", "children"),
@@ -554,7 +539,7 @@ def main():
             dbc.Input(
                 id="inp-" + id_suffix,
                 type="number",
-                value=default,
+                # value=default,
                 style={"appearance": "textfield", "width": size},
             ),
             style={"width": size},
@@ -789,7 +774,7 @@ def main():
             ),
             html.Tr(
                 [
-                    html.Td("Cone Plot", id="label-cone-plot"),
+                    html.Td("Cone Plot (experimental)", id="label-cone-plot"),
                     daq.BooleanSwitch(id="switch-cone-plot", on=False),
                 ]
             ),
@@ -896,7 +881,7 @@ def main():
 
     app.layout = html.Div(
         [
-            dbc.Row(html.H1("Cleaning")),
+            dbc.Row(html.H1("MagpiEM")),
             dbc.Row(
                 html.Table(
                     html.Tr(
@@ -938,11 +923,6 @@ def main():
             return {"display": "none"}
         else:
             return {}
-
-    # @server.route("/temp/<path:filename>")
-    # def download(filename):
-    #     print("download", filename)
-    #     return send_from_directory(TEMP_FILE_DIR, filename)#, as_attachment=True)
 
     @app.callback(
         # Output("link-download", "href"),
