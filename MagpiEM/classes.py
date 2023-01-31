@@ -7,12 +7,65 @@ Created on Mon Nov  7 16:54:48 2022
 import numpy as np
 import pandas as pd
 import math
+import colorsys
 from prettytable import PrettyTable
 from collections import defaultdict
 from time import time
 
+import plotly.graph_objects as go
+
 ADJ_RANGE = [-1, 0, 1]
 ADJ_AREA_GEN = [[i, j, k] for i in ADJ_RANGE for j in ADJ_RANGE for k in ADJ_RANGE]
+
+def colour_range(num_points):
+    HSV_tuples = [(x * 1.0 / num_points, 0.75, 0.75) for x in range(num_points)]
+    RGB_tuples = [colorsys.hsv_to_rgb(*x) for x in HSV_tuples]
+    return [
+        "rgb({},{},{})".format(int(r * 255), int(g * 255), int(b * 255))
+        for (r, g, b) in RGB_tuples
+    ]
+
+def scatter3d_trace(df, colour, opacity):
+    return go.Scatter3d(
+        x=df["x"],
+        y=df["y"],
+        z=df["z"],
+        mode="markers",
+        text=df["n"],
+        marker=dict(size=6, color=colour, opacity=opacity),
+        showlegend=False,
+    )
+
+def plot_snapshot(array_dict, idx):
+    plot_id = str(idx).zfill(4)
+    print("Plotting {}".format(plot_id))
+    print("Dict length {}".format(len(array_dict.keys())))
+    fig = go.Figure()
+    fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
+    fig.update_layout(margin={"l": 20, "r": 20, "t": 20, "b": 20})
+    fig["layout"]["uirevision"] = "a"
+
+    # define linear range of colours
+    hex_vals = colour_range(len(array_dict))
+
+    # assign one colour to each protein array index
+    colour_dict = dict()
+    for idx, akey in enumerate(array_dict.keys()):
+        hex_val = hex_vals[idx]
+        colour_dict.update({akey: hex_val})
+
+    # assign colours and plot array
+    for akey in array_dict.keys():
+        array = array_dict[akey]
+        opacity = 1
+        if akey == 0:
+            continue
+        else:
+            colour = colour_dict[akey]
+        fig.add_trace(scatter3d_trace(array, colour, opacity))
+            # fig.add_trace(mesh3d_trace(array, colour, opacity))
+
+    fig.write_image("images/fig{}.png".format(plot_id))
 
 
 class Cleaner:
@@ -226,6 +279,8 @@ class Particle:
         if len(local_protein_arrays) > 1:
             # print("Assimilating")
             self.assimilate_protein_arrays(local_protein_arrays)
+        
+
 
     def set_protein_array(self, ar: int):
         if self.protein_array:
@@ -540,7 +595,7 @@ class SubTomogram:
             if particle.cc_score > self.cleaning_params.cc_threshold
         }
         self.find_particle_neighbours(self.cleaning_params.dist_range)
-        for particle in self.all_particles:
+        for idx, particle in enumerate(self.all_particles):
             # if already assigned protein array, has
             # already been verified by neighbour
             # if particle.protein_array:
@@ -563,6 +618,9 @@ class SubTomogram:
 
             # if good, assign to protein array
             particle.choose_protein_array()
+            
+            self.generate_particle_df()
+            plot_snapshot(self.particle_df_dict, idx)
 
         # can't check size of array until all particles allocated
 
