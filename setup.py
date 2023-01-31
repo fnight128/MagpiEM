@@ -15,7 +15,7 @@ long_description = "Sample Package made for a demo \
 
 setup(
     name="MagpiEM",
-    version="0.1",
+    version="0.2.1",
     description="Automated cleaning of sub-tomogram particle picking",
     author="Frank Nightingale",
     author_email="frank.nightingale@linacre.ox.ac.uk",

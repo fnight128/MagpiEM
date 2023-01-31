@@ -36,6 +36,7 @@ WHITE = "#FFFFFF"
 GREY = "#646464"
 BLACK = "#000000"
 
+subtomograms = dict()
 
 def main():
     server = Flask(__name__)
@@ -55,8 +56,9 @@ def main():
     empty_graph = go.Figure(
         data=go.Cone(x=[0], y=[0], z=[0], u=[[0]], v=[0], w=[0], showscale=False)
     )
-
+    
     subtomograms = dict()
+
 
     @app.callback(
         Output("upload-data", "children"),
@@ -252,6 +254,9 @@ def main():
         Input("button-previous-subtomogram", "n_clicks"),
     )
     def update_dropdown(current_val, disabled, _, __):
+        
+        global subtomograms
+
         # unfortunately need to merge two callbacks here, dash does not allow multiple
         # callbacks with the same output so use ctx to distinguish between cases
         try:
@@ -298,6 +303,9 @@ def main():
         # State("dropdown-filetype", "value")
     )
     def read_subtomograms(clicks, filename, contents, num_images, cleaning_type):
+        if ctx.triggered_id != "button-read":
+            filename = None
+
         if not filename:
             return "", True, True, False, False, False
 
@@ -402,6 +410,7 @@ def main():
         Input("upload-ref", "children"),
     )
     def print_needed_refs(_, __):
+        global subtomograms
         return [
             tomoname
             for tomoname, subtomo in subtomograms.items()
@@ -413,6 +422,7 @@ def main():
         [Input("upload-ref", "filename"), Input("upload-ref", "contents")],
     )
     def upload_refs(filenames, contents):
+        global subtomograms
 
         if not any([filenames]):
             raise PreventUpdate
@@ -491,21 +501,7 @@ def main():
         clicks,
         clicks2,
     ):
-        if not all(
-            [
-                dist_goal,
-                dist_tol,
-                ori_goal,
-                ori_tol,
-                disp_goal,
-                disp_tol,
-                min_neighbours,
-                cc_thresh,
-                array_size,
-                clicks or clicks2,
-            ]
-        ):
-            print("Not all cleaning parameters set")
+        if not clicks or clicks2:
             return True, True, False
         # print(inp_file)
         # subtomo = SubTomogram(name, particles)
@@ -521,6 +517,8 @@ def main():
             disp_goal,
             disp_tol,
         )
+        
+        global subtomograms
 
         if ctx.triggered_id == "button-preview-clean":
             print("Preview")
@@ -917,6 +915,7 @@ def main():
         Input("dropdown-tomo", "value"),
     )
     def graph_visibility(t_id):
+        global subtomograms
         if not t_id:
             return {"display": "none"}
         elif not t_id in subtomograms.keys():
@@ -936,6 +935,7 @@ def main():
         long_callback=True,
     )
     def save_result(output_name, input_name, keep_selected, save_additional, clicks):
+        global subtomograms
         if not output_name:
             return None
         if output_name == input_name:
@@ -961,3 +961,6 @@ def main():
 
     webbrowser.open("http://localhost:8050/")
     app.run_server(debug=True, use_reloader=False)
+
+if __name__ == "__main__":
+    main()
