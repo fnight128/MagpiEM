@@ -38,6 +38,9 @@ BLACK = "#000000"
 
 subtomograms = dict()
 
+last_click = 0.0
+
+
 def main():
     server = Flask(__name__)
     app = DashProxy(
@@ -56,9 +59,8 @@ def main():
     empty_graph = go.Figure(
         data=go.Cone(x=[0], y=[0], z=[0], u=[[0]], v=[0], w=[0], showscale=False)
     )
-    
-    subtomograms = dict()
 
+    subtomograms = dict()
 
     @app.callback(
         Output("upload-data", "children"),
@@ -126,6 +128,7 @@ def main():
         tomo_selection: str, clicked_point, make_cones: bool, show_removed: bool, _
     ):
         global subtomograms
+        global last_click
         # print("plot_tomo")
 
         params_message = ""
@@ -136,15 +139,24 @@ def main():
 
         subtomo = subtomograms[tomo_selection]
 
+        # strange error with cone plots makes completely random, erroneous clicks
+        # happen right after clicking on cone plot - add a cooldown to temporarily
+        # prevent this - clicks must now be 500ms apart
+        # print("Time since last click: ", time() - last_click)
+        click_on_cooldown = time() - last_click < 0.5
         # clicked point lingers between calls, causing unwanted toggling when e.g.
         # switching to cones, and selected points can carry over to the next graph
         # prevent by clearing clicked_point if not actually from clicking a point
         if ctx.triggered_id != "graph-picking":
             clicked_point = ""
         else:
+            if click_on_cooldown:
+                raise PreventUpdate
+            last_click = time()
             clicked_particle_pos = [
                 clicked_point["points"][0][c] for c in ["x", "y", "z"]
             ]
+            print("Clicked pos", clicked_particle_pos)
             params_message = subtomo.show_particle_data(clicked_particle_pos)
 
         should_make_cones = make_cones and not subtomo.position_only
@@ -254,7 +266,6 @@ def main():
         Input("button-previous-subtomogram", "n_clicks"),
     )
     def update_dropdown(current_val, disabled, _, __):
-        
         global subtomograms
 
         # unfortunately need to merge two callbacks here, dash does not allow multiple
@@ -360,7 +371,6 @@ def main():
             counter = -1
 
         for gkey in geom.keys():
-
             if counter == 0:
                 break
             counter -= 1
@@ -389,7 +399,6 @@ def main():
         subtomo.generate_particle_df()
 
     def prox_clean_subtomo(subtomo, dist_min, dist_max):
-
         if not any(subtomo.reference_points):
             print("Subtomo {} has no reference points uploaded".format(subtomo.name))
         t0 = time()
@@ -457,7 +466,6 @@ def main():
     def run_prox_cleaning(
         dist_min: float, dist_max: float, is_disabled: bool, clicks, clicks2
     ):
-
         if not all([dist_max, clicks or clicks2]):
             return False
         if not dist_min:
@@ -517,7 +525,7 @@ def main():
             disp_goal,
             disp_tol,
         )
-        
+
         global subtomograms
 
         if ctx.triggered_id == "button-preview-clean":
@@ -961,6 +969,7 @@ def main():
 
     webbrowser.open("http://localhost:8050/")
     app.run_server(debug=True, use_reloader=False)
+
 
 if __name__ == "__main__":
     main()

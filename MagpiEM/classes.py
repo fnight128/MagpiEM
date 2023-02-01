@@ -631,7 +631,6 @@ class SubTomogram:
         self.cone_fix = cone_fix_df
 
     def generate_particle_df(self):
-
         particle_df = self.all_particles_df()
         # split into one dataframe for each array
         self.particle_df_dict = dict(iter(particle_df.groupby("n")))
