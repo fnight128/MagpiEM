@@ -9,7 +9,7 @@ import pandas as pd
 import math
 from prettytable import PrettyTable
 from collections import defaultdict
-from time import time
+from time import time as tm
 
 ADJ_RANGE = [-1, 0, 1]
 ADJ_AREA_GEN = [[i, j, k] for i in ADJ_RANGE for j in ADJ_RANGE for k in ADJ_RANGE]
@@ -23,6 +23,8 @@ class Cleaner:
     ori_range: list
     pos_range: list
 
+    flipped_ori_range: list
+
     def __init__(
         self,
         cc_thresh,
@@ -34,6 +36,7 @@ class Cleaner:
         ori_tol,
         target_pos,
         pos_tol,
+        allow_flips,
     ):
         self.cc_threshold = cc_thresh
         self.min_neighbours = min_neigh
@@ -41,6 +44,9 @@ class Cleaner:
         self.dist_range = Cleaner.dist_range(target_dist, dist_tol)
         self.ori_range = Cleaner.ang_range_dotprod(target_ori, ori_tol)
         self.pos_range = Cleaner.ang_range_dotprod(target_pos, pos_tol)
+        self.flipped_ori_range = (
+            [-x for x in reversed(self.ori_range)] if allow_flips else 0
+        )
 
     def __str__(self):
         return "Allowed distances: {}-{}. Allowed orientations:{}-{}. Allowed Displacement angles:{}-{}.".format(
@@ -161,12 +167,14 @@ class Particle:
         displ = self.displacement_from(particle)
         return np.vdot(displ, displ)
 
-    def filter_neighbour_orientation(self, orange):
-        good_orientation = {
-            neighbour
-            for neighbour in self.neighbours
-            if within(self.dot_direction(neighbour), orange)
-        }
+    def filter_neighbour_orientation(self, orange, flipped_range):
+        good_orientation = set()
+        for neighbour in self.neighbours:
+            ori = self.dot_direction(neighbour)
+            if within(ori, orange):
+                good_orientation.add(neighbour)
+            elif flipped_range and within(ori, flipped_range):
+                good_orientation.add(neighbour)
         self.neighbours = good_orientation
 
     def filter_neighbour_position(self, pos_range):
@@ -196,36 +204,12 @@ class Particle:
             particle.direction, normalise(self.displacement_from(particle))
         )
 
-    def choose_protein_array(self):
-        all_protein_arrays = self.subtomo.protein_arrays
-        neighbours = self.neighbours
-        local_protein_arrays = {neighbour.protein_array for neighbour in neighbours}
-        local_protein_arrays.discard(0)
-        # print("options", local_protein_arrays)
-
-        # possibilities:
-        # all particles have no protein_array (assign new)
-        # one has a protein_array (assign all others to that)
-        # several have different protein_arrays (assimilate)
-
-        # if no local particles are part of an array, define a new one for them
-        if len(local_protein_arrays) == 0:
-            new_protein_array = max(all_protein_arrays.keys()) + 1
-            # print("making new", new_protein_array)
-            all_protein_arrays[new_protein_array] = set()
-            for particle in {self, *neighbours}:
-                particle.set_protein_array(new_protein_array)
-        # if one local particle is part of an array, add the rest to it
-        elif len(local_protein_arrays) > 0:
-            # print("Choosing min", min(local_protein_arrays))
-            for particle in {self, *neighbours}:
-                particle.set_protein_array(min(local_protein_arrays))
-
-        # next, if particles belong to multiple arrays already, assimilate them all
-        # into a single array
-        if len(local_protein_arrays) > 1:
-            # print("Assimilating")
-            self.assimilate_protein_arrays(local_protein_arrays)
+    def choose_protein_array_new(self, array):
+        "Recursively assign particle and all neighbours to array"
+        self.set_protein_array(array)
+        for neighbour in self.neighbours:
+            if not neighbour.protein_array:
+                neighbour.choose_protein_array_new(array)
 
     def set_protein_array(self, ar: int):
         if self.protein_array:
@@ -441,7 +425,9 @@ class SubTomogram:
 
     def find_particle_neighbours(self, drange):
         particles = self.all_particles
+        t0 = tm()
         regions = SubTomogram.assign_regions(particles, max(drange) ** 0.5)
+        print("Assigning particles to regions", tm() - t0)
         # max_dist = max(drange) ** 0.5
 
         # for particle in particles:
@@ -449,7 +435,7 @@ class SubTomogram:
         #     locality_id = "_".join(position_list)
         #     regions[locality_id].add(particle)
 
-        t0 = time()
+        t0 = tm()
         for rkey, region in regions.items():
             if len(region) == 0:
                 continue
@@ -464,7 +450,7 @@ class SubTomogram:
 
             # remove all checked particles from further checks
             regions[rkey] = set()
-        print("Finding particles in regions", time() - t0)
+        print("Finding particles in regions", tm() - t0)
 
     def __hash__(self):
         return self.name
@@ -540,33 +526,44 @@ class SubTomogram:
             if particle.cc_score > self.cleaning_params.cc_threshold
         }
         self.find_particle_neighbours(self.cleaning_params.dist_range)
+        t0 = tm()
         for particle in self.all_particles:
-            # if already assigned protein array, has
-            # already been verified by neighbour
-            # if particle.protein_array:
-            #     continue
             neighbours = particle.neighbours
 
             if len(neighbours) < self.cleaning_params.min_neighbours:
                 self.particles_fate["low_neighbours"].add(particle)
                 continue
+        print("Finding low neighbours", tm() - t0)
+        t0 = tm()
+        for particle in self.all_particles:  # temp for timing
             # check correct orientation
-            particle.filter_neighbour_orientation(self.cleaning_params.ori_range)
+            particle.filter_neighbour_orientation(
+                self.cleaning_params.ori_range, self.cleaning_params.flipped_ori_range
+            )
             if len(particle.neighbours) < self.cleaning_params.min_neighbours:
                 self.particles_fate["wrong_ori"].add(particle)
                 continue
+        print("Comparing angles", tm() - t0)
+        t0 = tm()
+        for particle in self.all_particles:  # temp for timing
             # check correct positioning
             particle.filter_neighbour_position(self.cleaning_params.pos_range)
             if len(particle.neighbours) < self.cleaning_params.min_neighbours:
                 self.particles_fate["wrong_disp"].add(particle)
                 continue
-
+        print("Comparing displacements", tm() - t0)
+        t0 = tm()
+        for particle in self.all_particles:  # temp for timing
+            if particle.protein_array:
+                continue
             # if good, assign to protein array
-            particle.choose_protein_array()
-
+            # particle.choose_protein_array()
+            particle.choose_protein_array_new(len(self.protein_arrays))
+        print("Choosing initial arrays", tm() - t0)
         # can't check size of array until all particles allocated
 
         # can't delete arrays within loop, changes size of dict
+        t0 = tm()
         bad_arrays = set()
         for akey, protein_array in self.protein_arrays.items():
             if len(protein_array) < self.cleaning_params.min_array_size:
@@ -578,6 +575,7 @@ class SubTomogram:
                     self.auto_cleaned_particles.add(particle)
         for akey in bad_arrays:
             self.delete_array(akey)
+        print("Time to assimilate arrays", tm() - t0)
 
     def particle_fate_table(self):
         pf = self.particles_fate

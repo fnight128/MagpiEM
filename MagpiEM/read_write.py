@@ -11,6 +11,8 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import scipy.io
 from pathlib import Path
+from glob import glob
+from zipfile import ZipFile
 
 # readin
 TEMP_FILE_DIR = "static/"
@@ -79,6 +81,17 @@ def write_emfile(subtomo_dict: dict, out_suffix: str, keep_selected: bool):
         good_particles = tomo.auto_cleaned_particles
         em_list = np.array([[em_format(particle) for particle in good_particles]])
         emfile.write(TEMP_FILE_DIR + filename, em_list, overwrite=True)
+
+
+def zip_files(final_filename: str, extension_to_zip: str):
+    archive_name = "{}.zip".format(final_filename)
+    filenames = glob("*.{}".format(extension_to_zip))
+
+    with ZipFile(archive_name, mode="w") as zp:
+        for filename in filenames:
+            zp.write(filename)
+
+    return archive_name
 
 
 def read_imod(filename: str):

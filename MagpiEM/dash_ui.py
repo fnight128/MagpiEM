@@ -10,6 +10,7 @@ import scipy.io
 import plotly.graph_objects as go
 import os
 import base64
+import math
 from pathlib import Path
 
 import webbrowser
@@ -29,8 +30,8 @@ import dash_daq as daq
 from flask import Flask  # , send_from_directory
 
 
-from .classes import SubTomogram, Cleaner
-from .read_write import read_imod, write_emfile, modify_emc_mat
+from classes import SubTomogram, Cleaner
+from read_write import read_imod, write_emfile, modify_emc_mat, zip_files
 
 WHITE = "#FFFFFF"
 GREY = "#646464"
@@ -73,6 +74,15 @@ def main():
             return "Choose File", ""
         else:
             return filename, "out_" + filename
+
+    def prog_bar(current_index, goal):
+        if current_index < 0 or goal < 0 or current_index > goal:
+            return "Unable to generate progress bar"
+        bar_length = 20
+        progress = math.floor((current_index / goal) * bar_length)
+        to_do = bar_length - progress
+        bar = "<{}{}> {}/{}".format("#" * progress, "-" * to_do, current_index, goal)
+        return bar
 
     def colour_range(num_points):
         HSV_tuples = [(x * 1.0 / num_points, 0.75, 0.75) for x in range(num_points)]
@@ -491,6 +501,7 @@ def main():
         State("inp-min-neighbours", "value"),
         State("inp-cc-thresh", "value"),
         State("inp-array-size", "value"),
+        State("switch-allow-flips", "on"),
         Input("button-full-clean", "n_clicks"),
         Input("button-preview-clean", "n_clicks"),
         prevent_initial_call=True,
@@ -506,6 +517,7 @@ def main():
         min_neighbours: int,
         cc_thresh: float,
         array_size: int,
+        allow_flips: bool,
         clicks,
         clicks2,
     ):
@@ -524,7 +536,10 @@ def main():
             ori_tol,
             disp_goal,
             disp_tol,
+            allow_flips,
         )
+
+        print("Clean")
 
         global subtomograms
 
@@ -534,8 +549,12 @@ def main():
             return False, True, True
         else:
             print("Full")
+            clean_count = 0
+            total_subtomos = len(subtomograms.keys())
             for subtomo in subtomograms.values():
                 clean_subtomo(subtomo, clean_params)
+                clean_count += 1
+                print(prog_bar(clean_count, total_subtomos))
         return False, False, True
 
     size = "50px"
@@ -545,7 +564,7 @@ def main():
             dbc.Input(
                 id="inp-" + id_suffix,
                 type="number",
-                # value=default,
+                value=default,
                 style={"appearance": "textfield", "width": size},
             ),
             style={"width": size},
@@ -564,15 +583,15 @@ def main():
             html.Tr(
                 [
                     html.Td("Distance"),
-                    inp_num("dist-goal", 54),
+                    inp_num("dist-goal", 25),
                     html.Td("±"),
-                    inp_num("dist-tol", 30),
+                    inp_num("dist-tol", 10),
                 ]
             ),
             html.Tr(
                 [
                     html.Td("Orientation"),
-                    inp_num("ori-goal", 5),
+                    inp_num("ori-goal", 9),
                     html.Td("±"),
                     inp_num("ori-tol", 10),
                 ]
@@ -585,9 +604,15 @@ def main():
                     inp_num("pos-tol", 20),
                 ]
             ),
-            html.Tr([html.Td("Min Neighbours"), inp_num("min-neighbours", 3)]),
-            html.Tr([html.Td("CC Threshold"), inp_num("cc-thresh", 1)]),
-            html.Tr([html.Td("Min Array Size"), inp_num("array-size", 4)]),
+            html.Tr([html.Td("Min Neighbours"), inp_num("min-neighbours", 2)]),
+            html.Tr([html.Td("CC Threshold"), inp_num("cc-thresh", 5)]),
+            html.Tr([html.Td("Min Array Size"), inp_num("array-size", 5)]),
+            html.Tr(
+                [
+                    html.Td("Allow Flipped Particles"),
+                    daq.BooleanSwitch(id="switch-allow-flips", on=False),
+                ]
+            ),
             html.Tr(
                 html.Td(
                     dbc.Button(
@@ -704,7 +729,7 @@ def main():
             card,
             id="collapse-" + collapse_id,
             is_open=start_open,
-            style={"width": "300px", "height": "100%"},
+            style={"width": "450px", "height": "100%"},
         )  # ,style={"float":"right"})
 
     upload_table = html.Table(
@@ -772,7 +797,7 @@ def main():
                     dcc.Dropdown(
                         [],
                         id="dropdown-tomo",
-                        style={"width": "100px"},
+                        style={"width": "300px"},
                         clearable=False
                         # value=list(protein_list.keys())[0],
                     ),
@@ -954,6 +979,9 @@ def main():
 
         if ".em (Place Object)" in save_additional:
             write_emfile(subtomograms, "out", keep_selected)
+            zip_files(output_name, "em")
+            dcc.send_file(TEMP_FILE_DIR + output_name)
+
         modify_emc_mat(
             subtomograms,
             TEMP_FILE_DIR + output_name,
