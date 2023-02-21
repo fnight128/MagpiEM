@@ -746,7 +746,7 @@ def main():
                 dcc.RadioItems(
                     [
                         "Clean based on orientation",
-                        "Clean based on reference particles",
+                        #"Clean based on reference particles",
                     ],
                     "Clean based on orientation",
                     id="radio-cleantype",
