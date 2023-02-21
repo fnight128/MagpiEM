@@ -130,12 +130,14 @@ def main():
         Input("dropdown-tomo", "value"),
         Input("graph-picking", "clickData"),
         Input("switch-cone-plot", "on"),
+        State("inp-cone-size", "value"),
+        Input("button-set-cone-size", "n_clicks"),
         Input("switch-show-removed", "on"),
         Input("button-next-subtomogram", "disabled"),
         prevent_initial_call=True,
     )
     def plot_tomo(
-        tomo_selection: str, clicked_point, make_cones: bool, show_removed: bool, _
+        tomo_selection: str, clicked_point, make_cones: bool, cone_size: float, _, show_removed: bool, __
     ):
         global subtomograms
         global last_click
@@ -185,16 +187,20 @@ def main():
         # if subtomo not yet cleaned, just plot all points
         if len(subtomo.auto_cleaned_particles) == 0:
             if should_make_cones:
+                # me from the future: I have no idea what this was for but
+                # seems bad, causes weird cone behaviour when checking params
+                # disabling for now
                 # have to fix dash cones error again
-                scale = 10 if params_message else 1
+                #scale = 10 if params_message else 1
+
                 nonchecking_df = pd.concat(
                     (subtomo.nonchecking_particles_df(), subtomo.cone_fix_df())
                 )
                 checking_df = pd.concat(
                     (subtomo.checking_particles_df(), subtomo.cone_fix_df())
                 )
-                fig.add_trace(cone_trace(nonchecking_df, WHITE, 0.6, scale))
-                fig.add_trace(cone_trace(checking_df, BLACK, 1))
+                fig.add_trace(cone_trace(nonchecking_df, WHITE, 0.6, cone_size))
+                fig.add_trace(cone_trace(checking_df, BLACK, 1, cone_size))
             else:
                 fig.add_trace(scatter3d_trace(subtomo.all_particles_df(), WHITE, 0.6))
                 fig.add_trace(
@@ -233,7 +239,7 @@ def main():
             if should_make_cones:
                 # cone fix
                 array = pd.concat([subtomo.cone_fix_df(), array])
-                fig.add_trace(cone_trace(array, colour, opacity))
+                fig.add_trace(cone_trace(array, colour, opacity, cone_size))
                 if has_ref:
                     fig.add_trace(scatter3d_trace(subtomo.reference_df, GREY, 0.2))
             else:
@@ -811,6 +817,13 @@ def main():
             ),
             html.Tr(
                 [
+                    html.Td("Overall Cone Size", id="label-cone-size"),
+                    html.Td(dbc.Input(id="inp-cone-size", value=10, type="number", style={"width":"70%"})),
+                    html.Td(dbc.Button("Set", id="button-set-cone-size"))
+                ]
+            ),
+            html.Tr(
+                [
                     html.Td("Show Removed Particles", id="label-show-removed"),
                     daq.BooleanSwitch(id="switch-show-removed", on=False),
                 ]
@@ -829,7 +842,8 @@ def main():
         style={  #'float':'left',
             "overflow": "hidden",
             "margin": "3px",
-            "width": "100%"
+            "width": "100%",
+            "table-layout":"fixed"
             #'borderWidth': '1px',
             #'borderStyle': 'dashed',
             #'borderRadius': '5px'
