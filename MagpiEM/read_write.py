@@ -23,7 +23,7 @@ def em_format(particle):
     # convert orientation vector into euler angles
     # PlaceObject uses "zxz" euler angles, but saved in the order "zzx"
     rotation_matrix = np.array([[0, 0, rx], [0, 0, ry], [0, 0, rz]])
-    euler = R.from_matrix(rotation_matrix).as_euler("xzx", degrees=True)
+    euler = R.from_matrix(rotation_matrix).as_euler("zxz", degrees=True)
     euler_formatted = [euler[0], euler[2], euler[1]]
     # print("")
     return [

@@ -41,6 +41,9 @@ subtomograms = dict()
 
 last_click = 0.0
 
+MAT_CYCLE = "cycle012"
+MAT_TYPE = "geometry" if MAT_CYCLE == "cycle000" else "Avg_geometry"
+
 
 def main():
     server = Flask(__name__)
@@ -98,11 +101,23 @@ def main():
         )
 
     def scatter3d_trace(df, colour, opacity):
+        #print("df length", len(df))
         return go.Scatter3d(
             x=df["x"],
             y=df["y"],
             z=df["z"],
             mode="markers",
+            text=df["n"],
+            marker=dict(size=6, color=colour, opacity=opacity),
+            showlegend=False,
+        )
+    
+    def lines3d_trace(df, colour, opacity):
+        return go.Scatter3d(
+            x=df["x"],
+            y=df["y"],
+            z=df["z"],
+            #mode="markers",
             text=df["n"],
             marker=dict(size=6, color=colour, opacity=opacity),
             showlegend=False,
@@ -139,16 +154,20 @@ def main():
     ):
         global subtomograms
         global last_click
-        # print("plot_tomo")
+        # print("plot_tomo")df
 
         params_message = ""
 
-        # Warning: must return a graph object in both of these, or breaks dash
+        # must return a graph object in both of these, or breaks dash
         if not tomo_selection or not tomo_selection in subtomograms.keys():
             return empty_graph, params_message
 
         subtomo = subtomograms[tomo_selection]
-
+        
+        # try:
+        #     print("df dict:", subtomo.particle_df_dict)
+        # except:
+        #     print("no df dict for tomo")
         # strange error with cone plots makes completely random, erroneous clicks
         # happen right after clicking on cone plot - add a cooldown to temporarily
         # prevent this - clicks must now be 500ms apart
@@ -171,17 +190,24 @@ def main():
 
         should_make_cones = make_cones and not subtomo.position_only
 
-        try:
-            subtomo.reference_df
-            has_ref = True
-        except:
-            has_ref = False
-
         fig = go.Figure()
         fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
         fig.update_layout(margin={"l": 20, "r": 20, "t": 20, "b": 20})
         fig["layout"]["uirevision"] = "a"
 
+        if should_make_cones:
+            fig.add_trace(cone_trace(subtomo.all_particles_df(), BLACK, 1))
+        else:
+            fig.add_trace(scatter3d_trace(subtomo.all_particles_df(), BLACK, 1))
+            
+        try:
+            fig.add_trace(cone_trace(subtomo.joining_cones, WHITE, 0.6))
+        except:
+            print("No joining cones")
+            
+        return fig, ""
+
+        print("auto cleaned particles", len(subtomo.auto_cleaned_particles))
         # if subtomo not yet cleaned, just plot all points
         if len(subtomo.auto_cleaned_particles) == 0:
             if should_make_cones:
@@ -219,6 +245,7 @@ def main():
 
         # assign colours and plot array
         for akey in array_dict.keys():
+            print(akey)
             array = array_dict[akey]
             opacity = 1
             if akey == 0:
@@ -234,13 +261,10 @@ def main():
                 # cone fix
                 array = pd.concat([subtomo.cone_fix_df(), array])
                 fig.add_trace(cone_trace(array, colour, opacity))
-                if has_ref:
-                    fig.add_trace(scatter3d_trace(subtomo.reference_df, GREY, 0.2))
+                fig.add_trace(cone_trace())
             else:
                 fig.add_trace(scatter3d_trace(array, colour, opacity))
                 # fig.add_trace(mesh3d_trace(array, colour, opacity))
-                if has_ref:
-                    fig.add_trace(scatter3d_trace(subtomo.reference_df, GREY, 0.2))
         return fig, params_message
 
     @app.callback(
@@ -357,7 +381,7 @@ def main():
             try:
                 geom = scipy.io.loadmat(temp_file_path, simplify_cells=True)[
                     "subTomoMeta"
-                ]["cycle000"]["geometry"]
+                ][MAT_CYCLE][MAT_TYPE]
             except:
                 return "Matlab File Unreadable", True, True, False, False, False
         elif ".mod" in filename:
@@ -385,11 +409,10 @@ def main():
                 break
             counter -= 1
 
-            print(gkey)
-
             subtomo = SubTomogram.tomo_from_mat(gkey, geom[gkey])
 
             subtomograms[gkey] = subtomo
+
 
         return "Tomograms read", False, False, True, *clean_open
 
@@ -583,9 +606,9 @@ def main():
             html.Tr(
                 [
                     html.Td("Distance"),
-                    inp_num("dist-goal", 25),
+                    inp_num("dist-goal", 70),
                     html.Td("±"),
-                    inp_num("dist-tol", 10),
+                    inp_num("dist-tol", 70),
                 ]
             ),
             html.Tr(
@@ -605,7 +628,7 @@ def main():
                 ]
             ),
             html.Tr([html.Td("Min Neighbours"), inp_num("min-neighbours", 2)]),
-            html.Tr([html.Td("CC Threshold"), inp_num("cc-thresh", 5)]),
+            html.Tr([html.Td("CC Threshold"), inp_num("cc-thresh", 0)]),
             html.Tr([html.Td("Min Array Size"), inp_num("array-size", 5)]),
             html.Tr(
                 [
@@ -750,6 +773,7 @@ def main():
                     ],
                     "Clean based on orientation",
                     id="radio-cleantype",
+                    #Disabled=True,
                 )
             ),
             html.Tr([html.Td("Number of Images to Process")]),
