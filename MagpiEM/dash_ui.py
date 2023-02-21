@@ -201,71 +201,71 @@ def main():
             fig.add_trace(scatter3d_trace(subtomo.all_particles_df(), BLACK, 1))
             
         try:
-            fig.add_trace(cone_trace(subtomo.joining_cones, WHITE, 0.6))
-        except:
-            print("No joining cones")
-            
+            fig.add_trace(cone_trace(subtomo.joining_cone_df(), WHITE, 0.6, sizeref=0.5))
+        except Exception as e:
+            print(e)
+        fig.write_html("fig.html")
         return fig, ""
 
-        print("auto cleaned particles", len(subtomo.auto_cleaned_particles))
-        # if subtomo not yet cleaned, just plot all points
-        if len(subtomo.auto_cleaned_particles) == 0:
-            if should_make_cones:
-                # have to fix dash cones error again
-                scale = 10 if params_message else 1
-                nonchecking_df = pd.concat(
-                    (subtomo.nonchecking_particles_df(), subtomo.cone_fix_df())
-                )
-                checking_df = pd.concat(
-                    (subtomo.checking_particles_df(), subtomo.cone_fix_df())
-                )
-                fig.add_trace(cone_trace(nonchecking_df, WHITE, 0.6, scale))
-                fig.add_trace(cone_trace(checking_df, BLACK, 1))
-            else:
-                fig.add_trace(scatter3d_trace(subtomo.all_particles_df(), WHITE, 0.6))
-                fig.add_trace(
-                    scatter3d_trace(subtomo.checking_particles_df(), BLACK, 1)
-                )
+        # print("auto cleaned particles", len(subtomo.auto_cleaned_particles))
+        # # if subtomo not yet cleaned, just plot all points
+        # if len(subtomo.auto_cleaned_particles) == 0:
+        #     if should_make_cones:
+        #         # have to fix dash cones error again
+        #         scale = 10 if params_message else 1
+        #         nonchecking_df = pd.concat(
+        #             (subtomo.nonchecking_particles_df(), subtomo.cone_fix_df())
+        #         )
+        #         checking_df = pd.concat(
+        #             (subtomo.checking_particles_df(), subtomo.cone_fix_df())
+        #         )
+        #         fig.add_trace(cone_trace(nonchecking_df, WHITE, 0.6, scale))
+        #         fig.add_trace(cone_trace(checking_df, BLACK, 1))
+        #     else:
+        #         fig.add_trace(scatter3d_trace(subtomo.all_particles_df(), WHITE, 0.6))
+        #         fig.add_trace(
+        #             scatter3d_trace(subtomo.checking_particles_df(), BLACK, 1)
+        #         )
 
-            return fig, params_message
+        #     return fig, params_message
 
-        if clicked_point:
-            subtomo.toggle_selected(clicked_point["points"][0]["text"])
+        # if clicked_point:
+        #     subtomo.toggle_selected(clicked_point["points"][0]["text"])
 
-        array_dict = subtomo.particle_df_dict
+        # array_dict = subtomo.particle_df_dict
 
-        # define linear range of colours
-        hex_vals = colour_range(len(array_dict))
+        # # define linear range of colours
+        # hex_vals = colour_range(len(array_dict))
 
-        # assign one colour to each protein array index
-        colour_dict = dict()
-        for idx, akey in enumerate(array_dict.keys()):
-            hex_val = WHITE if akey in subtomo.selected_n else hex_vals[idx]
-            colour_dict.update({akey: hex_val})
+        # # assign one colour to each protein array index
+        # colour_dict = dict()
+        # for idx, akey in enumerate(array_dict.keys()):
+        #     hex_val = WHITE if akey in subtomo.selected_n else hex_vals[idx]
+        #     colour_dict.update({akey: hex_val})
 
-        # assign colours and plot array
-        for akey in array_dict.keys():
-            print(akey)
-            array = array_dict[akey]
-            opacity = 1
-            if akey == 0:
-                if show_removed:
-                    colour = BLACK
-                    opacity = 0.6
-                else:
-                    continue
-            else:
-                colour = colour_dict[akey]
+        # # assign colours and plot array
+        # for akey in array_dict.keys():
+        #     print(akey)
+        #     array = array_dict[akey]
+        #     opacity = 1
+        #     if akey == 0:
+        #         if show_removed:
+        #             colour = BLACK
+        #             opacity = 0.6
+        #         else:
+        #             continue
+        #     else:
+        #         colour = colour_dict[akey]
 
-            if should_make_cones:
-                # cone fix
-                array = pd.concat([subtomo.cone_fix_df(), array])
-                fig.add_trace(cone_trace(array, colour, opacity))
-                fig.add_trace(cone_trace())
-            else:
-                fig.add_trace(scatter3d_trace(array, colour, opacity))
-                # fig.add_trace(mesh3d_trace(array, colour, opacity))
-        return fig, params_message
+        #     if should_make_cones:
+        #         # cone fix
+        #         array = pd.concat([subtomo.cone_fix_df(), array])
+        #         fig.add_trace(cone_trace(array, colour, opacity))
+        #         fig.add_trace(cone_trace())
+        #     else:
+        #         fig.add_trace(scatter3d_trace(array, colour, opacity))
+        #         # fig.add_trace(mesh3d_trace(array, colour, opacity))
+        # return fig, params_message
 
     @app.callback(
         Output("dropdown-filetype", "value"),

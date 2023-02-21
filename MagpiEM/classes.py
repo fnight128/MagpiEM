@@ -564,6 +564,9 @@ class SubTomogram:
     def checking_particles_df(self):
         return SubTomogram.particles_to_df(set(self.checking_particles))
 
+    def joining_cone_df(self):
+        return SubTomogram.particles_to_df(self.joining_cones)
+
     def autoclean(self):
         self.all_particles = {
             particle
