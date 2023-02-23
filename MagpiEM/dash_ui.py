@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 import os
 import base64
 import math
+import yaml
 from pathlib import Path
 
 import webbrowser
@@ -31,7 +32,7 @@ from flask import Flask  # , send_from_directory
 
 
 from classes import SubTomogram, Cleaner
-from read_write import read_imod, write_emfile, modify_emc_mat, zip_files
+from read_write import read_imod, modify_emc_mat  # , zip_files, write_emfile
 
 WHITE = "#FFFFFF"
 GREY = "#646464"
@@ -137,7 +138,13 @@ def main():
         prevent_initial_call=True,
     )
     def plot_tomo(
-        tomo_selection: str, clicked_point, make_cones: bool, cone_size: float, _, show_removed: bool, __
+        tomo_selection: str,
+        clicked_point,
+        make_cones: bool,
+        cone_size: float,
+        _,
+        show_removed: bool,
+        __,
     ):
         global subtomograms
         global last_click
@@ -185,13 +192,13 @@ def main():
         fig["layout"]["uirevision"] = "a"
 
         # if subtomo not yet cleaned, just plot all points
-        if len(subtomo.auto_cleaned_particles) == 0:
+        if len(subtomo.protein_arrays) == 1:
             if should_make_cones:
                 # me from the future: I have no idea what this was for but
                 # seems bad, causes weird cone behaviour when checking params
                 # disabling for now
                 # have to fix dash cones error again
-                #scale = 10 if params_message else 1
+                # scale = 10 if params_message else 1
 
                 nonchecking_df = pd.concat(
                     (subtomo.nonchecking_particles_df(), subtomo.cone_fix_df())
@@ -265,13 +272,140 @@ def main():
         return ext
 
     @app.callback(
-        Output("label-keep-particles", "children"), Input("switch-keep-particles", "on")
+        Output("label-keep-particles", "children"),
+        Input("switch-keep-particles", "on"),
     )
     def update_keeping_particles(keeping):
         if keeping:
             return "Keep selected particles"
         else:
             return "Keep unselected particles"
+
+    @app.callback(
+        Output("download-file", "data"),
+        Input("button-save-progress", "n_clicks"),
+        State("upload-data", "filename"),
+    )
+    def save_current_progress(clicks, filename):
+        if not clicks:
+            return None
+
+        file_path = TEMP_FILE_DIR + filename + "_progress.yml"
+
+        cleaning_params_key = ".__cleaning_parameters__."
+        global subtomograms
+        tomo_dict = {}
+        for name, tomo in subtomograms.items():
+            if name == cleaning_params_key:
+                print("Tomo {} has an invalid name and cannot be saved!").format(name)
+                continue
+            tomo_dict[name] = tomo.write_prog_dict()
+        # scipy.io.savemat("out_dict.mat", mdict=tomo_dict)
+        try:
+            tomo_dict[".__cleaning_parameters__."] = next(
+                iter(subtomograms.values())
+            ).cleaning_params.dict_to_print
+        except:
+            print("No cleaning parameters found to save")
+        print("Saving keys:", tomo_dict.keys())
+        prog = yaml.safe_dump(tomo_dict)
+        with open(file_path, "w") as yaml_file:
+            yaml_file.write(prog)
+        return dcc.send_file(file_path)
+
+    @app.callback(
+        Output("label-read", "children"),
+        Output("dropdown-tomo", "disabled"),
+        Output("collapse-upload", "is_open"),
+        Output("collapse-graph-control", "is_open"),
+        Output("collapse-save", "is_open"),
+        Input("upload-previous-session", "filename"),
+        Input("upload-previous-session", "contents"),
+        State("upload-data", "filename"),
+        State("upload-data", "contents"),
+    )
+    def load_previous_progress(
+        previous_filename, previous_contents, data_filename, data_contents
+    ):
+        global subtomograms
+
+        failed_upload = [True, True, False, False]
+        successful_upload = [False, False, True, True]
+        if ctx.triggered_id != "upload-previous-session":
+            data_filename = None
+
+        if not previous_filename:
+            return "", *failed_upload
+        if not data_filename:
+            return "Please select a .mat file first", *failed_upload
+
+        # ensure temp directory clear
+        files = glob.glob(TEMP_FILE_DIR + "*")
+        if files:
+            print("Pre-existing temp files found, removing:", files)
+        for f in files:
+            os.remove(f)
+
+        save_dash_upload(previous_filename, previous_contents)
+        save_dash_upload(data_filename, data_contents)
+
+        data_path = TEMP_FILE_DIR + data_filename
+        prev_path = TEMP_FILE_DIR + previous_filename
+
+        try:
+            geom = scipy.io.loadmat(data_path, simplify_cells=True)["subTomoMeta"][
+                "cycle000"
+            ]["geometry"]
+        except:
+            return "Matlab File Unreadable", *failed_upload
+
+        try:
+            with open(prev_path, "r") as prev_yaml:
+                prev_yaml = yaml.safe_load(prev_yaml)
+        except:
+            return "Previous session file unreadable", *failed_upload
+
+        geom_keys = set(geom.keys())
+        prev_keys = set(prev_yaml.keys())
+        prev_keys.discard(".__cleaning_parameters__.")
+
+        print("geom keys", geom_keys)
+        print("prev keys", prev_keys)
+
+        if not geom_keys == prev_keys:
+            if len(prev_keys) in {1, 5}:
+                return [
+                    "Keys do not match up between previous session and .mat file.",
+                    html.Br(),
+                    " Previous session only contains {0} keys, did you save the session with only {0} tomogram(s) loaded?".format(
+                        len(prev_keys)
+                    ),
+                ], *failed_upload
+            geom_missing = list(prev_keys.difference(geom_keys))
+            geom_msg = ""
+            if len(geom_missing) > 0:
+                geom_msg = "Keys present in previous session but not .mat: {}".format(
+                    ",".join(geom_missing)
+                )
+            prev_missing = list(geom_keys.difference(prev_keys))
+            prev_msg = ""
+            if len(prev_missing) > 0:
+                prev_msg = "Keys present in previous session but not .mat: {}".format(
+                    ",".join(geom_missing)
+                )
+            return [
+                "Keys do not match up between previous session and .mat file.",
+                html.Br(),
+                geom_msg,
+                html.Br(),
+                prev_msg,
+            ] * failed_upload
+
+        for gkey, geom_arr in geom.items():
+            subtomo = SubTomogram.from_prog_dict(gkey, geom_arr, prev_yaml[gkey])
+            subtomograms[gkey] = subtomo
+
+        return "", *successful_upload
 
     @app.callback(
         Output("dropdown-tomo", "options"),
@@ -326,8 +460,7 @@ def main():
         State("upload-data", "contents"),
         State("slider-num-images", "value"),
         State("radio-cleantype", "value"),
-        long_callback=True
-        # State("dropdown-filetype", "value")
+        long_callback=True,
     )
     def read_subtomograms(clicks, filename, contents, num_images, cleaning_type):
         if ctx.triggered_id != "button-read":
@@ -752,7 +885,7 @@ def main():
                 dcc.RadioItems(
                     [
                         "Clean based on orientation",
-                        #"Clean based on reference particles",
+                        # "Clean based on reference particles",
                     ],
                     "Clean based on orientation",
                     id="radio-cleantype",
@@ -780,19 +913,37 @@ def main():
             html.Tr(
                 [
                     html.Td(dbc.Button("Read Subtomograms", id="button-read")),
-                    html.Td(id="label-read"),
                 ]
             ),
+            html.Td(
+                dcc.Upload(
+                    "Load Previous Session",
+                    id="upload-previous-session",
+                    multiple=False,
+                    style={
+                        #'width': '100%',
+                        # "height": "60px",
+                        # "lineHeight": "60px",
+                        "borderWidth": "1px",
+                        "borderStyle": "dashed",
+                        "borderRadius": "3px",
+                        "textAlign": "center",
+                        "margin": "20px",
+                        "overflow": "hidden",
+                    },
+                )
+            ),
+            html.Tr(html.Div(id="label-read"))
             # html.Tr(html.Td(dbc.Button("Plot Without Cleaning", id="button-plot_all"))),
         ],
-        style={  #'float':'left',
-            "overflow": "hidden",
-            "margin": "3px",
-            "width": "100%"
-            #'borderWidth': '1px',
-            #'borderStyle': 'dashed',
-            #'borderRadius': '5px'
-        },
+        # style={  #'float':'left',
+        #     "overflow": "hidden",
+        #     "margin": "3px",
+        #     "width": "100%"
+        #     #'borderWidth': '1px',
+        #     #'borderStyle': 'dashed',
+        #     #'borderRadius': '5px'
+        # },
     )
 
     graph_controls_table = html.Table(
@@ -818,8 +969,15 @@ def main():
             html.Tr(
                 [
                     html.Td("Overall Cone Size", id="label-cone-size"),
-                    html.Td(dbc.Input(id="inp-cone-size", value=10, type="number", style={"width":"70%"})),
-                    html.Td(dbc.Button("Set", id="button-set-cone-size"))
+                    html.Td(
+                        dbc.Input(
+                            id="inp-cone-size",
+                            value=10,
+                            type="number",
+                            style={"width": "70%"},
+                        )
+                    ),
+                    html.Td(dbc.Button("Set", id="button-set-cone-size")),
                 ]
             ),
             html.Tr(
@@ -843,7 +1001,7 @@ def main():
             "overflow": "hidden",
             "margin": "3px",
             "width": "100%",
-            "table-layout":"fixed"
+            "table-layout": "fixed"
             #'borderWidth': '1px',
             #'borderStyle': 'dashed',
             #'borderRadius': '5px'
@@ -852,6 +1010,9 @@ def main():
 
     save_table = html.Table(
         [
+            html.Tr(
+                html.Td(dbc.Button("Save Current Progress", id="button-save-progress"))
+            ),
             html.Tr(
                 [
                     html.Td("Keep selected particles", id="label-keep-particles"),
@@ -868,9 +1029,9 @@ def main():
             ),
             html.Tr(
                 [
-                    html.Td("Also save:"),
+                    # html.Td("Also save:"),
                     dcc.Checklist(
-                        [".em (Place Object)"],
+                        # [".em (Place Object)"],
                         [],
                         inline=True,
                         id="checklist-save-additional",
@@ -991,10 +1152,12 @@ def main():
             )
             return None
 
-        if ".em (Place Object)" in save_additional:
-            write_emfile(subtomograms, "out", keep_selected)
-            zip_files(output_name, "em")
-            dcc.send_file(TEMP_FILE_DIR + output_name)
+        #  temporarily disabled until em file saving is fixed
+        #
+        # if ".em (Place Object)" in save_additional:
+        #     write_emfile(subtomograms, "out", keep_selected)
+        #     zip_files(output_name, "em")
+        #     dcc.send_file(TEMP_FILE_DIR + output_name)
 
         modify_emc_mat(
             subtomograms,

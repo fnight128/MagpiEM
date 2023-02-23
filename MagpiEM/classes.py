@@ -25,6 +25,8 @@ class Cleaner:
 
     flipped_ori_range: list
 
+    dict_to_print: dict
+
     def __init__(
         self,
         cc_thresh,
@@ -47,6 +49,16 @@ class Cleaner:
         self.flipped_ori_range = (
             [-x for x in reversed(self.ori_range)] if allow_flips else 0
         )
+        self.dict_to_print = {
+            "distance": target_dist,
+            "distance tolerance": dist_tol,
+            "orientation": target_ori,
+            "orientation tolerance": ori_tol,
+            "cc threshold": cc_thresh,
+            "min neighbours": min_neigh,
+            "min array size": min_array,
+            "allow flips": allow_flips,
+        }
 
     def __str__(self):
         return "Allowed distances: {}-{}. Allowed orientations:{}-{}. Allowed Displacement angles:{}-{}.".format(
@@ -659,6 +671,43 @@ class SubTomogram:
             particle.set_protein_array(0)
             self.auto_cleaned_particles.discard(particle)
         self.protein_arrays.pop(n)
+
+    def write_prog_dict(self):
+        if len(self.protein_arrays.keys()) < 2:
+            print("Skipping tomo {}, contains no arrays").format(self.name)
+            return
+        arr_dict = {}
+        for ind, arr in self.protein_arrays.items():
+            # must use lists, or yaml interprets as dicts
+            if ind == 0:
+                continue
+            # print("ind", ind)
+            p_ids = [p.particle_id for p in arr]
+            arr_dict[ind] = p_ids
+        arr_dict["selected"] = list(self.selected_n)
+        return arr_dict
+
+    @staticmethod
+    def from_prog_dict(name, mat_geomt, prog_dict):
+        print("loading tomo", name)
+        subtomo = SubTomogram.tomo_from_mat(name, mat_geomt)
+        inverted_prog_dict = {}
+        for array, particles in prog_dict.items():
+            if array == "selected":
+                continue
+            for particle in particles:
+                inverted_prog_dict[particle] = array
+        for particle in subtomo.all_particles:
+            p_id = particle.particle_id
+            if p_id in inverted_prog_dict.keys():
+                particle.set_protein_array(
+                    int(inverted_prog_dict[particle.particle_id])
+                )
+            else:
+                particle.set_protein_array(0)
+        subtomo.selected_n = set(prog_dict["selected"])
+        subtomo.generate_particle_df()
+        return subtomo
 
 
 def normalise(vec: np.ndarray):
