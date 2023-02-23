@@ -936,14 +936,14 @@ def main():
             html.Tr(html.Div(id="label-read"))
             # html.Tr(html.Td(dbc.Button("Plot Without Cleaning", id="button-plot_all"))),
         ],
-        # style={  #'float':'left',
-        #     "overflow": "hidden",
-        #     "margin": "3px",
-        #     "width": "100%"
-        #     #'borderWidth': '1px',
-        #     #'borderStyle': 'dashed',
-        #     #'borderRadius': '5px'
-        # },
+        style={  #'float':'left',
+            "overflow": "hidden",
+            "margin": "3px",
+            "width": "100%",
+            #'borderWidth': '1px',
+            #'borderStyle': 'dashed',
+            #'borderRadius': '5px'
+        },
     )
 
     graph_controls_table = html.Table(
@@ -962,7 +962,7 @@ def main():
             ),
             html.Tr(
                 [
-                    html.Td("Cone Plot (experimental)", id="label-cone-plot"),
+                    html.Td("Cone Plot (experimental!)", id="label-cone-plot"),
                     daq.BooleanSwitch(id="switch-cone-plot", on=False),
                 ]
             ),
