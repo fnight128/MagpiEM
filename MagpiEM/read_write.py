@@ -54,7 +54,7 @@ def modify_emc_mat(
         print(tomo_id)
         table_rows = list()
         try:
-            mat_out = scipy.io.loadmat(inp_path, simplify_cells=True)
+            mat_out = scipy.io.loadmat(inp_path, simplify_cells=True, mat_dtype=True)
             mat_inp = mat_out["subTomoMeta"]["cycle000"]["geometry"]
         except:
             print("Unable to open original matlab file, was it moved?")
