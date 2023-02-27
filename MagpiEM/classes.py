@@ -290,10 +290,17 @@ class Particle:
             particles.add(Particle(0, 9999, x, blank_orientation, particles, subtomo))
         return particles
 
-    # @staticmethod
-    # def from_em(em_df, subtomo):
-    #     particles = set()
-    #     pass
+
+class ReferenceParticle(Particle):
+    def __eq__(self, other):
+        """
+        Define two particles as equal if in same position
+        Rounded as very small differences often introduced
+        by e.g. binning
+        """
+        self_rough_pos = np.round(self.position, 2)
+        other_rough_pos = np.round(other.position, 2)
+        return (self_rough_pos == other_rough_pos).all()
 
 
 class SubTomogram:
