@@ -31,8 +31,8 @@ import dash_daq as daq
 from flask import Flask  # , send_from_directory
 
 
-from classes import SubTomogram, Cleaner
-from read_write import read_imod, modify_emc_mat  # , zip_files, write_emfile
+from .classes import SubTomogram, Cleaner
+from .read_write import read_imod, modify_emc_mat  # , zip_files, write_emfile
 
 WHITE = "#FFFFFF"
 GREY = "#646464"
@@ -194,11 +194,6 @@ def main():
         # if subtomo not yet cleaned, just plot all points
         if len(subtomo.protein_arrays) == 1:
             if should_make_cones:
-                # me from the future: I have no idea what this was for but
-                # seems bad, causes weird cone behaviour when checking params
-                # disabling for now
-                # have to fix dash cones error again
-                # scale = 10 if params_message else 1
 
                 nonchecking_df = pd.concat(
                     (subtomo.nonchecking_particles_df(), subtomo.cone_fix_df())

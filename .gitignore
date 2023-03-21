@@ -159,3 +159,6 @@ cython_debug/
 
 *.yml
 *.html
+
+#PyCharm
+.idea/
