@@ -275,37 +275,37 @@ def main():
             return "Keep selected particles"
         else:
             return "Keep unselected particles"
-        
+
     @app.callback(
         Output("button-set-cone-size", "n_clicks"),
-        Input("div-null", "style")
-        )
+        Input("div-null", "style"),
+    )
     def cone_clicks(_):
         return 1
-        
+
     @app.callback(
         Output("button-set-cone-size", "n_clicks"),
         State("button-set-cone-size", "n_clicks"),
         Input("button-toggle-convex", "n_clicks"),
         prevent_initial_call=True,
-        )
+    )
     def select_convex(clicks, _):
         global subtomograms
         for tomo in subtomograms.values():
             tomo.toggle_convex_arrays()
-        return int(clicks) + 1
-    
+        return clicks + 1
+
     @app.callback(
         Output("button-set-cone-size", "n_clicks"),
         State("button-set-cone-size", "n_clicks"),
         Input("button-toggle-concave", "n_clicks"),
         prevent_initial_call=True,
-        )
+    )
     def select_concave(clicks, _):
         global subtomograms
         for tomo in subtomograms.values():
             tomo.toggle_concave_arrays()
-        return int(clicks) + 1
+        return clicks + 1
 
     @app.callback(
         Output("download-file", "data"),

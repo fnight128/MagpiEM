@@ -681,13 +681,15 @@ class SubTomogram:
             if a_id > 0
             and np.mean([particle.avg_curvature for particle in particles]) < 0
         }
-    
+
     def toggle_convex_arrays(self):
         for a_id in self.get_convex_arrays():
             self.toggle_selected(a_id)
-    
+
     def toggle_concave_arrays(self):
-        for a_id in set(self.protein_arrays.keys()).difference(self.get_convex_arrays()):
+        for a_id in set(self.protein_arrays.keys()).difference(
+            self.get_convex_arrays()
+        ):
             self.toggle_selected(a_id)
 
     def show_particle_data(self, position):
