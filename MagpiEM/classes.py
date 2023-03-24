@@ -61,7 +61,7 @@ class Cleaner:
         }
 
     def __str__(self):
-        return "Allowed distances: {}-{}. Allowed orientations:{}-{}. Allowed Displacement angles:{}-{}.".format(
+        return "Allowed distances: {}-{}. Allowed orientations:{}-{}. Allowed curvatures:{}-{}.".format(
             *self.dist_range, *self.ori_range, *self.pos_range
         )
 
@@ -142,6 +142,8 @@ class Particle:
     cc_score: float
     position: np.ndarray
     direction: np.ndarray
+
+    avg_curvature: float
 
     subtomo: object
 
@@ -289,6 +291,18 @@ class Particle:
         for x in imod_data:
             particles.add(Particle(0, 9999, x, blank_orientation, particles, subtomo))
         return particles
+
+    def find_avg_curvature(self):
+        if len(self.neighbours) == 0:
+            print(
+                "Warning: calculating average curvature for particle with no neighbours. This is likely a mistake"
+            )
+            self.avg_curvature = 0.0
+            return
+        # print(np.mean([self.dot_displacement(neighbour) for neighbour in self.neighbours]))
+        self.avg_curvature = np.mean(
+            [self.dot_displacement(neighbour) for neighbour in self.neighbours]
+        )
 
 
 class ReferenceParticle(Particle):
@@ -578,6 +592,7 @@ class SubTomogram:
             # if good, assign to protein array
             # particle.choose_protein_array()
             particle.choose_protein_array_new(len(self.protein_arrays))
+
         print("Choosing initial arrays", tm() - t0)
         # can't check size of array until all particles allocated
 
@@ -591,6 +606,7 @@ class SubTomogram:
                     self.particles_fate["small_array"].add(particle)
             else:
                 for particle in protein_array:
+                    particle.find_avg_curvature()
                     self.auto_cleaned_particles.add(particle)
         for akey in bad_arrays:
             self.delete_array(akey)
@@ -657,6 +673,22 @@ class SubTomogram:
             self.selected_n.remove(n)
         else:
             self.selected_n.add(n)
+
+    def get_convex_arrays(self):
+        return {
+            a_id
+            for a_id, particles in self.protein_arrays.items()
+            if a_id > 0
+            and np.mean([particle.avg_curvature for particle in particles]) < 0
+        }
+    
+    def toggle_convex_arrays(self):
+        for a_id in self.get_convex_arrays():
+            self.toggle_selected(a_id)
+    
+    def toggle_concave_arrays(self):
+        for a_id in set(self.protein_arrays.keys()).difference(self.get_convex_arrays()):
+            self.toggle_selected(a_id)
 
     def show_particle_data(self, position):
         new_particle = self.get_particle_from_position(position)

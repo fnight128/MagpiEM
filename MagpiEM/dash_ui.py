@@ -31,8 +31,8 @@ import dash_daq as daq
 from flask import Flask  # , send_from_directory
 
 
-from .classes import SubTomogram, Cleaner
-from .read_write import read_imod, modify_emc_mat  # , zip_files, write_emfile
+from classes import SubTomogram, Cleaner
+from read_write import read_imod, modify_emc_mat  # , zip_files, write_emfile
 
 WHITE = "#FFFFFF"
 GREY = "#646464"
@@ -275,6 +275,37 @@ def main():
             return "Keep selected particles"
         else:
             return "Keep unselected particles"
+        
+    @app.callback(
+        Output("button-set-cone-size", "n_clicks"),
+        Input("div-null", "style")
+        )
+    def cone_clicks(_):
+        return 1
+        
+    @app.callback(
+        Output("button-set-cone-size", "n_clicks"),
+        State("button-set-cone-size", "n_clicks"),
+        Input("button-toggle-convex", "n_clicks"),
+        prevent_initial_call=True,
+        )
+    def select_convex(clicks, _):
+        global subtomograms
+        for tomo in subtomograms.values():
+            tomo.toggle_convex_arrays()
+        return int(clicks) + 1
+    
+    @app.callback(
+        Output("button-set-cone-size", "n_clicks"),
+        State("button-set-cone-size", "n_clicks"),
+        Input("button-toggle-concave", "n_clicks"),
+        prevent_initial_call=True,
+        )
+    def select_concave(clicks, _):
+        global subtomograms
+        for tomo in subtomograms.values():
+            tomo.toggle_concave_arrays()
+        return int(clicks) + 1
 
     @app.callback(
         Output("download-file", "data"),
@@ -514,14 +545,14 @@ def main():
         elif num_images == 2:
             counter = -1
 
-        for gkey in geom.keys():
+        for gkey, tomo_geom in geom.items():
             if counter == 0:
                 break
             counter -= 1
 
             print(gkey)
 
-            subtomo = SubTomogram.tomo_from_mat(gkey, geom[gkey])
+            subtomo = SubTomogram.tomo_from_mat(gkey, tomo_geom)
 
             subtomograms[gkey] = subtomo
 
@@ -974,6 +1005,12 @@ def main():
                     ),
                     html.Td(dbc.Button("Set", id="button-set-cone-size")),
                 ]
+            ),
+            html.Tr(
+                [
+                    html.Td(dbc.Button("Toggle Convex", id="button-toggle-convex")),
+                    html.Td(dbc.Button("Toggle Concave", id="button-toggle-concave")),
+                ],
             ),
             html.Tr(
                 [
