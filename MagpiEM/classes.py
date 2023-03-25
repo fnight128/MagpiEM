@@ -294,9 +294,6 @@ class Particle:
 
     def find_avg_curvature(self):
         if len(self.neighbours) == 0:
-            print(
-                "Warning: calculating average curvature for particle with no neighbours. This is likely a mistake"
-            )
             self.avg_curvature = 0.0
             return
         # print(np.mean([self.dot_displacement(neighbour) for neighbour in self.neighbours]))
