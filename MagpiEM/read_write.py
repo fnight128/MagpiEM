@@ -14,6 +14,8 @@ from pathlib import Path
 from glob import glob
 from zipfile import ZipFile
 
+from classes import SubTomogram
+
 # readin
 TEMP_FILE_DIR = "static/"
 
@@ -74,7 +76,6 @@ def modify_emc_mat(
     except:
         print("Unable to save file")
 
-
 def write_emfile(subtomo_dict: dict, out_suffix: str, keep_selected: bool):
     for skey, tomo in subtomo_dict.items():
         filename = "{0}_{1}{2}".format(skey, out_suffix, ".em")
@@ -128,6 +129,24 @@ def append_filename(filename, suffix="out"):
     return "{0}_{1}{2}".format(p.stem, suffix, p.suffix)
 
 
+def mat_to_subtomos(filename, num_images=9999):
+    filename = TEMP_FILE_DIR + filename
+    try:
+        full_geom = scipy.io.loadmat(filename, simplify_cells=True)[
+            "subTomoMeta"
+        ]["cycle000"]["geometry"]
+    except:
+        print("Mat file {} unreadable".format(filename))
+        return
+    
+    subtomograms = dict()
+    for idx, (gkey, geom) in enumerate(full_geom.items()):
+        if idx == num_images:
+            break
+        print(gkey)
+        subtomo = SubTomogram.tomo_from_mat(gkey, geom)
+        subtomograms[gkey] = subtomo
+    return subtomograms
 # data=0
 
 
