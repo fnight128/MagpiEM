@@ -31,8 +31,8 @@ import dash_daq as daq
 from flask import Flask  # , send_from_directory
 
 
-from .classes import SubTomogram, Cleaner
-from .read_write import read_imod, modify_emc_mat, mat_to_subtomos  # , zip_files, write_emfile
+from classes import SubTomogram, Cleaner
+from read_write import read_imod, modify_emc_mat, mat_to_subtomos  # , zip_files, write_emfile
 
 WHITE = "#FFFFFF"
 GREY = "#646464"
@@ -468,7 +468,6 @@ def main():
         num_images = num_img_dict[num_images]
 
         global subtomograms
-        subtomograms = dict()
 
         if cleaning_type == "Clean based on orientation":
             clean_open = [True, False]
@@ -491,7 +490,7 @@ def main():
         temp_file_path = TEMP_FILE_DIR + filename
 
         if ".mat" in filename:
-            subtomograms = mat_to_subtomos(filename, num_images)
+            subtomograms = mat_to_subtomos(filename, num_images=num_images)
         elif ".mod" in filename:
             try:
                 imod_data = read_imod(temp_file_path)
