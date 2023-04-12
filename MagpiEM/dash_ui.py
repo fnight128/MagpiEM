@@ -643,8 +643,8 @@ def main():
         State("inp-dist-tol", "value"),
         State("inp-ori-goal", "value"),
         State("inp-ori-tol", "value"),
-        State("inp-pos-goal", "value"),
-        State("inp-pos-tol", "value"),
+        State("inp-curv-goal", "value"),
+        State("inp-curv-tol", "value"),
         State("inp-min-neighbours", "value"),
         State("inp-cc-thresh", "value"),
         State("inp-array-size", "value"),
@@ -745,10 +745,10 @@ def main():
             ),
             html.Tr(
                 [
-                    html.Td("Displacement"),
-                    inp_num("pos-goal", 90),
+                    html.Td("Curvature"),
+                    inp_num("curv-goal", 90),
                     html.Td("±"),
-                    inp_num("pos-tol", 20),
+                    inp_num("curv-tol", 20),
                 ]
             ),
             html.Tr([html.Td("Min Neighbours"), inp_num("min-neighbours", 2)]),
