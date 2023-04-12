@@ -11,8 +11,8 @@ from prettytable import PrettyTable
 from collections import defaultdict
 from time import time as tm
 
-ADJ_RANGE = [-1, 0, 1]
-ADJ_AREA_GEN = [[i, j, k] for i in ADJ_RANGE for j in ADJ_RANGE for k in ADJ_RANGE]
+ADJ_RANGE = (-1, 0, 1)
+ADJ_AREA_GEN = tuple([(i, j, k) for i in ADJ_RANGE for j in ADJ_RANGE for k in ADJ_RANGE])
 
 
 class Cleaner:
@@ -154,12 +154,11 @@ class Particle:
 
     protein_array: int = 0
 
-    def __init__(self, p_id, cc, position, orientation, particle_set, subtomo):
+    def __init__(self, p_id, cc, position, orientation, subtomo):
         self.particle_id = p_id
         self.cc_score = cc
         self.position = position
         self.direction = normalise(orientation)
-        self.particles = particle_set
         self.subtomo = subtomo
         self.neighbours = set()
 
@@ -268,6 +267,29 @@ class Particle:
         return "Distance: {:.1f}\nOrientation: {:.1f}°\nDisplacement: {:.1f}°".format(
             distance, orientation, displacement
         )
+    
+    @staticmethod
+    def from_array(plist, subtomo):
+        """
+        Produce an array of particles from parameters
+
+        Parameters
+        ----------
+        plist : List of lists of parameters
+            List of particles. Each entry should be a list of parameters
+            in the following order:
+                cc value, [x, y, z], [u, v, w]
+        subtomo: SubTomogram
+            SubTomogram object from which the particles are from
+        
+        Returns
+        -------
+        Set of particles
+
+        """
+        {Particle(idx, *pdata, subtomo) for idx, pdata in enumerate(plist)}
+        #def __init__(self, p_id, cc, position, orientation, particle_set, subtomo):
+    #__init__(self, p_id, cc, position, orientation, particle_set, subtomo):
 
     @staticmethod
     def from_geom_mat(subtomo, garr: np.ndarray, cc_thresh):
@@ -355,14 +377,6 @@ class SubTomogram:
         self.reference_points = set()
         self.checking_particles = []
         self.cone_fix = None
-
-    @staticmethod
-    def tomo_from_mat(name, mat_geom):
-        subtomo = SubTomogram(name)
-        particles = Particle.from_geom_mat(subtomo, mat_geom, 5)
-        subtomo.set_particles(particles)
-        subtomo.position_only = False
-        return subtomo
 
     @staticmethod
     def tomo_from_imod(name, imod_struct):
@@ -502,7 +516,6 @@ class SubTomogram:
 
     def set_particles(self, particles):
         self.all_particles = particles
-        # self.sample_particle = next(iter(particles))
 
     def set_clean_params(self, cp):
         self.cleaning_params = cp

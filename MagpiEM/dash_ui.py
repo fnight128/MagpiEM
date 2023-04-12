@@ -32,7 +32,9 @@ from flask import Flask  # , send_from_directory
 
 
 from classes import SubTomogram, Cleaner
-from read_write import read_imod, modify_emc_mat  # , zip_files, write_emfile
+
+from read_write import read_imod, modify_emc_mat, mat_to_subtomos  # , zip_files, write_emfile
+
 
 WHITE = "#FFFFFF"
 GREY = "#646464"
@@ -495,8 +497,10 @@ def main():
         if not filename:
             return "", True, True, False, False, False
 
+        num_img_dict = {0:1, 1:5, 2:-1}
+        num_images = num_img_dict[num_images]
+
         global subtomograms
-        subtomograms = dict()
 
         if cleaning_type == "Clean based on orientation":
             clean_open = [True, False]
@@ -520,11 +524,9 @@ def main():
 
         if ".mat" in filename:
             try:
-                geom = scipy.io.loadmat(temp_file_path, simplify_cells=True)[
-                    "subTomoMeta"
-                ]["cycle000"]["geometry"]
+                subtomograms = mat_to_subtomos(filename, num_images=num_images)
             except:
-                return "Matlab File Unreadable", True, True, False, False, False
+                return 
         elif ".mod" in filename:
             try:
                 imod_data = read_imod(temp_file_path)
@@ -535,26 +537,6 @@ def main():
             return "Tomogram read", False, False, True, *clean_open
         else:
             return "Unrecognised file extension", True, True, False, False, False
-
-        print(geom.keys())
-
-        if num_images == 0:
-            counter = 1
-        elif num_images == 1:
-            counter = 5
-        elif num_images == 2:
-            counter = -1
-
-        for gkey, tomo_geom in geom.items():
-            if counter == 0:
-                break
-            counter -= 1
-
-            print(gkey)
-
-            subtomo = SubTomogram.tomo_from_mat(gkey, tomo_geom)
-
-            subtomograms[gkey] = subtomo
 
         return "Tomograms read", False, False, True, *clean_open
 
@@ -588,18 +570,18 @@ def main():
         with open(os.path.join(TEMP_FILE_DIR, filename), "wb") as fp:
             fp.write(base64.decodebytes(data))
 
-    @app.callback(
-        Output("div-need-refs", "children"),
-        Input("collapse-clean", "is_open"),
-        Input("upload-ref", "children"),
-    )
-    def print_needed_refs(_, __):
-        global subtomograms
-        return [
-            tomoname
-            for tomoname, subtomo in subtomograms.items()
-            if not subtomo.reference_points
-        ]
+    # @app.callback(
+    #     Output("div-need-refs", "children"),
+    #     Input("collapse-clean", "is_open"),
+    #     Input("upload-ref", "children"),
+    # )
+    # def print_needed_refs(_, __):
+    #     global subtomograms
+    #     return [
+    #         tomoname
+    #         for tomoname, subtomo in subtomograms.items()
+    #         if not subtomo.reference_points
+    #     ]
 
     @app.callback(
         Output("upload-ref", "children"),
