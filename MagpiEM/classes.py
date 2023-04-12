@@ -190,13 +190,13 @@ class Particle:
                 good_orientation.add(neighbour)
         self.neighbours = good_orientation
 
-    def filter_neighbour_position(self, pos_range):
-        good_displacement = {
+    def filter_curvature(self, pos_range):
+        good_curvature = {
             neighbour
             for neighbour in self.neighbours
-            if within(self.dot_displacement(neighbour), pos_range)
+            if within(self.dot_curvature(neighbour), pos_range)
         }
-        self.neighbours = good_displacement
+        self.neighbours = good_curvature
 
     @staticmethod
     def dot_product(v1, v2):
@@ -211,7 +211,7 @@ class Particle:
         "Dot product of two particles' orientations"
         return Particle.dot_product(self.direction, particle.direction)
 
-    def dot_displacement(self, particle):
+    def dot_curvature(self, particle):
         "Dot product of particle's orientation with its displacement from second particle"
         return Particle.dot_product(
             particle.direction, normalise(self.displacement_from(particle))
@@ -263,9 +263,9 @@ class Particle:
         "Return set of useful parameters about two particles"
         distance = self.distance2(particle2) ** 0.5
         orientation = np.degrees(np.arccos(self.dot_direction(particle2)))
-        displacement = np.degrees(np.arccos(self.dot_displacement(particle2)))
+        curvature = np.degrees(np.arccos(self.dot_curvature(particle2)))
         return "Distance: {:.1f}\nOrientation: {:.1f}°\nDisplacement: {:.1f}°".format(
-            distance, orientation, displacement
+            distance, orientation, curvature
         )
     
     @staticmethod
@@ -318,9 +318,9 @@ class Particle:
         if len(self.neighbours) == 0:
             self.avg_curvature = 0.0
             return
-        # print(np.mean([self.dot_displacement(neighbour) for neighbour in self.neighbours]))
+        # print(np.mean([self.dot_curvature(neighbour) for neighbour in self.neighbours]))
         self.avg_curvature = np.mean(
-            [self.dot_displacement(neighbour) for neighbour in self.neighbours]
+            [self.dot_curvature(neighbour) for neighbour in self.neighbours]
         )
 
 
@@ -590,11 +590,11 @@ class SubTomogram:
         t0 = tm()
         for particle in self.all_particles:  # temp for timing
             # check correct positioning
-            particle.filter_neighbour_position(self.cleaning_params.pos_range)
+            particle.filter_curvature(self.cleaning_params.pos_range)
             if len(particle.neighbours) < self.cleaning_params.min_neighbours:
                 self.particles_fate["wrong_disp"].add(particle)
                 continue
-        print("Comparing displacements", tm() - t0)
+        print("Comparing curvatures", tm() - t0)
         t0 = tm()
         for particle in self.all_particles:  # temp for timing
             if particle.protein_array:
