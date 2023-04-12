@@ -287,7 +287,7 @@ class Particle:
         Set of particles
 
         """
-        {Particle(idx, *pdata, subtomo) for idx, pdata in enumerate(plist)}
+        return {Particle(idx, *pdata, subtomo) for idx, pdata in enumerate(plist)}
         #def __init__(self, p_id, cc, position, orientation, particle_set, subtomo):
     #__init__(self, p_id, cc, position, orientation, particle_set, subtomo):
 

@@ -151,10 +151,12 @@ def mat_to_subtomos(filename, cycle="cycle000", num_images=-1):
         If file is unreadable, returns 0
 
     """
+    geom_key = "geometry" if cycle=="cycle000" else "Avg_geometry"
+    
     try:
         full_geom = scipy.io.loadmat(filename, simplify_cells=True)[
             "subTomoMeta"
-        ]["cycle000"]["geometry"]
+        ][cycle][geom_key]
     except:
         print("Mat file {} unreadable".format(filename))
         return
@@ -166,11 +168,9 @@ def mat_to_subtomos(filename, cycle="cycle000", num_images=-1):
         print(gkey)
         subtomo = SubTomogram(gkey)
         pdata = [[row[0], row[10:13], row[22:25]] for row in geom]
-        #print(pdata)
-        print(pdata[1])
         particles = Particle.from_array(pdata, subtomo)
         subtomo.set_particles(particles)
-        #subtomo = SubTomogram.tomo_from_mat(gkey, geom)
+        #print(subtomo.name, len(subtomo.all_particles))
         subtomograms[gkey] = subtomo
     return subtomograms
 # data=0

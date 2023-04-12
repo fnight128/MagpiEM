@@ -160,18 +160,17 @@ def main():
 
         subtomo = subtomograms[tomo_selection]
 
-        # strange error with cone plots makes completely random, erroneous clicks
-        # happen right after clicking on cone plot - add a cooldown to temporarily
-        # prevent this - clicks must now be 500ms apart
-        # print("Time since last click: ", time() - last_click)
-        click_on_cooldown = time() - last_click < 0.5
         # clicked point lingers between calls, causing unwanted toggling when e.g.
         # switching to cones, and selected points can carry over to the next graph
         # prevent by clearing clicked_point if not actually from clicking a point
         if ctx.triggered_id != "graph-picking":
             clicked_point = ""
         else:
-            if click_on_cooldown:
+            # strange error with cone plots makes completely random, erroneous clicks
+            # happen right after clicking on cone plot - add a cooldown to temporarily
+            # prevent this - clicks must now be 500ms apart
+            # print("Time since last click: ", time() - last_click)
+            if time() - last_click < 0.5:
                 raise PreventUpdate
             last_click = time()
             clicked_particle_pos = [
@@ -180,7 +179,7 @@ def main():
             print("Clicked pos", clicked_particle_pos)
             params_message = subtomo.show_particle_data(clicked_particle_pos)
 
-        should_make_cones = make_cones and not subtomo.position_only
+        should_make_cones = make_cones #and not subtomo.position_only
 
         try:
             subtomo.reference_df
@@ -191,6 +190,7 @@ def main():
         fig = go.Figure()
         fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
         fig.update_layout(margin={"l": 20, "r": 20, "t": 20, "b": 20})
+        fig.update_layout(scene_aspectmode="data")
         fig["layout"]["uirevision"] = "a"
 
         # if subtomo not yet cleaned, just plot all points
@@ -380,6 +380,7 @@ def main():
         data_path = TEMP_FILE_DIR + data_filename
         prev_path = TEMP_FILE_DIR + previous_filename
 
+        #TODO use new upload method
         try:
             geom = scipy.io.loadmat(data_path, simplify_cells=True)["subTomoMeta"][
                 "cycle000"
@@ -524,7 +525,7 @@ def main():
 
         if ".mat" in filename:
             try:
-                subtomograms = mat_to_subtomos(filename, num_images=num_images)
+                subtomograms = mat_to_subtomos(TEMP_FILE_DIR + filename, num_images=num_images)
             except:
                 return 
         elif ".mod" in filename:
