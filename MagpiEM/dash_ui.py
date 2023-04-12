@@ -490,7 +490,10 @@ def main():
         temp_file_path = TEMP_FILE_DIR + filename
 
         if ".mat" in filename:
-            subtomograms = mat_to_subtomos(filename, num_images=num_images)
+            try:
+                subtomograms = mat_to_subtomos(filename, num_images=num_images)
+            except:
+                return 
         elif ".mod" in filename:
             try:
                 imod_data = read_imod(temp_file_path)
@@ -533,18 +536,18 @@ def main():
         with open(os.path.join(TEMP_FILE_DIR, filename), "wb") as fp:
             fp.write(base64.decodebytes(data))
 
-    @app.callback(
-        Output("div-need-refs", "children"),
-        Input("collapse-clean", "is_open"),
-        Input("upload-ref", "children"),
-    )
-    def print_needed_refs(_, __):
-        global subtomograms
-        return [
-            tomoname
-            for tomoname, subtomo in subtomograms.items()
-            if not subtomo.reference_points
-        ]
+    # @app.callback(
+    #     Output("div-need-refs", "children"),
+    #     Input("collapse-clean", "is_open"),
+    #     Input("upload-ref", "children"),
+    # )
+    # def print_needed_refs(_, __):
+    #     global subtomograms
+    #     return [
+    #         tomoname
+    #         for tomoname, subtomo in subtomograms.items()
+    #         if not subtomo.reference_points
+    #     ]
 
     @app.callback(
         Output("upload-ref", "children"),

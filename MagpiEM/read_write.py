@@ -8,7 +8,6 @@ Created on Mon Nov  7 16:55:11 2022
 import imodmodel
 import emfile
 import numpy as np
-import pandas as pd
 from scipy.spatial.transform import Rotation as R
 import scipy.io
 from pathlib import Path

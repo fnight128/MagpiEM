@@ -11,8 +11,8 @@ from prettytable import PrettyTable
 from collections import defaultdict
 from time import time as tm
 
-ADJ_RANGE = [-1, 0, 1]
-ADJ_AREA_GEN = [[i, j, k] for i in ADJ_RANGE for j in ADJ_RANGE for k in ADJ_RANGE]
+ADJ_RANGE = (-1, 0, 1)
+ADJ_AREA_GEN = tuple([(i, j, k) for i in ADJ_RANGE for j in ADJ_RANGE for k in ADJ_RANGE])
 
 
 class Cleaner:
