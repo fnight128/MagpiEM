@@ -16,7 +16,7 @@ from zipfile import ZipFile
 import starfile
 import eulerangles
 
-from .classes import SubTomogram, Particle
+from classes import SubTomogram, Particle
 
 # readin
 TEMP_FILE_DIR = "static/"
@@ -214,23 +214,24 @@ def star_to_tomo(filename, num_images=-1):
         # extract euler angles and convert to z-vectors
         angles = tomo_df[["rlnAngleRot", "rlnAngleTilt", "rlnAnglePsi"]]
         ang_mats = eulerangles.euler2matrix(angles, "zyz", intrinsic=True, right_handed_rotation=True)
-        z_rotation = np.array([ang_mat[:,2] for ang_mat in ang_mats])
+        z_rotation = [ang_mat[2,:] for ang_mat in ang_mats]
         
         # extract position vectors
         pos = tomo_df[["rlnCoordinateX", "rlnCoordinateY", "rlnCoordinateZ"]].to_numpy()
         
         # extract CC scores (TODO)
-        ccs = np.array([10] * pos.shape[0])
-        ccs = ccs[:, None]
+        ccs = [10] * len(z_rotation)
+        ccs = ccs
         
         # assemble into standard format
-        pdata = np.hstack([ccs, pos, z_rotation])
+        pdata = [[cc, ps, z_r] for cc, ps, z_r in zip(ccs, pos, z_rotation)]
         
         # form tomograms
         tomo = SubTomogram(tomo_name)
         particles = Particle.from_array(pdata, tomo)
         tomo.set_particles(particles)
         tomograms[tomo_name] = tomo
+        
         
     return tomograms
         

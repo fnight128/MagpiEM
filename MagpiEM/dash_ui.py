@@ -31,9 +31,9 @@ import dash_daq as daq
 from flask import Flask  # , send_from_directory
 
 
-from .classes import SubTomogram, Cleaner
+from classes import SubTomogram, Cleaner
 
-from .read_write import read_imod, modify_emc_mat, mat_to_subtomos  # , zip_files, write_emfile
+from read_write import read_imod, modify_emc_mat, mat_to_subtomos, star_to_tomo # , zip_files, write_emfile
 
 
 WHITE = "#FFFFFF"
@@ -525,6 +525,8 @@ def main():
                 subtomograms = mat_to_subtomos(TEMP_FILE_DIR + filename, num_images=num_images)
             except:
                 return 
+        elif ".star" in filename:
+            subtomograms = star_to_tomo(temp_file_path, num_images=num_images)
         elif ".mod" in filename:
             try:
                 imod_data = read_imod(temp_file_path)
