@@ -305,15 +305,6 @@ class Particle:
             particles.add(new_particle)
         return particles
 
-    @staticmethod
-    def from_imod(imod_data, subtomo):
-        "Read set of particles from imod model"
-        particles = set()
-        blank_orientation = [0, 0, 1]
-        for x in imod_data:
-            particles.add(Particle(0, 9999, x, blank_orientation, particles, subtomo))
-        return particles
-
     def find_avg_curvature(self):
         if len(self.neighbours) == 0:
             self.avg_curvature = 0.0
@@ -343,7 +334,6 @@ class SubTomogram:
     auto_cleaned_particles: set()
     removed_particles: set()
     selected_n: set()
-    # manual_cleaned_particles: set()
 
     checking_particles: list
 
@@ -356,34 +346,22 @@ class SubTomogram:
     particle_df_dict: dict()
     cone_fix: pd.DataFrame
 
-    # keep_selected: bool
-
     cleaning_params: Cleaner
 
-    # viewed: bool
     reference_points: set()
     reference_df: set()
 
-    # sample_particle: Particle
 
     def __init__(self, name):
         self.protein_arrays = defaultdict(lambda: set())
         self.protein_arrays[0] = set()
         self.name = name
-        # self.sample_particle = next(iter(particles))
         self.selected_n = set()
         self.auto_cleaned_particles = set()
         self.particles_fate = defaultdict(lambda: set())
         self.reference_points = set()
         self.checking_particles = []
         self.cone_fix = None
-
-    @staticmethod
-    def tomo_from_imod(name, imod_struct):
-        subtomo = SubTomogram(name)
-        subtomo.set_particles(Particle.from_imod(imod_struct, subtomo))
-        subtomo.position_only = True
-        return subtomo
 
     # @staticmethod
     # def tomo_from_em(name, em_df):
@@ -500,10 +478,9 @@ class SubTomogram:
         return self.name
 
     def __str__(self):
-        return "Subtomogram {}, containing {} particles, {} after auto cleaning. Selected arrays: {}".format(
+        return "Subtomogram {}, containing {} particles. Selected arrays: {}".format(
             self.name,
             len(self.all_particles),
-            len(self.auto_cleaned_particles),
             ",".join({str(n) for n in self.selected_n}),
         )
 
@@ -737,18 +714,17 @@ class SubTomogram:
             arr_dict[ind] = p_ids
         arr_dict["selected"] = list(self.selected_n)
         return arr_dict
-
-    @staticmethod
-    def from_prog_dict(name, mat_geomt, prog_dict):
-        print("loading tomo", name)
-        subtomo = SubTomogram.tomo_from_mat(name, mat_geomt)
+    
+    def apply_prog_dict(self, prog_dict):
+        #invert dict
         inverted_prog_dict = {}
         for array, particles in prog_dict.items():
             if array == "selected":
                 continue
             for particle in particles:
                 inverted_prog_dict[particle] = array
-        for particle in subtomo.all_particles:
+        print(inverted_prog_dict)
+        for particle in self.all_particles:
             p_id = particle.particle_id
             if p_id in inverted_prog_dict.keys():
                 particle.set_protein_array(
@@ -756,10 +732,8 @@ class SubTomogram:
                 )
             else:
                 particle.set_protein_array(0)
-        subtomo.selected_n = set(prog_dict["selected"])
-        subtomo.generate_particle_df()
-        return subtomo
-
+        self.selected_n = set(prog_dict["selected"])
+        self.generate_particle_df()
 
 def normalise(vec: np.ndarray):
     """Normalise vector of any dimension"""

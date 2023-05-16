@@ -27,7 +27,7 @@ requirements = [
 
 setup(
     name="MagpiEM",
-    version="0.2.7",
+    version="0.2.9",
     description="Automated cleaning of sub-tomogram particle picking",
     author="Frank Nightingale",
     author_email="frank.nightingale@linacre.ox.ac.uk",

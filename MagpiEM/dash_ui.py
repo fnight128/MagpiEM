@@ -31,9 +31,9 @@ import dash_daq as daq
 from flask import Flask  # , send_from_directory
 
 
-from classes import SubTomogram, Cleaner
+from .classes import SubTomogram, Cleaner
 
-from read_write import read_imod, modify_emc_mat, mat_to_subtomos  # , zip_files, write_emfile
+from .read_write import read_imod, modify_emc_mat, mat_to_subtomos  # , zip_files, write_emfile
 
 
 WHITE = "#FFFFFF"
@@ -382,9 +382,7 @@ def main():
 
         #TODO use new upload method
         try:
-            geom = scipy.io.loadmat(data_path, simplify_cells=True)["subTomoMeta"][
-                "cycle000"
-            ]["geometry"]
+            subtomograms = mat_to_subtomos(data_path)
         except:
             return "Matlab File Unreadable", *failed_upload
 
@@ -394,7 +392,7 @@ def main():
         except:
             return "Previous session file unreadable", *failed_upload
 
-        geom_keys = set(geom.keys())
+        geom_keys = set(subtomograms.keys())
         prev_keys = set(prev_yaml.keys())
         prev_keys.discard(".__cleaning_parameters__.")
 
@@ -430,9 +428,8 @@ def main():
                 prev_msg,
             ] * failed_upload
 
-        for gkey, geom_arr in geom.items():
-            subtomo = SubTomogram.from_prog_dict(gkey, geom_arr, prev_yaml[gkey])
-            subtomograms[gkey] = subtomo
+        for tomo_name, tomo in subtomograms.items():
+            tomo.apply_prog_dict(prev_yaml[tomo_name])
 
         return "", *successful_upload
 
