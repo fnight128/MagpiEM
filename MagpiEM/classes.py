@@ -12,7 +12,9 @@ from collections import defaultdict
 from time import time as tm
 
 ADJ_RANGE = (-1, 0, 1)
-ADJ_AREA_GEN = tuple([(i, j, k) for i in ADJ_RANGE for j in ADJ_RANGE for k in ADJ_RANGE])
+ADJ_AREA_GEN = tuple(
+    [(i, j, k) for i in ADJ_RANGE for j in ADJ_RANGE for k in ADJ_RANGE]
+)
 
 
 class Cleaner:
@@ -145,7 +147,7 @@ class Particle:
 
     avg_curvature: float
 
-    subtomo: object
+    tomo: object
 
     particles: set()
 
@@ -154,12 +156,12 @@ class Particle:
 
     protein_array: int = 0
 
-    def __init__(self, p_id, cc, position, orientation, subtomo):
+    def __init__(self, p_id, cc, position, orientation, tomo):
         self.particle_id = p_id
         self.cc_score = cc
         self.position = position
         self.direction = normalise(orientation)
-        self.subtomo = subtomo
+        self.tomo = tomo
         self.neighbours = set()
 
     def __hash__(self):
@@ -226,9 +228,9 @@ class Particle:
 
     def set_protein_array(self, ar: int):
         if self.protein_array:
-            self.subtomo.protein_arrays[self.protein_array].discard(self)
+            self.tomo.protein_arrays[self.protein_array].discard(self)
         self.protein_array = ar
-        self.subtomo.protein_arrays[ar].add(self)
+        self.tomo.protein_arrays[ar].add(self)
 
     def assimilate_protein_arrays(self, assimilate_arrays: set):
         """
@@ -245,8 +247,8 @@ class Particle:
 
         """
         # choose a random array to assimilate the rest into
-        all_arrays = self.subtomo.protein_arrays
-        particles = self.subtomo.all_particles
+        all_arrays = self.tomo.protein_arrays
+        particles = self.tomo.all_particles
         assimilate_to = assimilate_arrays.pop()
         for particle in particles:
             if particle.protein_array in assimilate_arrays:
@@ -267,9 +269,9 @@ class Particle:
         return "Distance: {:.1f}\nOrientation: {:.1f}°\nDisplacement: {:.1f}°".format(
             distance, orientation, curvature
         )
-    
+
     @staticmethod
-    def from_array(plist, subtomo):
+    def from_array(plist, tomo):
         """
         Produce an array of particles from parameters
 
@@ -279,20 +281,21 @@ class Particle:
             List of particles. Each entry should be a list of parameters
             in the following order:
                 cc value, [x, y, z], [u, v, w]
-        subtomo: SubTomogram
-            SubTomogram object from which the particles are from
-        
+        tomo: tomogram
+            tomogram object from which the particles are from
+
         Returns
         -------
         Set of particles
 
         """
-        return {Particle(idx, *pdata, subtomo) for idx, pdata in enumerate(plist)}
-        #def __init__(self, p_id, cc, position, orientation, particle_set, subtomo):
-    #__init__(self, p_id, cc, position, orientation, particle_set, subtomo):
+        return {Particle(idx, *pdata, tomo) for idx, pdata in enumerate(plist)}
+        # def __init__(self, p_id, cc, position, orientation, particle_set, tomo):
+
+    # __init__(self, p_id, cc, position, orientation, particle_set, tomo):
 
     @staticmethod
-    def from_geom_mat(subtomo, garr: np.ndarray, cc_thresh):
+    def from_geom_mat(tomo, garr: np.ndarray, cc_thresh):
         "Read set of particles from matlab array"
         particles = set()
         for idx, pdata in enumerate(garr):
@@ -300,7 +303,7 @@ class Particle:
             #     print("bad cc", pdata[0])
             #     continue
             new_particle = Particle(
-                idx, pdata[0], pdata[10:13], pdata[22:25], particles, subtomo
+                idx, pdata[0], pdata[10:13], pdata[22:25], particles, tomo
             )
             particles.add(new_particle)
         return particles
@@ -327,7 +330,7 @@ class ReferenceParticle(Particle):
         return (self_rough_pos == other_rough_pos).all()
 
 
-class SubTomogram:
+class tomogram:
     name: str
     all_particles: set()
     current_particles: set()
@@ -351,7 +354,6 @@ class SubTomogram:
     reference_points: set()
     reference_df: set()
 
-
     def __init__(self, name):
         self.protein_arrays = defaultdict(lambda: set())
         self.protein_arrays[0] = set()
@@ -365,22 +367,22 @@ class SubTomogram:
 
     # @staticmethod
     # def tomo_from_em(name, em_df):
-    #     subtomo = SubTomogram(name)
-    #     particles = Particle.from_em(em_df, subtomo)
-    #     subtomo.position_only = False
-    #     return subtomo
+    #     tomo = tomogram(name)
+    #     particles = Particle.from_em(em_df, tomo)
+    #     tomo.position_only = False
+    #     return tomo
 
     # @staticmethod
     # def tomo_from_imod(name, imod_filename):
-    #     subtomo = SubTomogram(name)
+    #     tomo = tomogram(name)
     #     positions = read_write.positions_from_imod(imod_filename)
     #     particles = set()
     #     no_ori = np.array([0.0, 0.0, 1.0])
     #     for x in np.nditer(positions, flags=['external_loop']):
-    #         particles.add(Particle(0, 9999, x, no_ori, particles, subtomo))
-    #     subtomo.set_particles(particles)
-    #     subtomo.position_only = True
-    #     return subtomo
+    #         particles.add(Particle(0, 9999, x, no_ori, particles, tomo))
+    #     tomo.set_particles(particles)
+    #     tomo.position_only = True
+    #     return tomo
 
     @staticmethod
     def assign_regions(particles: set, max_dist: float):
@@ -404,7 +406,7 @@ class SubTomogram:
         return set().union(
             *[
                 regions[k]
-                for k in SubTomogram.find_nearby_keys(region_key)
+                for k in tomogram.find_nearby_keys(region_key)
                 if k in regions
             ]
         )
@@ -413,17 +415,17 @@ class SubTomogram:
         self.auto_cleaned_particles = set()
         prox_range = drange
         # print(prox_range)
-        ref_regions = SubTomogram.assign_regions(
+        ref_regions = tomogram.assign_regions(
             self.reference_points, max(prox_range) ** 0.5
         )
-        particle_regions = SubTomogram.assign_regions(
+        particle_regions = tomogram.assign_regions(
             self.all_particles, max(prox_range) ** 0.5
         )
 
         for rkey, region in particle_regions.items():
             if len(region) == 0:
                 continue
-            proximal_refs = SubTomogram.find_nearby_particles(ref_regions, rkey)
+            proximal_refs = tomogram.find_nearby_particles(ref_regions, rkey)
 
             for particle in region:
                 for ref in proximal_refs:
@@ -448,7 +450,7 @@ class SubTomogram:
     def find_particle_neighbours(self, drange):
         particles = self.all_particles
         t0 = tm()
-        regions = SubTomogram.assign_regions(particles, max(drange) ** 0.5)
+        regions = tomogram.assign_regions(particles, max(drange) ** 0.5)
         print("Assigning particles to regions", tm() - t0)
         # max_dist = max(drange) ** 0.5
 
@@ -461,7 +463,7 @@ class SubTomogram:
         for rkey, region in regions.items():
             if len(region) == 0:
                 continue
-            proximal_particles = SubTomogram.find_nearby_particles(regions, rkey)
+            proximal_particles = tomogram.find_nearby_particles(regions, rkey)
 
             for particle in regions[rkey]:
                 for particle2 in proximal_particles:
@@ -478,7 +480,7 @@ class SubTomogram:
         return self.name
 
     def __str__(self):
-        return "Subtomogram {}, containing {} particles. Selected arrays: {}".format(
+        return "tomogram {}, containing {} particles. Selected arrays: {}".format(
             self.name,
             len(self.all_particles),
             ",".join({str(n) for n in self.selected_n}),
@@ -530,14 +532,14 @@ class SubTomogram:
         return pd.DataFrame(particle_data, columns=["x", "y", "z", "u", "v", "w", "n"])
 
     def all_particles_df(self):
-        return SubTomogram.particles_to_df(self.all_particles)
+        return tomogram.particles_to_df(self.all_particles)
 
     def nonchecking_particles_df(self):
         unchecking = self.all_particles.difference(set(self.checking_particles))
-        return SubTomogram.particles_to_df(unchecking)
+        return tomogram.particles_to_df(unchecking)
 
     def checking_particles_df(self):
-        return SubTomogram.particles_to_df(set(self.checking_particles))
+        return tomogram.particles_to_df(set(self.checking_particles))
 
     def autoclean(self):
         self.all_particles = {
@@ -714,9 +716,9 @@ class SubTomogram:
             arr_dict[ind] = p_ids
         arr_dict["selected"] = list(self.selected_n)
         return arr_dict
-    
+
     def apply_prog_dict(self, prog_dict):
-        #invert dict
+        # invert dict
         inverted_prog_dict = {}
         for array, particles in prog_dict.items():
             if array == "selected":
@@ -734,6 +736,7 @@ class SubTomogram:
                 particle.set_protein_array(0)
         self.selected_n = set(prog_dict["selected"])
         self.generate_particle_df()
+
 
 def normalise(vec: np.ndarray):
     """Normalise vector of any dimension"""

@@ -31,16 +31,15 @@ import dash_daq as daq
 from flask import Flask  # , send_from_directory
 
 
-from classes import SubTomogram, Cleaner
-
-from read_write import read_imod, modify_emc_mat, mat_to_subtomos, star_to_tomo # , zip_files, write_emfile
+from classes import tomogram, Cleaner
+import read_write
 
 
 WHITE = "#FFFFFF"
 GREY = "#646464"
 BLACK = "#000000"
 
-subtomograms = dict()
+tomograms = dict()
 
 last_click = 0.0
 
@@ -64,7 +63,7 @@ def main():
         data=go.Cone(x=[0], y=[0], z=[0], u=[[0]], v=[0], w=[0], showscale=False)
     )
 
-    subtomograms = dict()
+    tomograms = dict()
 
     @app.callback(
         Output("upload-data", "children"),
@@ -136,7 +135,7 @@ def main():
         State("inp-cone-size", "value"),
         Input("button-set-cone-size", "n_clicks"),
         Input("switch-show-removed", "on"),
-        Input("button-next-subtomogram", "disabled"),
+        Input("button-next-tomogram", "disabled"),
         prevent_initial_call=True,
     )
     def plot_tomo(
@@ -148,17 +147,17 @@ def main():
         show_removed: bool,
         __,
     ):
-        global subtomograms
+        global tomograms
         global last_click
         # print("plot_tomo")
 
         params_message = ""
 
         # Warning: must return a graph object in both of these, or breaks dash
-        if not tomo_selection or not tomo_selection in subtomograms.keys():
+        if not tomo_selection or not tomo_selection in tomograms.keys():
             return empty_graph, params_message
 
-        subtomo = subtomograms[tomo_selection]
+        tomo = tomograms[tomo_selection]
 
         # clicked point lingers between calls, causing unwanted toggling when e.g.
         # switching to cones, and selected points can carry over to the next graph
@@ -177,12 +176,12 @@ def main():
                 clicked_point["points"][0][c] for c in ["x", "y", "z"]
             ]
             print("Clicked pos", clicked_particle_pos)
-            params_message = subtomo.show_particle_data(clicked_particle_pos)
+            params_message = tomo.show_particle_data(clicked_particle_pos)
 
-        should_make_cones = make_cones #and not subtomo.position_only
+        should_make_cones = make_cones  # and not tomo.position_only
 
         try:
-            subtomo.reference_df
+            tomo.reference_df
             has_ref = True
         except:
             has_ref = False
@@ -193,30 +192,30 @@ def main():
         fig.update_layout(scene_aspectmode="data")
         fig["layout"]["uirevision"] = "a"
 
-        # if subtomo not yet cleaned, just plot all points
-        if len(subtomo.protein_arrays) == 1:
+        # if tomo not yet cleaned, just plot all points
+        if len(tomo.protein_arrays) == 1:
             if should_make_cones:
 
                 nonchecking_df = pd.concat(
-                    (subtomo.nonchecking_particles_df(), subtomo.cone_fix_df())
+                    (tomo.nonchecking_particles_df(), tomo.cone_fix_df())
                 )
                 checking_df = pd.concat(
-                    (subtomo.checking_particles_df(), subtomo.cone_fix_df())
+                    (tomo.checking_particles_df(), tomo.cone_fix_df())
                 )
                 fig.add_trace(cone_trace(nonchecking_df, WHITE, 0.6, cone_size))
                 fig.add_trace(cone_trace(checking_df, BLACK, 1, cone_size))
             else:
-                fig.add_trace(scatter3d_trace(subtomo.all_particles_df(), WHITE, 0.6))
+                fig.add_trace(scatter3d_trace(tomo.all_particles_df(), WHITE, 0.6))
                 fig.add_trace(
-                    scatter3d_trace(subtomo.checking_particles_df(), BLACK, 1)
+                    scatter3d_trace(tomo.checking_particles_df(), BLACK, 1)
                 )
 
             return fig, params_message
 
         if clicked_point:
-            subtomo.toggle_selected(clicked_point["points"][0]["text"])
+            tomo.toggle_selected(clicked_point["points"][0]["text"])
 
-        array_dict = subtomo.particle_df_dict
+        array_dict = tomo.particle_df_dict
 
         # define linear range of colours
         hex_vals = colour_range(len(array_dict))
@@ -224,7 +223,7 @@ def main():
         # assign one colour to each protein array index
         colour_dict = dict()
         for idx, akey in enumerate(array_dict.keys()):
-            hex_val = WHITE if akey in subtomo.selected_n else hex_vals[idx]
+            hex_val = WHITE if akey in tomo.selected_n else hex_vals[idx]
             colour_dict.update({akey: hex_val})
 
         # assign colours and plot array
@@ -242,15 +241,15 @@ def main():
 
             if should_make_cones:
                 # cone fix
-                array = pd.concat([subtomo.cone_fix_df(), array])
+                array = pd.concat([tomo.cone_fix_df(), array])
                 fig.add_trace(cone_trace(array, colour, opacity, cone_size))
                 if has_ref:
-                    fig.add_trace(scatter3d_trace(subtomo.reference_df, GREY, 0.2))
+                    fig.add_trace(scatter3d_trace(tomo.reference_df, GREY, 0.2))
             else:
                 fig.add_trace(scatter3d_trace(array, colour, opacity))
                 # fig.add_trace(mesh3d_trace(array, colour, opacity))
                 if has_ref:
-                    fig.add_trace(scatter3d_trace(subtomo.reference_df, GREY, 0.2))
+                    fig.add_trace(scatter3d_trace(tomo.reference_df, GREY, 0.2))
         return fig, params_message
 
     @app.callback(
@@ -292,8 +291,8 @@ def main():
         prevent_initial_call=True,
     )
     def select_convex(clicks, _):
-        global subtomograms
-        for tomo in subtomograms.values():
+        global tomograms
+        for tomo in tomograms.values():
             tomo.toggle_convex_arrays()
         return clicks + 1
 
@@ -304,8 +303,8 @@ def main():
         prevent_initial_call=True,
     )
     def select_concave(clicks, _):
-        global subtomograms
-        for tomo in subtomograms.values():
+        global tomograms
+        for tomo in tomograms.values():
             tomo.toggle_concave_arrays()
         return clicks + 1
 
@@ -321,9 +320,9 @@ def main():
         file_path = TEMP_FILE_DIR + filename + "_progress.yml"
 
         cleaning_params_key = ".__cleaning_parameters__."
-        global subtomograms
+        global tomograms
         tomo_dict = {}
-        for name, tomo in subtomograms.items():
+        for name, tomo in tomograms.items():
             if name == cleaning_params_key:
                 print("Tomo {} has an invalid name and cannot be saved!").format(name)
                 continue
@@ -331,7 +330,7 @@ def main():
         # scipy.io.savemat("out_dict.mat", mdict=tomo_dict)
         try:
             tomo_dict[".__cleaning_parameters__."] = next(
-                iter(subtomograms.values())
+                iter(tomograms.values())
             ).cleaning_params.dict_to_print
         except:
             print("No cleaning parameters found to save")
@@ -355,7 +354,7 @@ def main():
     def load_previous_progress(
         previous_filename, previous_contents, data_filename, data_contents
     ):
-        global subtomograms
+        global tomograms
 
         failed_upload = [True, True, False, False]
         successful_upload = [False, False, True, True]
@@ -380,9 +379,9 @@ def main():
         data_path = TEMP_FILE_DIR + data_filename
         prev_path = TEMP_FILE_DIR + previous_filename
 
-        #TODO use new upload method
+        # TODO use new upload method
         try:
-            subtomograms = mat_to_subtomos(data_path)
+            tomograms = mat_to_tomos(data_path)
         except:
             return "Matlab File Unreadable", *failed_upload
 
@@ -392,7 +391,7 @@ def main():
         except:
             return "Previous session file unreadable", *failed_upload
 
-        geom_keys = set(subtomograms.keys())
+        geom_keys = set(tomograms.keys())
         prev_keys = set(prev_yaml.keys())
         prev_keys.discard(".__cleaning_parameters__.")
 
@@ -428,7 +427,7 @@ def main():
                 prev_msg,
             ] * failed_upload
 
-        for tomo_name, tomo in subtomograms.items():
+        for tomo_name, tomo in tomograms.items():
             tomo.apply_prog_dict(prev_yaml[tomo_name])
 
         return "", *successful_upload
@@ -438,41 +437,41 @@ def main():
         Output("dropdown-tomo", "value"),
         State("dropdown-tomo", "value"),
         Input("dropdown-tomo", "disabled"),
-        Input("button-next-subtomogram", "n_clicks"),
-        Input("button-previous-subtomogram", "n_clicks"),
+        Input("button-next-tomogram", "n_clicks"),
+        Input("button-previous-tomogram", "n_clicks"),
     )
     def update_dropdown(current_val, disabled, _, __):
-        global subtomograms
+        global tomograms
 
         # unfortunately need to merge two callbacks here, dash does not allow multiple
         # callbacks with the same output so use ctx to distinguish between cases
         try:
-            subtomo_keys = list(subtomograms.keys())
-            subtomo_key_0 = subtomo_keys[0]
+            tomo_keys = list(tomograms.keys())
+            tomo_key_0 = tomo_keys[0]
         except:
             return [], ""
 
         # enabling dropdown once cleaning finishes
         if ctx.triggered_id == "dropdown-tomo":
-            return subtomo_keys, subtomo_key_0
+            return tomo_keys, tomo_key_0
 
-        # moving to next/prev item in dropdown when next/prev subtomogram button pressed
+        # moving to next/prev item in dropdown when next/prev tomogram button pressed
         if not current_val:
-            return subtomo_keys, ""
-        current_index = subtomo_keys.index(current_val)
+            return tomo_keys, ""
+        current_index = tomo_keys.index(current_val)
 
-        if ctx.triggered_id == "button-next-subtomogram":
+        if ctx.triggered_id == "button-next-tomogram":
             # loop back to start if at end of list
-            if len(subtomo_keys) == current_index + 1:
-                new_val = subtomo_key_0
+            if len(tomo_keys) == current_index + 1:
+                new_val = tomo_key_0
             else:
-                new_val = subtomo_keys[subtomo_keys.index(current_val) + 1]
-        elif ctx.triggered_id == "button-previous-subtomogram":
+                new_val = tomo_keys[tomo_keys.index(current_val) + 1]
+        elif ctx.triggered_id == "button-previous-tomogram":
             if current_index == 0:
-                new_val = subtomo_keys[-1]
+                new_val = tomo_keys[-1]
             else:
-                new_val = subtomo_keys[subtomo_keys.index(current_val) - 1]
-        return subtomo_keys, new_val
+                new_val = tomo_keys[tomo_keys.index(current_val) - 1]
+        return tomo_keys, new_val
 
     @app.callback(
         Output("label-read", "children"),
@@ -488,17 +487,17 @@ def main():
         State("radio-cleantype", "value"),
         long_callback=True,
     )
-    def read_subtomograms(clicks, filename, contents, num_images, cleaning_type):
+    def read_tomograms(clicks, filename, contents, num_images, cleaning_type):
         if ctx.triggered_id != "button-read":
             filename = None
 
         if not filename:
             return "", True, True, False, False, False
 
-        num_img_dict = {0:1, 1:5, 2:-1}
+        num_img_dict = {0: 1, 1: 5, 2: -1}
         num_images = num_img_dict[num_images]
 
-        global subtomograms
+        global tomograms
 
         if cleaning_type == "Clean based on orientation":
             clean_open = [True, False]
@@ -522,47 +521,49 @@ def main():
 
         if ".mat" in filename:
             try:
-                subtomograms = mat_to_subtomos(TEMP_FILE_DIR + filename, num_images=num_images)
+                tomograms = read_write.read_emC(
+                    TEMP_FILE_DIR + filename, num_images=num_images
+                )
             except:
-                return 
+                return
         elif ".star" in filename:
-            subtomograms = star_to_tomo(temp_file_path, num_images=num_images)
+            tomograms = read_write.read_relion(temp_file_path, num_images=num_images)
         elif ".mod" in filename:
             try:
-                imod_data = read_imod(temp_file_path)
+                imod_data = read_write.read_imod(temp_file_path)
             except:
                 return "Invalid file", True, True, False, False, False
-            subtomo = SubTomogram.tomo_from_imod(Path(filename).stem, imod_data)
-            subtomograms[subtomo.name] = subtomo
+            tomo = tomogram.tomo_from_imod(Path(filename).stem, imod_data)
+            tomograms[tomo.name] = tomo
             return "Tomogram read", False, False, True, *clean_open
         else:
             return "Unrecognised file extension", True, True, False, False, False
 
         return "Tomograms read", False, False, True, *clean_open
 
-    def clean_subtomo(subtomo, clean_params):
+    def clean_tomo(tomo, clean_params):
         t0 = time()
 
-        subtomo.set_clean_params(clean_params)
+        tomo.set_clean_params(clean_params)
 
-        subtomo.reset_cleaning()
+        tomo.reset_cleaning()
 
-        subtomo.autoclean()
+        tomo.autoclean()
 
-        print(subtomo.particle_fate_table())
+        print(tomo.particle_fate_table())
 
-        print("time for {}:".format(subtomo.name), time() - t0)
+        print("time for {}:".format(tomo.name), time() - t0)
 
-        subtomo.generate_particle_df()
+        tomo.generate_particle_df()
 
-    def prox_clean_subtomo(subtomo, dist_min, dist_max):
-        if not any(subtomo.reference_points):
-            print("Subtomo {} has no reference points uploaded".format(subtomo.name))
+    def prox_clean_tomo(tomo, dist_min, dist_max):
+        if not any(tomo.reference_points):
+            print("tomo {} has no reference points uploaded".format(tomo.name))
         t0 = time()
 
-        subtomo.proximity_clean((dist_min**2, dist_max**2))
+        tomo.proximity_clean((dist_min**2, dist_max**2))
 
-        print("time for {}:".format(subtomo.name), time() - t0)
+        print("time for {}:".format(tomo.name), time() - t0)
 
     def save_dash_upload(filename, contents):
         print("Uploading file:", filename)
@@ -576,11 +577,11 @@ def main():
     #     Input("upload-ref", "children"),
     # )
     # def print_needed_refs(_, __):
-    #     global subtomograms
+    #     global tomograms
     #     return [
     #         tomoname
-    #         for tomoname, subtomo in subtomograms.items()
-    #         if not subtomo.reference_points
+    #         for tomoname, tomo in tomograms.items()
+    #         if not tomo.reference_points
     #     ]
 
     @app.callback(
@@ -588,7 +589,7 @@ def main():
         [Input("upload-ref", "filename"), Input("upload-ref", "contents")],
     )
     def upload_refs(filenames, contents):
-        global subtomograms
+        global tomograms
 
         if not any([filenames]):
             raise PreventUpdate
@@ -597,25 +598,25 @@ def main():
                 raise PreventUpdate
             save_dash_upload(filename, data)
             try:
-                ref_data = read_imod(TEMP_FILE_DIR + filename)
+                ref_data = read_write.read_imod(TEMP_FILE_DIR + filename)
             except:
                 return "Unable to read " + filename
 
             tomo_name = filename.split("-ref")[0]
             print("uploaded: ", tomo_name)
-            print("subtomos: ", subtomograms.keys())
-            if tomo_name in subtomograms.keys():
-                subtomograms[tomo_name].assign_ref_imod(ref_data)
+            print("tomos: ", tomograms.keys())
+            if tomo_name in tomograms.keys():
+                tomograms[tomo_name].assign_ref_imod(ref_data)
             else:
-                return "No matching subtomogram found"
+                return "No matching tomogram found"
 
         return filenames
 
     @app.callback(
-        Output("button-next-subtomogram", "disabled"),
+        Output("button-next-tomogram", "disabled"),
         State("inp-dist-min", "value"),
         State("inp-dist-max", "value"),
-        State("button-next-subtomogram", "disabled"),
+        State("button-next-tomogram", "disabled"),
         Input("button-full-prox", "n_clicks"),
         Input("button-preview-prox", "n_clicks"),
         prevent_initial_call=True,
@@ -628,15 +629,15 @@ def main():
         if not dist_min:
             dist_min = 0.0
 
-        global subtomograms
+        global tomograms
 
-        for subtomo in subtomograms.values():
-            prox_clean_subtomo(subtomo, dist_min, dist_max)
+        for tomo in tomograms.values():
+            prox_clean_tomo(tomo, dist_min, dist_max)
 
         return not is_disabled
 
     @app.callback(
-        Output("button-next-subtomogram", "disabled"),
+        Output("button-next-tomogram", "disabled"),
         Output("collapse-clean", "is_open"),
         Output("collapse-save", "is_open"),
         State("inp-dist-goal", "value"),
@@ -671,7 +672,7 @@ def main():
         if not clicks or clicks2:
             return True, True, False
         # print(inp_file)
-        # subtomo = SubTomogram(name, particles)
+        # tomo = tomogram(name, particles)
 
         clean_params = Cleaner(
             cc_thresh,
@@ -688,20 +689,20 @@ def main():
 
         print("Clean")
 
-        global subtomograms
+        global tomograms
 
         if ctx.triggered_id == "button-preview-clean":
             print("Preview")
-            clean_subtomo(list(subtomograms.values())[0], clean_params)
+            clean_tomo(list(tomograms.values())[0], clean_params)
             return False, True, True
         else:
             print("Full")
             clean_count = 0
-            total_subtomos = len(subtomograms.keys())
-            for subtomo in subtomograms.values():
-                clean_subtomo(subtomo, clean_params)
+            total_tomos = len(tomograms.keys())
+            for tomo in tomograms.values():
+                clean_tomo(tomo, clean_params)
                 clean_count += 1
-                print(prog_bar(clean_count, total_subtomos))
+                print(prog_bar(clean_count, total_tomos))
         return False, False, True
 
     size = "50px"
@@ -920,7 +921,7 @@ def main():
             ),
             html.Tr(
                 [
-                    html.Td(dbc.Button("Read Subtomograms", id="button-read")),
+                    html.Td(dbc.Button("Read tomograms", id="button-read")),
                 ]
             ),
             html.Td(
@@ -958,7 +959,7 @@ def main():
         [
             html.Tr(
                 [
-                    html.Td("Subtomogram"),
+                    html.Td("tomogram"),
                     dcc.Dropdown(
                         [],
                         id="dropdown-tomo",
@@ -1004,8 +1005,8 @@ def main():
                 [
                     html.Td(
                         dbc.Button(
-                            "Previous Subtomogram",
-                            id="button-previous-subtomogram",
+                            "Previous tomogram",
+                            id="button-previous-tomogram",
                         ),
                     )
                 ]
@@ -1119,8 +1120,8 @@ def main():
             dbc.Row(
                 html.Td(
                     dbc.Button(
-                        "Next Subtomogram",
-                        id="button-next-subtomogram",
+                        "Next tomogram",
+                        id="button-next-tomogram",
                         size="lg",
                         style={"width": "100%", "height": "100px"},
                     )
@@ -1137,10 +1138,10 @@ def main():
         Input("dropdown-tomo", "value"),
     )
     def graph_visibility(t_id):
-        global subtomograms
+        global tomograms
         if not t_id:
             return {"display": "none"}
-        elif not t_id in subtomograms.keys():
+        elif not t_id in tomograms.keys():
             return {"display": "none"}
         else:
             return {}
@@ -1157,7 +1158,7 @@ def main():
         long_callback=True,
     )
     def save_result(output_name, input_name, keep_selected, save_additional, clicks):
-        global subtomograms
+        global tomograms
         if not output_name:
             return None
         if output_name == input_name:
@@ -1169,12 +1170,12 @@ def main():
         #  temporarily disabled until em file saving is fixed
         #
         # if ".em (Place Object)" in save_additional:
-        #     write_emfile(subtomograms, "out", keep_selected)
+        #     write_emfile(tomograms, "out", keep_selected)
         #     zip_files(output_name, "em")
         #     dcc.send_file(TEMP_FILE_DIR + output_name)
 
-        modify_emc_mat(
-            subtomograms,
+        read_write.modify_emc_mat(
+            tomograms,
             TEMP_FILE_DIR + output_name,
             TEMP_FILE_DIR + input_name,
             keep_selected,
