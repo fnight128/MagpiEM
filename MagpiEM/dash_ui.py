@@ -6,7 +6,6 @@ Created on Mon Nov  7 16:53:45 2022
 """
 import colorsys
 import pandas as pd
-import scipy.io
 import plotly.graph_objects as go
 import os
 import base64
@@ -206,9 +205,7 @@ def main():
                 fig.add_trace(cone_trace(checking_df, BLACK, 1, cone_size))
             else:
                 fig.add_trace(scatter3d_trace(tomo.all_particles_df(), WHITE, 0.6))
-                fig.add_trace(
-                    scatter3d_trace(tomo.checking_particles_df(), BLACK, 1)
-                )
+                fig.add_trace(scatter3d_trace(tomo.checking_particles_df(), BLACK, 1))
 
             return fig, params_message
 
@@ -379,9 +376,8 @@ def main():
         data_path = TEMP_FILE_DIR + data_filename
         prev_path = TEMP_FILE_DIR + previous_filename
 
-        # TODO use new upload method
         try:
-            tomograms = mat_to_tomos(data_path)
+            tomograms = read_write.read_emC(data_path)
         except:
             return "Matlab File Unreadable", *failed_upload
 
@@ -520,25 +516,24 @@ def main():
         temp_file_path = TEMP_FILE_DIR + filename
 
         if ".mat" in filename:
-            try:
-                tomograms = read_write.read_emC(
-                    TEMP_FILE_DIR + filename, num_images=num_images
-                )
-            except:
-                return
+            tomograms = read_write.read_emC(
+                TEMP_FILE_DIR + filename, num_images=num_images
+            )
         elif ".star" in filename:
             tomograms = read_write.read_relion(temp_file_path, num_images=num_images)
-        elif ".mod" in filename:
-            try:
-                imod_data = read_write.read_imod(temp_file_path)
-            except:
-                return "Invalid file", True, True, False, False, False
-            tomo = tomogram.tomo_from_imod(Path(filename).stem, imod_data)
-            tomograms[tomo.name] = tomo
-            return "Tomogram read", False, False, True, *clean_open
+        # elif ".mod" in filename:
+        #     try:
+        #         imod_data = read_write.read_imod(temp_file_path)
+        #     except:
+        #         return "Invalid file", True, True, False, False, False
+        #     tomo = tomogram.tomo_from_imod(Path(filename).stem, imod_data)
+        #     tomograms[tomo.name] = tomo
+        #     return "Tomogram read", False, False, True, *clean_open
         else:
             return "Unrecognised file extension", True, True, False, False, False
 
+        if not tomograms:
+            return "File Unreadable", True, True, False, False, False
         return "Tomograms read", False, False, True, *clean_open
 
     def clean_tomo(tomo, clean_params):
@@ -1162,10 +1157,12 @@ def main():
         if not output_name:
             return None
         if output_name == input_name:
-            print(
-                "Output and input file cannot be identical, this will lead to loss of data"
-            )
+            print("Output and input file cannot be identical")
             return None
+
+        saving_ids = {
+            tomo.name: tomo.selected_particle_ids(keep_selected) for tomo in tomograms
+        }
 
         #  temporarily disabled until em file saving is fixed
         #
@@ -1175,10 +1172,9 @@ def main():
         #     dcc.send_file(TEMP_FILE_DIR + output_name)
 
         read_write.modify_emc_mat(
-            tomograms,
+            saving_ids,
             TEMP_FILE_DIR + output_name,
             TEMP_FILE_DIR + input_name,
-            keep_selected,
         )
         # files = glob.glob(TEMP_FILE_DIR + "*")
         # print(files)

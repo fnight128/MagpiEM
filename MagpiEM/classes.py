@@ -404,11 +404,7 @@ class tomogram:
     @staticmethod
     def find_nearby_particles(regions, region_key):
         return set().union(
-            *[
-                regions[k]
-                for k in tomogram.find_nearby_keys(region_key)
-                if k in regions
-            ]
+            *[regions[k] for k in tomogram.find_nearby_keys(region_key) if k in regions]
         )
 
     def proximity_clean(self, drange):
@@ -499,11 +495,11 @@ class tomogram:
     def set_clean_params(self, cp):
         self.cleaning_params = cp
 
-    def selected_particle_ids(self):
+    def selected_particle_ids(self, selected=True):
         return {
             particle.particle_id
             for particle in self.auto_cleaned_particles
-            if particle.protein_array in self.selected_n
+            if (particle.protein_array in self.selected_n) == selected
         }
 
     def assign_ref_imod(self, imod_data):
@@ -515,13 +511,6 @@ class tomogram:
         self.reference_df = pd.DataFrame(
             particle_data, columns=["x", "y", "z", "u", "v", "w", "n"]
         )
-
-    def unselected_particle_ids(self):
-        return {
-            particle.particle_id
-            for particle in self.auto_cleaned_particles
-            if not particle.protein_array in self.selected_n
-        }
 
     @staticmethod
     def particles_to_df(particles):
