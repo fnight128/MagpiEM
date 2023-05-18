@@ -27,10 +27,10 @@ from dash_extensions.enrich import Output, DashProxy, Input, MultiplexerTransfor
 import dash_daq as daq
 
 # flask server to save files
-from flask import Flask  # , send_from_directory
+from flask import Flask
 
 
-from classes import tomogram, Cleaner
+from classes import Cleaner
 import read_write
 
 
@@ -86,17 +86,17 @@ def main():
         return bar
 
     def colour_range(num_points):
-        HSV_tuples = [(x * 1.0 / num_points, 0.75, 0.75) for x in range(num_points)]
-        RGB_tuples = [colorsys.hsv_to_rgb(*x) for x in HSV_tuples]
+        hsv_tuples = [(x * 1.0 / num_points, 0.75, 0.75) for x in range(num_points)]
+        rgb_tuples = [colorsys.hsv_to_rgb(*x) for x in hsv_tuples]
         return [
             "rgb({},{},{})".format(int(r * 255), int(g * 255), int(b * 255))
-            for (r, g, b) in RGB_tuples
+            for (r, g, b) in rgb_tuples
         ]
 
-    def mesh3d_trace(df, colour, opacity):
-        return go.Mesh3d(
-            x=df["x"], y=df["y"], z=df["z"], opacity=opacity, color=colour, alphahull=-1
-        )
+    # def mesh3d_trace(df, colour, opacity):
+    #     return go.Mesh3d(
+    #         x=df["x"], y=df["y"], z=df["z"], opacity=opacity, color=colour, alphahull=-1
+    #     )
 
     def scatter3d_trace(df, colour, opacity):
         return go.Scatter3d(
@@ -109,7 +109,7 @@ def main():
             showlegend=False,
         )
 
-    def cone_trace(df, colour, opacity, sizeref=10):
+    def cone_trace(df, colour, opacity, sizeref=10.0):
         return go.Cone(
             x=df["x"],
             y=df["y"],
@@ -153,7 +153,7 @@ def main():
         params_message = ""
 
         # Warning: must return a graph object in both of these, or breaks dash
-        if not tomo_selection or not tomo_selection in tomograms.keys():
+        if not tomo_selection or tomo_selection not in tomograms.keys():
             return empty_graph, params_message
 
         tomo = tomograms[tomo_selection]
@@ -162,7 +162,7 @@ def main():
         # switching to cones, and selected points can carry over to the next graph
         # prevent by clearing clicked_point if not actually from clicking a point
         if ctx.triggered_id != "graph-picking":
-            clicked_point = ""
+            clicked_point = None
         else:
             # strange error with cone plots makes completely random, erroneous clicks
             # happen right after clicking on cone plot - add a cooldown to temporarily
@@ -179,11 +179,7 @@ def main():
 
         should_make_cones = make_cones  # and not tomo.position_only
 
-        try:
-            tomo.reference_df
-            has_ref = True
-        except:
-            has_ref = False
+        has_ref = hasattr(tomo, "reference_df")
 
         fig = go.Figure()
         fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
@@ -260,7 +256,7 @@ def main():
         print(x)
         try:
             ext = Path(filename).suffix
-        except:
+        except Exception:
             raise PreventUpdate
         return ext
 
@@ -321,15 +317,14 @@ def main():
         tomo_dict = {}
         for name, tomo in tomograms.items():
             if name == cleaning_params_key:
-                print("Tomo {} has an invalid name and cannot be saved!").format(name)
+                print("Tomo {} has an invalid name and cannot be saved!".format(name))
                 continue
             tomo_dict[name] = tomo.write_prog_dict()
-        # scipy.io.savemat("out_dict.mat", mdict=tomo_dict)
         try:
             tomo_dict[".__cleaning_parameters__."] = next(
                 iter(tomograms.values())
             ).cleaning_params.dict_to_print
-        except:
+        except Exception:
             print("No cleaning parameters found to save")
         print("Saving keys:", tomo_dict.keys())
         prog = yaml.safe_dump(tomo_dict)
@@ -378,13 +373,13 @@ def main():
 
         try:
             tomograms = read_write.read_emC(data_path)
-        except:
+        except Exception:
             return "Matlab File Unreadable", *failed_upload
 
         try:
             with open(prev_path, "r") as prev_yaml:
                 prev_yaml = yaml.safe_load(prev_yaml)
-        except:
+        except Exception:
             return "Previous session file unreadable", *failed_upload
 
         geom_keys = set(tomograms.keys())
@@ -399,9 +394,8 @@ def main():
                 return [
                     "Keys do not match up between previous session and .mat file.",
                     html.Br(),
-                    " Previous session only contains {0} keys, did you save the session with only {0} tomogram(s) loaded?".format(
-                        len(prev_keys)
-                    ),
+                    "Previous session only contains {0} keys, did you save the session with only {0} tomogram(s) "
+                    "loaded?".format(len(prev_keys)),
                 ], *failed_upload
             geom_missing = list(prev_keys.difference(geom_keys))
             geom_msg = ""
@@ -421,7 +415,7 @@ def main():
                 geom_msg,
                 html.Br(),
                 prev_msg,
-            ] * failed_upload
+            ], *failed_upload
 
         for tomo_name, tomo in tomograms.items():
             tomo.apply_prog_dict(prev_yaml[tomo_name])
@@ -444,7 +438,7 @@ def main():
         try:
             tomo_keys = list(tomograms.keys())
             tomo_key_0 = tomo_keys[0]
-        except:
+        except Exception:
             return [], ""
 
         # enabling dropdown once cleaning finishes
@@ -456,18 +450,21 @@ def main():
             return tomo_keys, ""
         current_index = tomo_keys.index(current_val)
 
+        increment = 0
         if ctx.triggered_id == "button-next-tomogram":
-            # loop back to start if at end of list
-            if len(tomo_keys) == current_index + 1:
-                new_val = tomo_key_0
-            else:
-                new_val = tomo_keys[tomo_keys.index(current_val) + 1]
+            increment = 1
         elif ctx.triggered_id == "button-previous-tomogram":
-            if current_index == 0:
-                new_val = tomo_keys[-1]
-            else:
-                new_val = tomo_keys[tomo_keys.index(current_val) - 1]
-        return tomo_keys, new_val
+            increment = -1
+        chosen_index = tomo_keys.index(current_val) + increment
+
+        # allow wrapping around
+        if chosen_index < 0:
+            chosen_index = 0
+        elif chosen_index >= len(tomo_keys):
+            chosen_index = tomo_keys[-1]
+
+        chosen_tomo = tomo_keys[chosen_index]
+        return tomo_keys, chosen_tomo
 
     @app.callback(
         Output("label-read", "children"),
@@ -506,13 +503,7 @@ def main():
         for f in files:
             os.remove(f)
 
-        # data = contents.encode("utf8").split(b";base64,")[1]
-        # with open(os.path.join(TEMP_FILE_DIR, filename), "wb") as fp:
-        #     fp.write(base64.decodebytes(data))
-
         save_dash_upload(filename, contents)
-
-        # contents_decoded = io.BytesIO(base64.b64decode(contents))
         temp_file_path = TEMP_FILE_DIR + filename
 
         if ".mat" in filename:
@@ -574,38 +565,38 @@ def main():
     # def print_needed_refs(_, __):
     #     global tomograms
     #     return [
-    #         tomoname
-    #         for tomoname, tomo in tomograms.items()
+    #         tomo_name
+    #         for tomo_name, tomo in tomograms.items()
     #         if not tomo.reference_points
     #     ]
-
-    @app.callback(
-        Output("upload-ref", "children"),
-        [Input("upload-ref", "filename"), Input("upload-ref", "contents")],
-    )
-    def upload_refs(filenames, contents):
-        global tomograms
-
-        if not any([filenames]):
-            raise PreventUpdate
-        for filename, data in zip(filenames, contents):
-            if not filename:
-                raise PreventUpdate
-            save_dash_upload(filename, data)
-            try:
-                ref_data = read_write.read_imod(TEMP_FILE_DIR + filename)
-            except:
-                return "Unable to read " + filename
-
-            tomo_name = filename.split("-ref")[0]
-            print("uploaded: ", tomo_name)
-            print("tomos: ", tomograms.keys())
-            if tomo_name in tomograms.keys():
-                tomograms[tomo_name].assign_ref_imod(ref_data)
-            else:
-                return "No matching tomogram found"
-
-        return filenames
+    #
+    # @app.callback(
+    #     Output("upload-ref", "children"),
+    #     [Input("upload-ref", "filename"), Input("upload-ref", "contents")],
+    # )
+    # def upload_refs(filenames, contents):
+    #     global tomograms
+    #
+    #     if not any([filenames]):
+    #         raise PreventUpdate
+    #     for filename, data in zip(filenames, contents):
+    #         if not filename:
+    #             raise PreventUpdate
+    #         save_dash_upload(filename, data)
+    #         try:
+    #             ref_data = read_write.read_imod(TEMP_FILE_DIR + filename)
+    #         except:
+    #             return "Unable to read " + filename
+    #
+    #         tomo_name = filename.split("-ref")[0]
+    #         print("uploaded: ", tomo_name)
+    #         print("tomos: ", tomograms.keys())
+    #         if tomo_name in tomograms.keys():
+    #             tomograms[tomo_name].assign_ref_imod(ref_data)
+    #         else:
+    #             return "No matching tomogram found"
+    #
+    #     return filenames
 
     @app.callback(
         Output("button-next-tomogram", "disabled"),
@@ -702,7 +693,7 @@ def main():
 
     size = "50px"
 
-    def inp_num(id_suffix, default=""):
+    def inp_num(id_suffix, default=None):
         return html.Td(
             dbc.Input(
                 id="inp-" + id_suffix,
@@ -768,14 +759,7 @@ def main():
                 html.Td(dbc.Button("Full Cleaning", id="button-full-clean"), colSpan=4),
             ),
         ],
-        style={  #'float':'left',
-            "overflow": "hidden",
-            "margin": "3px",
-            "width": "100%"
-            #'borderWidth': '1px',
-            #'borderStyle': 'dashed',
-            #'borderRadius': '5px'
-        },
+        style={"overflow": "hidden", "margin": "3px", "width": "100%"},
     )
 
     prox_table = html.Table(
@@ -787,7 +771,6 @@ def main():
                             id="upload-ref",
                             children="Choose Reference",
                             style={
-                                #'width': '100%',
                                 "height": "60px",
                                 "lineHeight": "60px",
                                 "borderWidth": "1px",
@@ -805,7 +788,7 @@ def main():
             ),
             html.Tr(
                 [
-                    html.Td("Files requring references: "),
+                    html.Td("Files requiring references: "),
                     html.Td(
                         html.Div(id="div-need-refs", className="text-danger"), colSpan=3
                     ),
@@ -840,7 +823,6 @@ def main():
         id="upload-data",
         children="Choose File",
         style={
-            #'width': '100%',
             "height": "60px",
             "lineHeight": "60px",
             "borderWidth": "1px",
@@ -867,9 +849,11 @@ def main():
             # id='card-'
         )
 
-    def collapsing_card(card: dbc.Card, collapse_id: str, start_open: bool = False):
+    def collapsing_card(
+        display_card: dbc.Card, collapse_id: str, start_open: bool = False
+    ):
         return dbc.Collapse(
-            card,
+            display_card,
             id="collapse-" + collapse_id,
             is_open=start_open,
             style={"width": "450px", "height": "100%"},
@@ -880,7 +864,7 @@ def main():
             html.Tr([html.Td(upload_file)]),
             html.Tr(
                 dcc.Dropdown(
-                    [".mat", ".star", ".mod"],
+                    [".mat", ".star"],
                     id="dropdown-filetype",
                     clearable=False,
                 )
@@ -925,9 +909,6 @@ def main():
                     id="upload-previous-session",
                     multiple=False,
                     style={
-                        #'width': '100%',
-                        # "height": "60px",
-                        # "lineHeight": "60px",
                         "borderWidth": "1px",
                         "borderStyle": "dashed",
                         "borderRadius": "3px",
@@ -937,16 +918,12 @@ def main():
                     },
                 )
             ),
-            html.Tr(html.Div(id="label-read"))
-            # html.Tr(html.Td(dbc.Button("Plot Without Cleaning", id="button-plot_all"))),
+            html.Tr(html.Div(id="label-read")),
         ],
-        style={  #'float':'left',
+        style={
             "overflow": "hidden",
             "margin": "3px",
             "width": "100%",
-            #'borderWidth': '1px',
-            #'borderStyle': 'dashed',
-            #'borderRadius': '5px'
         },
     )
 
@@ -959,8 +936,7 @@ def main():
                         [],
                         id="dropdown-tomo",
                         style={"width": "300px"},
-                        clearable=False
-                        # value=list(protein_list.keys())[0],
+                        clearable=False,
                     ),
                 ]
             ),
@@ -1007,14 +983,11 @@ def main():
                 ]
             ),
         ],
-        style={  #'float':'left',
+        style={
             "overflow": "hidden",
             "margin": "3px",
             "width": "100%",
-            "table-layout": "fixed"
-            #'borderWidth': '1px',
-            #'borderStyle': 'dashed',
-            #'borderRadius': '5px'
+            "table-layout": "fixed",
         },
     )
 
@@ -1039,9 +1012,7 @@ def main():
             ),
             html.Tr(
                 [
-                    # html.Td("Also save:"),
                     dcc.Checklist(
-                        # [".em (Place Object)"],
                         [],
                         inline=True,
                         id="checklist-save-additional",
@@ -1049,26 +1020,10 @@ def main():
                 ]
             ),
             html.Tr(html.Td(dbc.Button("Save Particles", id="button-save"))),
-            # dcc.Link("Download Output File", id="link-download", href="a"),
             dcc.Download(id="download-file"),
         ],
-        style={  #'float':'left',
-            "overflow": "hidden",
-            "margin": "3px",
-            "width": "100%"
-            #'borderWidth': '1px',
-            #'borderStyle': 'dashed',
-            #'borderRadius': '5px'
-        },
+        style={"overflow": "hidden", "margin": "3px", "width": "100%"},
     )
-
-    # cleaning_type_div = emptydiv = html.Div(
-    #     [
-    #         # nonexistent outputs for callbacks with no visible effect
-    #         html.Div(id="div-null", style={"display": "none"}),
-    #     ],
-    #     style={"display": "none"},
-    # )
 
     cleaning_params_card = collapsing_card(
         card("Orientation Cleaning", param_table), "clean"
@@ -1111,7 +1066,6 @@ def main():
                     )
                 )
             ),
-            # dbc.Row([dbc.Col(upload_card, width=4), dbc.Col(cleaning_params_card, width=4), dbc.Col(graph_controls_card, width=4)]),
             dbc.Row(
                 html.Td(
                     dbc.Button(
@@ -1136,7 +1090,7 @@ def main():
         global tomograms
         if not t_id:
             return {"display": "none"}
-        elif not t_id in tomograms.keys():
+        elif t_id not in tomograms.keys():
             return {"display": "none"}
         else:
             return {}
