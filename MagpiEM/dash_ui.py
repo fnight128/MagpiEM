@@ -30,8 +30,8 @@ import dash_daq as daq
 from flask import Flask
 
 
-from classes import Cleaner
-import read_write
+from .classes import Cleaner
+from .read_write import read_relion, read_emC, modify_relion_star, modify_emc_mat
 
 
 WHITE = "#FFFFFF"
@@ -342,6 +342,7 @@ def main():
         Input("upload-previous-session", "contents"),
         State("upload-data", "filename"),
         State("upload-data", "contents"),
+        prevent_initial_call=True,
     )
     def load_previous_progress(
         previous_filename, previous_contents, data_filename, data_contents
@@ -471,9 +472,9 @@ def main():
 
     def read_uploaded_tomo(data_path, num_images=-1):
         if ".mat" in data_path:
-            tomograms = read_write.read_emC(data_path, num_images=num_images)
+            tomograms = read_emC(data_path, num_images=num_images)
         elif ".star" in data_path:
-            tomograms = read_write.read_relion(data_path, num_images=num_images)
+            tomograms = read_relion(data_path, num_images=num_images)
         else:
             return
         return tomograms
@@ -504,10 +505,6 @@ def main():
 
         global tomograms
 
-        # if cleaning_type == "Clean based on orientation":
-        clean_open = [True, False]
-        # else:
-        #     clean_open = [False, True]
 
         # ensure temp directory clear
         files = glob.glob(TEMP_FILE_DIR + "*")
@@ -522,7 +519,7 @@ def main():
 
         if not tomograms:
             return "File Unreadable", True, True, False, False, False
-        return "Tomograms read", False, False, True, *clean_open
+        return "Tomograms read", False, False, True, True, False
 
     def clean_tomo(tomo, clean_params):
         t0 = time()
@@ -872,7 +869,7 @@ def main():
         [
             html.Tr(
                 [
-                    html.Td("tomogram"),
+                    html.Td("Tomogram"),
                     dcc.Dropdown(
                         [],
                         id="dropdown-tomo",
@@ -1068,13 +1065,13 @@ def main():
         #     dcc.send_file(TEMP_FILE_DIR + output_name)
 
         if ".mat" in input_name:
-            read_write.modify_emc_mat(
+            modify_emc_mat(
                 saving_ids,
                 TEMP_FILE_DIR + output_name,
                 TEMP_FILE_DIR + input_name,
             )
         elif ".star" in input_name:
-            read_write.modify_relion_star(
+            modify_relion_star(
                 saving_ids,
                 TEMP_FILE_DIR + output_name,
                 TEMP_FILE_DIR + input_name,

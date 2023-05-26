@@ -15,7 +15,7 @@ from zipfile import ZipFile
 import starfile
 import eulerangles
 
-from classes import tomogram, Particle
+from .classes import tomogram, Particle
 
 # readin
 TEMP_FILE_DIR = "static/"

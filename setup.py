@@ -14,7 +14,7 @@ requirements = [
     "scipy",
     "plotly",
     "pathlib",
-    "dash==2.8.0",
+    "dash==2.9.3",
     "dash_bootstrap_components",
     "dash_bootstrap_templates",
     "dash_extensions",
@@ -23,11 +23,13 @@ requirements = [
     "imodmodel",
     "emfile",
     "pyyaml",
+    "starfile",
+    "eulerangles",
 ]
 
 setup(
     name="MagpiEM",
-    version="0.2.9",
+    version="0.2.10",
     description="Automated cleaning of sub-tomogram particle picking",
     author="Frank Nightingale",
     author_email="frank.nightingale@linacre.ox.ac.uk",
