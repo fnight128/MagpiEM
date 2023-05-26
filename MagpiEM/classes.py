@@ -296,7 +296,7 @@ class Particle:
             return {Particle(idx, *pdata, tomo) for idx, pdata in enumerate(plist)}
         else:
             return {Particle(ids[idx], *pdata, tomo) for idx, pdata in enumerate(plist)}
-        
+
         # def __init__(self, p_id, cc, position, orientation, particle_set, tomo):
 
     # __init__(self, p_id, cc, position, orientation, particle_set, tomo):

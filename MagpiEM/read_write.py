@@ -206,7 +206,7 @@ def read_relion(filename, num_images=-1):
             break
         tomo_name = tomo_data[0]
         tomo_df = tomo_data[1]
-        
+
         # extract ids
         ids = tomo_df["rlnTomoParticleId"].to_numpy()
 
