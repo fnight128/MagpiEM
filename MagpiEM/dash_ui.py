@@ -67,8 +67,8 @@ def main():
     @app.callback(
         Output("upload-data", "children"),
         Output("input-save-filename", "value"),
-        # Output("card-graph-control"),
         Input("upload-data", "filename"),
+        prevent_initial_call=True,
     )
     def update_output(filename):
         if not filename:
@@ -248,6 +248,7 @@ def main():
     @app.callback(
         Output("dropdown-filetype", "value"),
         Input("upload-data", "filename"),
+        prevent_initial_call=True,
     )
     def update_filetype_dropdown(filename):
         if not filename:
@@ -263,6 +264,7 @@ def main():
     @app.callback(
         Output("label-keep-particles", "children"),
         Input("switch-keep-particles", "on"),
+        prevent_initial_call=True,
     )
     def update_keeping_particles(keeping):
         if keeping:
@@ -273,8 +275,10 @@ def main():
     @app.callback(
         Output("button-set-cone-size", "n_clicks"),
         Input("div-null", "style"),
+        prevent_initial_call=True,
     )
     def cone_clicks(_):
+        # dummy
         return 1
 
     @app.callback(
@@ -305,6 +309,7 @@ def main():
         Output("download-file", "data"),
         Input("button-save-progress", "n_clicks"),
         State("upload-data", "filename"),
+        prevent_initial_call=True,
     )
     def save_current_progress(clicks, filename):
         if not clicks:
@@ -434,6 +439,7 @@ def main():
         Input("dropdown-tomo", "disabled"),
         Input("button-next-tomogram", "n_clicks"),
         Input("button-previous-tomogram", "n_clicks"),
+        prevent_initial_call=True,
     )
     def update_dropdown(current_val, disabled, _, __):
         global tomograms
@@ -492,6 +498,7 @@ def main():
         State("slider-num-images", "value"),
         State("radio-cleantype", "value"),
         long_callback=True,
+        prevent_initial_call=True,
     )
     def read_tomograms(clicks, filename, contents, num_images, cleaning_type):
         if ctx.triggered_id != "button-read":
@@ -504,7 +511,6 @@ def main():
         num_images = num_img_dict[num_images]
 
         global tomograms
-
 
         # ensure temp directory clear
         files = glob.glob(TEMP_FILE_DIR + "*")
