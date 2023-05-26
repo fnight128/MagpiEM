@@ -301,6 +301,7 @@ def main():
             tomo.toggle_concave_arrays()
         return clicks + 1
 
+
     @app.callback(
         Output("download-file", "data"),
         Input("button-save-progress", "n_clicks"),
@@ -332,6 +333,7 @@ def main():
             yaml_file.write(prog)
         return dcc.send_file(file_path)
 
+
     @app.callback(
         Output("label-read", "children"),
         Output("dropdown-tomo", "disabled"),
@@ -356,7 +358,7 @@ def main():
         if not previous_filename:
             return "", *failed_upload
         if not data_filename:
-            return "Please select a .mat file first", *failed_upload
+            return "Please select a particle database (.mat or .star) first", *failed_upload
 
         # ensure temp directory clear
         files = glob.glob(TEMP_FILE_DIR + "*")
@@ -371,10 +373,9 @@ def main():
         data_path = TEMP_FILE_DIR + data_filename
         prev_path = TEMP_FILE_DIR + previous_filename
 
-        try:
-            tomograms = read_write.read_emC(data_path)
-        except Exception:
-            return "Matlab File Unreadable", *failed_upload
+        tomograms = read_uploaded_tomo(data_path)
+        if not tomograms:
+            return "Particle database (.mat/.star) unreadable", *failed_upload
 
         try:
             with open(prev_path, "r") as prev_yaml:
@@ -382,6 +383,7 @@ def main():
         except Exception:
             return "Previous session file unreadable", *failed_upload
 
+        # check keys line up between files
         geom_keys = set(tomograms.keys())
         prev_keys = set(prev_yaml.keys())
         prev_keys.discard(".__cleaning_parameters__.")
@@ -391,6 +393,7 @@ def main():
 
         if not geom_keys == prev_keys:
             if len(prev_keys) in {1, 5}:
+                # likely saved result after only loading few tomograms
                 return [
                     "Keys do not match up between previous session and .mat file.",
                     html.Br(),
@@ -448,7 +451,6 @@ def main():
         # moving to next/prev item in dropdown when next/prev tomogram button pressed
         if not current_val:
             return tomo_keys, ""
-        current_index = tomo_keys.index(current_val)
 
         increment = 0
         if ctx.triggered_id == "button-next-tomogram":
@@ -459,12 +461,23 @@ def main():
 
         # allow wrapping around
         if chosen_index < 0:
-            chosen_index = 0
+            chosen_index = len(tomo_keys) - 1
         elif chosen_index >= len(tomo_keys):
-            chosen_index = tomo_keys[-1]
+            chosen_index = 0
 
         chosen_tomo = tomo_keys[chosen_index]
         return tomo_keys, chosen_tomo
+    
+    def read_uploaded_tomo(data_path, num_images=-1):
+        if ".mat" in data_path:
+            tomograms = read_write.read_emC(
+                data_path, num_images=num_images
+            )
+        elif ".star" in data_path:
+            tomograms = read_write.read_relion(data_path, num_images=num_images)
+        else:
+            return
+        return tomograms
 
     @app.callback(
         Output("label-read", "children"),
@@ -492,10 +505,10 @@ def main():
 
         global tomograms
 
-        if cleaning_type == "Clean based on orientation":
-            clean_open = [True, False]
-        else:
-            clean_open = [False, True]
+        # if cleaning_type == "Clean based on orientation":
+        clean_open = [True, False]
+        # else:
+        #     clean_open = [False, True]
 
         # ensure temp directory clear
         files = glob.glob(TEMP_FILE_DIR + "*")
@@ -506,22 +519,7 @@ def main():
         save_dash_upload(filename, contents)
         temp_file_path = TEMP_FILE_DIR + filename
 
-        if ".mat" in filename:
-            tomograms = read_write.read_emC(
-                TEMP_FILE_DIR + filename, num_images=num_images
-            )
-        elif ".star" in filename:
-            tomograms = read_write.read_relion(temp_file_path, num_images=num_images)
-        # elif ".mod" in filename:
-        #     try:
-        #         imod_data = read_write.read_imod(temp_file_path)
-        #     except:
-        #         return "Invalid file", True, True, False, False, False
-        #     tomo = tomogram.tomo_from_imod(Path(filename).stem, imod_data)
-        #     tomograms[tomo.name] = tomo
-        #     return "Tomogram read", False, False, True, *clean_open
-        else:
-            return "Unrecognised file extension", True, True, False, False, False
+        tomograms = read_uploaded_tomo(temp_file_path, num_images)
 
         if not tomograms:
             return "File Unreadable", True, True, False, False, False
@@ -556,71 +554,6 @@ def main():
         data = contents.encode("utf8").split(b";base64,")[1]
         with open(os.path.join(TEMP_FILE_DIR, filename), "wb") as fp:
             fp.write(base64.decodebytes(data))
-
-    # @app.callback(
-    #     Output("div-need-refs", "children"),
-    #     Input("collapse-clean", "is_open"),
-    #     Input("upload-ref", "children"),
-    # )
-    # def print_needed_refs(_, __):
-    #     global tomograms
-    #     return [
-    #         tomo_name
-    #         for tomo_name, tomo in tomograms.items()
-    #         if not tomo.reference_points
-    #     ]
-    #
-    # @app.callback(
-    #     Output("upload-ref", "children"),
-    #     [Input("upload-ref", "filename"), Input("upload-ref", "contents")],
-    # )
-    # def upload_refs(filenames, contents):
-    #     global tomograms
-    #
-    #     if not any([filenames]):
-    #         raise PreventUpdate
-    #     for filename, data in zip(filenames, contents):
-    #         if not filename:
-    #             raise PreventUpdate
-    #         save_dash_upload(filename, data)
-    #         try:
-    #             ref_data = read_write.read_imod(TEMP_FILE_DIR + filename)
-    #         except:
-    #             return "Unable to read " + filename
-    #
-    #         tomo_name = filename.split("-ref")[0]
-    #         print("uploaded: ", tomo_name)
-    #         print("tomos: ", tomograms.keys())
-    #         if tomo_name in tomograms.keys():
-    #             tomograms[tomo_name].assign_ref_imod(ref_data)
-    #         else:
-    #             return "No matching tomogram found"
-    #
-    #     return filenames
-
-    @app.callback(
-        Output("button-next-tomogram", "disabled"),
-        State("inp-dist-min", "value"),
-        State("inp-dist-max", "value"),
-        State("button-next-tomogram", "disabled"),
-        Input("button-full-prox", "n_clicks"),
-        Input("button-preview-prox", "n_clicks"),
-        prevent_initial_call=True,
-    )
-    def run_prox_cleaning(
-        dist_min: float, dist_max: float, is_disabled: bool, clicks, clicks2
-    ):
-        if not all([dist_max, clicks or clicks2]):
-            return False
-        if not dist_min:
-            dist_min = 0.0
-
-        global tomograms
-
-        for tomo in tomograms.values():
-            prox_clean_tomo(tomo, dist_min, dist_max)
-
-        return not is_disabled
 
     @app.callback(
         Output("button-next-tomogram", "disabled"),
@@ -716,7 +649,7 @@ def main():
             ),
             html.Tr(
                 [
-                    html.Td("Distance"),
+                    html.Td("Distance (px)"),
                     inp_num("dist-goal", 25),
                     html.Td("±"),
                     inp_num("dist-tol", 10),
@@ -724,7 +657,7 @@ def main():
             ),
             html.Tr(
                 [
-                    html.Td("Orientation"),
+                    html.Td("Orientation (°)"),
                     inp_num("ori-goal", 9),
                     html.Td("±"),
                     inp_num("ori-tol", 10),
@@ -732,15 +665,15 @@ def main():
             ),
             html.Tr(
                 [
-                    html.Td("Curvature"),
+                    html.Td("Curvature (°)"),
                     inp_num("curv-goal", 90),
                     html.Td("±"),
                     inp_num("curv-tol", 20),
                 ]
             ),
-            html.Tr([html.Td("Min Neighbours"), inp_num("min-neighbours", 2)]),
+            html.Tr([html.Td("Min. Neighbours"), inp_num("min-neighbours", 2)]),
             html.Tr([html.Td("CC Threshold"), inp_num("cc-thresh", 5)]),
-            html.Tr([html.Td("Min Array Size"), inp_num("array-size", 5)]),
+            html.Tr([html.Td("Min. Lattice Size"), inp_num("array-size", 5)]),
             html.Tr(
                 [
                     html.Td("Allow Flipped Particles"),
@@ -750,13 +683,14 @@ def main():
             html.Tr(
                 html.Td(
                     dbc.Button(
-                        "Preview Cleaning", id="button-preview-clean", color="secondary"
+                        # disable for now
+                        "Preview Cleaning", id="button-preview-clean", color="secondary", style={"display": "none"}
                     ),
                     colSpan=4,
                 ),
             ),
             html.Tr(
-                html.Td(dbc.Button("Full Cleaning", id="button-full-clean"), colSpan=4),
+                html.Td(dbc.Button("Run Cleaning", id="button-full-clean"), colSpan=4),
             ),
         ],
         style={"overflow": "hidden", "margin": "3px", "width": "100%"},
@@ -962,8 +896,8 @@ def main():
             ),
             html.Tr(
                 [
-                    html.Td(dbc.Button("Toggle Convex", id="button-toggle-convex")),
-                    html.Td(dbc.Button("Toggle Concave", id="button-toggle-concave")),
+                    html.Td(dbc.Button("Toggle All Convex", id="button-toggle-convex")),
+                    html.Td(dbc.Button("Toggle All Concave", id="button-toggle-concave")),
                 ],
             ),
             html.Tr(
@@ -1026,7 +960,7 @@ def main():
     )
 
     cleaning_params_card = collapsing_card(
-        card("Orientation Cleaning", param_table), "clean"
+        card("Cleaning", param_table), "clean"
     )
     proximity_params_card = collapsing_card(
         card("Proximity Cleaning", prox_table), "proximity"
@@ -1115,7 +1049,7 @@ def main():
             return None
 
         saving_ids = {
-            tomo.name: tomo.selected_particle_ids(keep_selected) for tomo in tomograms
+            tomo_name: tomo.selected_particle_ids(keep_selected) for tomo_name, tomo in tomograms.items()
         }
 
         #  temporarily disabled until em file saving is fixed

@@ -649,7 +649,8 @@ class tomogram:
     def toggle_selected(self, n):
         if n in self.selected_n:
             self.selected_n.remove(n)
-        else:
+        # ensure 0 is never selected - represents unclean particles
+        elif n != 0:
             self.selected_n.add(n)
 
     def get_convex_arrays(self):
@@ -700,27 +701,30 @@ class tomogram:
             # must use lists, or yaml interprets as dicts
             if ind == 0:
                 continue
-            # print("ind", ind)
+            
             p_ids = [p.particle_id for p in arr]
             arr_dict[ind] = p_ids
-        arr_dict["selected"] = list(self.selected_n)
+        selected_lattices = list(self.selected_n)
+        arr_dict["selected"] = selected_lattices
         return arr_dict
 
     def apply_prog_dict(self, prog_dict):
         # invert dict
         inverted_prog_dict = {}
         for array, particles in prog_dict.items():
+            # skip dict which stores which arrays are selected
             if array == "selected":
                 continue
             for particle in particles:
                 inverted_prog_dict[particle] = array
-        print(inverted_prog_dict)
+        # using inverted dict, assign all particles to lattices
         for particle in self.all_particles:
             p_id = particle.particle_id
             if p_id in inverted_prog_dict.keys():
                 particle.set_protein_array(
                     int(inverted_prog_dict[particle.particle_id])
                 )
+                self.auto_cleaned_particles.add(particle)
             else:
                 particle.set_protein_array(0)
         self.selected_n = set(prog_dict["selected"])

@@ -162,3 +162,5 @@ cython_debug/
 
 #PyCharm
 .idea/
+*.zip
+*.csv
