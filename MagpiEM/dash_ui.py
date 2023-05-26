@@ -301,7 +301,6 @@ def main():
             tomo.toggle_concave_arrays()
         return clicks + 1
 
-
     @app.callback(
         Output("download-file", "data"),
         Input("button-save-progress", "n_clicks"),
@@ -333,7 +332,6 @@ def main():
             yaml_file.write(prog)
         return dcc.send_file(file_path)
 
-
     @app.callback(
         Output("label-read", "children"),
         Output("dropdown-tomo", "disabled"),
@@ -358,7 +356,10 @@ def main():
         if not previous_filename:
             return "", *failed_upload
         if not data_filename:
-            return "Please select a particle database (.mat or .star) first", *failed_upload
+            return (
+                "Please select a particle database (.mat or .star) first",
+                *failed_upload,
+            )
 
         # ensure temp directory clear
         files = glob.glob(TEMP_FILE_DIR + "*")
@@ -467,12 +468,10 @@ def main():
 
         chosen_tomo = tomo_keys[chosen_index]
         return tomo_keys, chosen_tomo
-    
+
     def read_uploaded_tomo(data_path, num_images=-1):
         if ".mat" in data_path:
-            tomograms = read_write.read_emC(
-                data_path, num_images=num_images
-            )
+            tomograms = read_write.read_emC(data_path, num_images=num_images)
         elif ".star" in data_path:
             tomograms = read_write.read_relion(data_path, num_images=num_images)
         else:
@@ -534,7 +533,7 @@ def main():
 
         tomo.autoclean()
 
-        print(tomo.particle_fate_table())
+        # print(tomo.particle_fate_table())
 
         print("time for {}:".format(tomo.name), time() - t0)
 
@@ -619,9 +618,14 @@ def main():
             clean_count = 0
             total_tomos = len(tomograms.keys())
             for tomo in tomograms.values():
+                t0 = time()
                 clean_tomo(tomo, clean_params)
+                one_tomo_time = time() - t0
                 clean_count += 1
+                tomos_remaining = total_tomos - clean_count
+                mins_remaining = math.ceil(one_tomo_time * tomos_remaining / 60)
                 print(prog_bar(clean_count, total_tomos))
+                print("Approx time remaining: {:.0f} min".format(mins_remaining))
         return False, False, True
 
     size = "50px"
@@ -684,7 +688,10 @@ def main():
                 html.Td(
                     dbc.Button(
                         # disable for now
-                        "Preview Cleaning", id="button-preview-clean", color="secondary", style={"display": "none"}
+                        "Preview Cleaning",
+                        id="button-preview-clean",
+                        color="secondary",
+                        style={"display": "none"},
                     ),
                     colSpan=4,
                 ),
@@ -897,7 +904,9 @@ def main():
             html.Tr(
                 [
                     html.Td(dbc.Button("Toggle All Convex", id="button-toggle-convex")),
-                    html.Td(dbc.Button("Toggle All Concave", id="button-toggle-concave")),
+                    html.Td(
+                        dbc.Button("Toggle All Concave", id="button-toggle-concave")
+                    ),
                 ],
             ),
             html.Tr(
@@ -959,9 +968,7 @@ def main():
         style={"overflow": "hidden", "margin": "3px", "width": "100%"},
     )
 
-    cleaning_params_card = collapsing_card(
-        card("Cleaning", param_table), "clean"
-    )
+    cleaning_params_card = collapsing_card(card("Cleaning", param_table), "clean")
     proximity_params_card = collapsing_card(
         card("Proximity Cleaning", prox_table), "proximity"
     )
@@ -1049,7 +1056,8 @@ def main():
             return None
 
         saving_ids = {
-            tomo_name: tomo.selected_particle_ids(keep_selected) for tomo_name, tomo in tomograms.items()
+            tomo_name: tomo.selected_particle_ids(keep_selected)
+            for tomo_name, tomo in tomograms.items()
         }
 
         #  temporarily disabled until em file saving is fixed
@@ -1059,11 +1067,18 @@ def main():
         #     zip_files(output_name, "em")
         #     dcc.send_file(TEMP_FILE_DIR + output_name)
 
-        read_write.modify_emc_mat(
-            saving_ids,
-            TEMP_FILE_DIR + output_name,
-            TEMP_FILE_DIR + input_name,
-        )
+        if ".mat" in input_name:
+            read_write.modify_emc_mat(
+                saving_ids,
+                TEMP_FILE_DIR + output_name,
+                TEMP_FILE_DIR + input_name,
+            )
+        elif ".star" in input_name:
+            read_write.modify_relion_star(
+                saving_ids,
+                TEMP_FILE_DIR + output_name,
+                TEMP_FILE_DIR + input_name,
+            )
         # files = glob.glob(TEMP_FILE_DIR + "*")
         # print(files)
         # print(download(output_name))

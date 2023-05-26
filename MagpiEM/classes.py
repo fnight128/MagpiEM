@@ -271,7 +271,7 @@ class Particle:
         )
 
     @staticmethod
-    def from_array(plist, tomo):
+    def from_array(plist, tomo, ids=None):
         """
         Produce an array of particles from parameters
 
@@ -283,13 +283,20 @@ class Particle:
                 cc value, [x, y, z], [u, v, w]
         tomo: tomogram
             tomogram object from which the particles are from
+        ids:
+            optional specification of what each particle's id should be
+            internally. If not specified, assigned incrementally from 0
 
         Returns
         -------
         Set of particles
 
         """
-        return {Particle(idx, *pdata, tomo) for idx, pdata in enumerate(plist)}
+        if ids is None:
+            return {Particle(idx, *pdata, tomo) for idx, pdata in enumerate(plist)}
+        else:
+            return {Particle(ids[idx], *pdata, tomo) for idx, pdata in enumerate(plist)}
+        
         # def __init__(self, p_id, cc, position, orientation, particle_set, tomo):
 
     # __init__(self, p_id, cc, position, orientation, particle_set, tomo):
@@ -445,17 +452,11 @@ class tomogram:
 
     def find_particle_neighbours(self, drange):
         particles = self.all_particles
-        t0 = tm()
+        # t0 = tm()
         regions = tomogram.assign_regions(particles, max(drange) ** 0.5)
-        print("Assigning particles to regions", tm() - t0)
-        # max_dist = max(drange) ** 0.5
+        # print("Assigning particles to regions", tm() - t0)
 
-        # for particle in particles:
-        #     position_list = [str(math.floor(q / max_dist)) for q in particle.position]
-        #     locality_id = "_".join(position_list)
-        #     regions[locality_id].add(particle)
-
-        t0 = tm()
+        # t0 = tm()
         for rkey, region in regions.items():
             if len(region) == 0:
                 continue
@@ -470,7 +471,7 @@ class tomogram:
 
             # remove all checked particles from further checks
             regions[rkey] = set()
-        print("Finding particles in regions", tm() - t0)
+        # print("Finding particles in regions", tm() - t0)
 
     def __hash__(self):
         return self.name
@@ -537,15 +538,15 @@ class tomogram:
             if particle.cc_score > self.cleaning_params.cc_threshold
         }
         self.find_particle_neighbours(self.cleaning_params.dist_range)
-        t0 = tm()
+        # t0 = tm()
         for particle in self.all_particles:
             neighbours = particle.neighbours
 
             if len(neighbours) < self.cleaning_params.min_neighbours:
                 self.particles_fate["low_neighbours"].add(particle)
                 continue
-        print("Finding low neighbours", tm() - t0)
-        t0 = tm()
+        # print("Finding low neighbours", tm() - t0)
+        # t0 = tm()
         for particle in self.all_particles:  # temp for timing
             # check correct orientation
             particle.filter_neighbour_orientation(
@@ -554,16 +555,16 @@ class tomogram:
             if len(particle.neighbours) < self.cleaning_params.min_neighbours:
                 self.particles_fate["wrong_ori"].add(particle)
                 continue
-        print("Comparing angles", tm() - t0)
-        t0 = tm()
+        # print("Comparing angles", tm() - t0)
+        # t0 = tm()
         for particle in self.all_particles:  # temp for timing
             # check correct positioning
             particle.filter_curvature(self.cleaning_params.pos_range)
             if len(particle.neighbours) < self.cleaning_params.min_neighbours:
                 self.particles_fate["wrong_disp"].add(particle)
                 continue
-        print("Comparing curvatures", tm() - t0)
-        t0 = tm()
+        # print("Comparing curvatures", tm() - t0)
+        # t0 = tm()
         for particle in self.all_particles:  # temp for timing
             if particle.protein_array:
                 continue
@@ -571,11 +572,11 @@ class tomogram:
             # particle.choose_protein_array()
             particle.choose_protein_array_new(len(self.protein_arrays))
 
-        print("Choosing initial arrays", tm() - t0)
+        # print("Choosing initial arrays", tm() - t0)
         # can't check size of array until all particles allocated
 
         # can't delete arrays within loop, changes size of dict
-        t0 = tm()
+        # t0 = tm()
         bad_arrays = set()
         for akey, protein_array in self.protein_arrays.items():
             if len(protein_array) < self.cleaning_params.min_array_size:
@@ -588,7 +589,7 @@ class tomogram:
                     self.auto_cleaned_particles.add(particle)
         for akey in bad_arrays:
             self.delete_array(akey)
-        print("Time to assimilate arrays", tm() - t0)
+        # print("Time to assimilate arrays", tm() - t0)
 
     def particle_fate_table(self):
         pf = self.particles_fate
@@ -701,7 +702,7 @@ class tomogram:
             # must use lists, or yaml interprets as dicts
             if ind == 0:
                 continue
-            
+
             p_ids = [p.particle_id for p in arr]
             arr_dict[ind] = p_ids
         selected_lattices = list(self.selected_n)

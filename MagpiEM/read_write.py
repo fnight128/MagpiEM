@@ -148,9 +148,9 @@ def read_emC(filename: str, cycle="cycle000", num_images=-1):
     geom_key = "geometry" if cycle == "cycle000" else "Avg_geometry"
 
     try:
-        full_geom = scipy.io.loadmat(filename, simplify_cells=True)["subTomoMeta"][cycle][
-            geom_key
-        ]
+        full_geom = scipy.io.loadmat(filename, simplify_cells=True)["subTomoMeta"][
+            cycle
+        ][geom_key]
     except:
         print("Mat file {} unreadable".format(filename))
         return
@@ -206,6 +206,9 @@ def read_relion(filename, num_images=-1):
             break
         tomo_name = tomo_data[0]
         tomo_df = tomo_data[1]
+        
+        # extract ids
+        ids = tomo_df["rlnTomoParticleId"].to_numpy()
 
         # extract euler angles and convert to z-vectors
         angles = tomo_df[["rlnAngleRot", "rlnAngleTilt", "rlnAnglePsi"]]
@@ -226,8 +229,28 @@ def read_relion(filename, num_images=-1):
 
         # form tomograms
         tomo = tomogram(tomo_name)
-        particles = Particle.from_array(pdata, tomo)
+        particles = Particle.from_array(pdata, tomo, ids=ids)
         tomo.set_particles(particles)
         tomograms[tomo_name] = tomo
 
     return tomograms
+
+
+def modify_relion_star(keep_ids: dict, out_path: str, inp_path: str):
+    try:
+        rln_dict = starfile.read(inp_path, always_dict=True)
+        full_df = rln_dict["particles"]
+    except:
+        print("Star file {} unreadable".format(inp_path))
+        return
+
+    all_wanted_ids = set()
+
+    for ids in keep_ids.values():
+        all_wanted_ids.update(ids)
+
+    cleaned_df = full_df[full_df["rlnTomoParticleId"].isin(all_wanted_ids)]
+
+    rln_dict["particles"] = cleaned_df
+
+    starfile.write(rln_dict, out_path)
