@@ -17,18 +17,30 @@ import eulerangles
 
 from .classes import tomogram, Particle
 
-# readin
 TEMP_FILE_DIR = "static/"
 
 
 def em_format(particle):
+    """
+    Format particle data into a list
+    formatted for .em files
+
+    Parameters
+    ----------
+    particle : Particle
+        Particle to format
+
+    Returns
+    -------
+    list
+        List formatted for .em file
+
+    """
     rx, ry, rz = particle.direction
-    # convert orientation vector into euler angles
     # PlaceObject uses "zxz" euler angles, but saved in the order "zzx"
     rotation_matrix = np.array([[0, 0, rx], [0, 0, ry], [0, 0, rz]])
     euler = R.from_matrix(rotation_matrix).as_euler("xzx", degrees=True)
     euler_formatted = [euler[0], euler[2], euler[1]]
-    # print("")
     return [
         particle.cc_score,
         0.0,
@@ -49,33 +61,93 @@ def em_format(particle):
     ]
 
 
-def modify_emc_mat(
-    keep_ids: dict,
-    out_path: str,
-    inp_path: str,
-):
-    output_data = dict()
-    for tomo_id in keep_ids.keys():
+def purge_blank_tomos(mat_dict: dict, blank_tomos: set):
+    """
+    Recursively purge all mention of blank tomograms from dict.
+    mat_dict is modified in place
+
+    Parameters
+    ----------
+    mat_dict : dict
+        subTomoMeta dict from emClarity .mat file
+    blank_tomos : set
+        Keys of tomograms to remove
+
+    Returns
+    -------
+    None.
+
+    """
+    for blank_tomo in blank_tomos:
+        mat_dict.pop(blank_tomo, None)
+    for value in mat_dict.values():
+        if isinstance(value, dict):
+            purge_blank_tomos(value, blank_tomos)
+
+
+def modify_emc_mat(keep_ids: dict, out_path, inp_path, purge_blanks: bool = True):
+    """
+    Write a new emClarity .mat database with only the particles defined
+    by keep_ids
+
+    Parameters
+    ----------
+    keep_ids : dict
+        IDs of particles to keep
+    out_path :
+        Path to save new file to
+    inp_path :
+        Original .mat file to read data from
+    purge_blanks : bool, optional
+        Whether tomograms with no particles should be removed.
+        Defaults to True
+
+    """
+    try:
+        mat_full = scipy.io.loadmat(inp_path, simplify_cells=True, mat_dtype=True)
+        mat_geom = mat_full["subTomoMeta"]["cycle000"]["geometry"]
+    except:
+        print("Unable to open original matlab file, was it moved?")
+        return None
+    blank_tomos = set()
+    for tomo_id, particles in keep_ids.items():
+        if len(particles) == 0:
+            blank_tomos.add(tomo_id)
+            continue
         print(tomo_id)
         table_rows = list()
-        try:
-            mat_out = scipy.io.loadmat(inp_path, simplify_cells=True, mat_dtype=True)
-            mat_inp = mat_out["subTomoMeta"]["cycle000"]["geometry"]
-        except:
-            print("Unable to open original matlab file, was it moved?")
-            return ""
-        mat_table = mat_inp[tomo_id]
-        for particle_id in keep_ids[tomo_id]:
+        mat_table = mat_geom[tomo_id]
+        for particle_id in particles:
             table_rows.append(mat_table[particle_id])
-        output_data[tomo_id] = table_rows
+        mat_geom[tomo_id] = table_rows
+    if purge_blanks and len(blank_tomos) > 0:
+        purge_blank_tomos(mat_full, blank_tomos)
+    mat_full["subTomoMeta"]["cycle000"]["geometry"] = mat_geom
     try:
-        mat_out["subTomoMeta"]["cycle000"]["geometry"] = output_data
-        scipy.io.savemat(out_path, mdict=mat_out)
+        scipy.io.savemat(out_path, mdict=mat_full)
     except:
         print("Unable to save file")
 
 
 def write_emfile(tomo_dict: dict, out_suffix: str, keep_selected: bool):
+    """
+    Write a .em file for each tomo in tomo_dict
+
+    Parameters
+    ----------
+    tomo_dict : dict
+        Tomos to write .em file for
+    out_suffix : str
+        Suffix to add to each tomo's name to generate filename
+        (extension not necessary)
+    keep_selected : bool
+        Whether selected arrays should be kept, or unselected ones
+
+    Returns
+    -------
+    None.
+
+    """
     for skey, tomo in tomo_dict.items():
         filename = "{0}_{1}{2}".format(skey, out_suffix, ".em")
         good_particles = tomo.auto_cleaned_particles
@@ -83,7 +155,23 @@ def write_emfile(tomo_dict: dict, out_suffix: str, keep_selected: bool):
         emfile.write(TEMP_FILE_DIR + filename, em_list, overwrite=True)
 
 
-def zip_files(final_filename: str, extension_to_zip: str):
+def zip_files_with_extension(final_filename: str, extension_to_zip: str):
+    """
+    Zip all files with a certain extension
+
+    Parameters
+    ----------
+    final_filename : str
+        Desired filename for .zip file
+    extension_to_zip : str
+        Which extension to zip
+
+    Returns
+    -------
+    archive_name :
+        Zipped file
+
+    """
     archive_name = "{}.zip".format(final_filename)
     filenames = glob("*.{}".format(extension_to_zip))
 
@@ -94,31 +182,23 @@ def zip_files(final_filename: str, extension_to_zip: str):
     return archive_name
 
 
-# def read_imod(filename: str):
-#     """
+def append_filename(filename: str, suffix: str = "out"):
+    """
+    Insert a suffix between the end of a filename and its exension
 
+    Parameters
+    ----------
+    filename : str
+        File name
+    suffix : str
+        Suffix to append. Defaults to "out"
 
-#     Parameters
-#     ----------
-#     filename : str
-#         imod filename
+    Returns
+    -------
+    str
+        Modified string
 
-#     Returns
-#     -------
-#     3xN np array (x, y, z)
-#         e.g.
-#         [[27.4   99.4   3.6]
-#          [301.2  38.2   8.1]
-#          ...
-#          [43.1   99.0  12.3]
-#          [88.2   21.1  33.8]]
-
-#     """
-#     imod_inp = imodmodel.read(filename)
-#     return np.transpose(np.array([imod_inp[q] for q in ["x", "y", "z"]]))
-
-
-def append_filename(filename: str, suffix="out"):
+    """
     p = Path(filename)
     return "{0}_{1}{2}".format(p.stem, suffix, p.suffix)
 
@@ -169,9 +249,6 @@ def read_emC(filename: str, cycle="cycle000", num_images=-1):
     return tomograms
 
 
-# data=0
-
-
 def read_relion(filename, num_images=-1):
     """
     Read tomograms from a .star file generated by relion
@@ -207,7 +284,7 @@ def read_relion(filename, num_images=-1):
         tomo_name = tomo_data[0]
         tomo_df = tomo_data[1]
 
-        # extract ids
+        # relion uses preset ids
         ids = tomo_df["rlnTomoParticleId"].to_numpy()
 
         # extract euler angles and convert to z-vectors
@@ -237,6 +314,23 @@ def read_relion(filename, num_images=-1):
 
 
 def modify_relion_star(keep_ids: dict, out_path: str, inp_path: str):
+    """
+    Write a new relion .star file with only the particles defined
+    by keep_ids
+
+    Parameters
+    ----------
+    keep_ids : dict
+        IDs of particles to keep
+    out_path : str
+        Path to save new file to.
+    inp_path : str
+        Original .star file to read from
+    purge_empty_tomos : bool, optional
+        Whether tomograms with no particles should be removed.
+        Defaults to True
+
+    """
     try:
         rln_dict = starfile.read(inp_path, always_dict=True)
         full_df = rln_dict["particles"]

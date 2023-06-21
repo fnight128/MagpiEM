@@ -16,9 +16,9 @@ from pathlib import Path
 import webbrowser
 
 import glob
+import datetime
 from time import time
 
-# import dash
 from dash import dcc, html, State, ctx
 import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import load_figure_template
@@ -26,7 +26,6 @@ from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Output, DashProxy, Input, MultiplexerTransform
 import dash_daq as daq
 
-# flask server to save files
 from flask import Flask
 
 
@@ -528,17 +527,11 @@ def main():
         return "Tomograms read", False, False, True, True, False
 
     def clean_tomo(tomo, clean_params):
-        t0 = time()
-
         tomo.set_clean_params(clean_params)
 
         tomo.reset_cleaning()
 
         tomo.autoclean()
-
-        # print(tomo.particle_fate_table())
-
-        print("time for {}:".format(tomo.name), time() - t0)
 
         tomo.generate_particle_df()
 
@@ -619,16 +612,22 @@ def main():
         else:
             print("Full")
             clean_count = 0
+            clean_total_time = 0
             total_tomos = len(tomograms.keys())
             for tomo in tomograms.values():
                 t0 = time()
                 clean_tomo(tomo, clean_params)
-                one_tomo_time = time() - t0
+                clean_total_time += time() - t0
                 clean_count += 1
                 tomos_remaining = total_tomos - clean_count
-                mins_remaining = math.ceil(one_tomo_time * tomos_remaining / 60)
+                clean_speed = clean_total_time / clean_count
+                secs_remaining = clean_speed * tomos_remaining
+                formatted_time_remaining = str(
+                    datetime.timedelta(seconds=secs_remaining)
+                ).split(".")[0]
                 print(prog_bar(clean_count, total_tomos))
-                print("Approx time remaining: {:.0f} min".format(mins_remaining))
+                print("Time remaining:", formatted_time_remaining)
+                print()
         return False, False, True
 
     size = "50px"

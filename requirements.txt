@@ -4,7 +4,7 @@ prettytable
 scipy
 plotly
 pathlib
-dash==2.8.0
+dash==2.9.3
 dash_bootstrap_components
 dash_bootstrap_templates
 dash_extensions
@@ -12,3 +12,6 @@ dash_daq
 flask
 imodmodel
 emfile
+pyyaml
+starfile
+eulerangles
