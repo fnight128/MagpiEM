@@ -284,24 +284,35 @@ def main():
         Output("button-set-cone-size", "n_clicks"),
         State("button-set-cone-size", "n_clicks"),
         State("dropdown-tomo", "value"),
+        State("switch-toggle-conv-all", "on"),
         Input("button-toggle-convex", "n_clicks"),
         prevent_initial_call=True,
     )
-    def select_convex(clicks, current_tomo, _):
+    def select_convex(clicks, current_tomo, all_tomos, _):
         global tomograms
-        tomograms[current_tomo].toggle_convex_arrays()
+        if all_tomos:
+            for tomo in tomograms.values():
+                tomo.toggle_convex_arrays()
+        else:
+            tomograms[current_tomo].toggle_convex_arrays()
         return int(clicks or 0) + 1
 
     @app.callback(
         Output("button-set-cone-size", "n_clicks"),
         State("button-set-cone-size", "n_clicks"),
         State("dropdown-tomo", "value"),
+        State("switch-toggle-conv-all", "on"),
         Input("button-toggle-concave", "n_clicks"),
         prevent_initial_call=True,
     )
-    def select_concave(clicks, current_tomo, _):
+    def select_concave(clicks, current_tomo, all_tomos, _):
+        # TODO make these a single callback
         global tomograms
-        tomograms[current_tomo].toggle_concave_arrays()
+        if all_tomos:
+            for tomo in tomograms.values():
+                tomo.toggle_concave_arrays()
+        else:
+            tomograms[current_tomo].toggle_concave_arrays()
         return int(clicks or 0) + 1
 
     @app.callback(
@@ -909,6 +920,13 @@ def main():
                     ),
                     html.Td(
                         dbc.Button("Toggle Concave", id="button-toggle-concave"),
+                    ),
+                    html.Td(
+                        [
+                            daq.BooleanSwitch(id="switch-toggle-conv-all", on=False),
+                            html.Div("All tomos", style={"margin": "auto"}),
+                        ],
+                        style={"text-align": "center"},
                     ),
                 ],
             ),

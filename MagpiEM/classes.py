@@ -301,9 +301,7 @@ class Particle:
     def get_avg_curvature(self):
         if len(self.neighbours) == 0:
             return 0.0
-        return  np.mean(
-            [self.dot_curvature(neighbour) for neighbour in self.neighbours]
-        )
+        return np.mean([self.dot_curvature(neighbour) for neighbour in self.neighbours])
 
 
 class ReferenceParticle(Particle):
