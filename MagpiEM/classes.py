@@ -144,8 +144,6 @@ class Particle:
     position: np.ndarray
     direction: np.ndarray
 
-    avg_curvature: float
-
     tomo: object
 
     particles: set()
@@ -209,17 +207,17 @@ class Particle:
         return dot
 
     def dot_direction(self, particle):
-        "Dot product of two particles' orientations"
+        """Dot product of two particles' orientations"""
         return Particle.dot_product(self.direction, particle.direction)
 
     def dot_curvature(self, particle):
-        "Dot product of particle's orientation with its displacement from second particle"
+        """Dot product of particle's orientation with its displacement from second particle"""
         return Particle.dot_product(
             particle.direction, normalise(self.displacement_from(particle))
         )
 
     def choose_protein_array_new(self, array):
-        "Recursively assign particle and all neighbours to array"
+        """Recursively assign particle and all neighbours to array"""
         self.set_protein_array(array)
         for neighbour in self.neighbours:
             if not neighbour.protein_array:
@@ -256,12 +254,12 @@ class Particle:
             del all_arrays[array]
 
     def make_neighbours(self, particle2):
-        "Define two particles as neighbours"
+        """Define two particles as neighbours"""
         self.neighbours.add(particle2)
         particle2.neighbours.add(self)
 
     def calculate_params(self, particle2):
-        "Return set of useful parameters about two particles"
+        """Return set of useful parameters about two particles"""
         distance = self.distance2(particle2) ** 0.5
         orientation = np.degrees(np.arccos(self.dot_direction(particle2)))
         curvature = np.degrees(np.arccos(self.dot_curvature(particle2)))
@@ -300,26 +298,10 @@ class Particle:
 
     # __init__(self, p_id, cc, position, orientation, particle_set, tomo):
 
-    @staticmethod
-    def from_geom_mat(tomo, garr: np.ndarray, cc_thresh):
-        "Read set of particles from matlab array"
-        particles = set()
-        for idx, pdata in enumerate(garr):
-            # if pdata[0] < cc_thresh:
-            #     print("bad cc", pdata[0])
-            #     continue
-            new_particle = Particle(
-                idx, pdata[0], pdata[10:13], pdata[22:25], particles, tomo
-            )
-            particles.add(new_particle)
-        return particles
-
-    def find_avg_curvature(self):
+    def get_avg_curvature(self):
         if len(self.neighbours) == 0:
-            self.avg_curvature = 0.0
-            return
-        # print(np.mean([self.dot_curvature(neighbour) for neighbour in self.neighbours]))
-        self.avg_curvature = np.mean(
+            return 0.0
+        return  np.mean(
             [self.dot_curvature(neighbour) for neighbour in self.neighbours]
         )
 
@@ -571,11 +553,6 @@ class tomogram:
             # particle.choose_protein_array()
             particle.choose_protein_array_new(len(self.protein_arrays))
 
-        # print("Choosing initial arrays", tm() - t0)
-        # can't check size of array until all particles allocated
-
-        # can't delete arrays within loop, changes size of dict
-        # t0 = tm()
         bad_arrays = set()
         for akey, protein_array in self.protein_arrays.items():
             if len(protein_array) < self.cleaning_params.min_array_size:
@@ -584,7 +561,6 @@ class tomogram:
                     self.particles_fate["small_array"].add(particle)
             else:
                 for particle in protein_array:
-                    particle.find_avg_curvature()
                     self.auto_cleaned_particles.add(particle)
         for akey in bad_arrays:
             self.delete_array(akey)
@@ -657,18 +633,18 @@ class tomogram:
         return {
             a_id
             for a_id, particles in self.protein_arrays.items()
-            if a_id > 0
-            and np.mean([particle.avg_curvature for particle in particles]) < 0
+            if np.mean([particle.get_avg_curvature() for particle in particles]) < 0
         }
+
+    def get_concave_arrays(self):
+        return set(self.protein_arrays.keys()).difference(self.get_convex_arrays())
 
     def toggle_convex_arrays(self):
         for a_id in self.get_convex_arrays():
             self.toggle_selected(a_id)
 
     def toggle_concave_arrays(self):
-        for a_id in set(self.protein_arrays.keys()).difference(
-            self.get_convex_arrays()
-        ):
+        for a_id in self.get_concave_arrays():
             self.toggle_selected(a_id)
 
     def show_particle_data(self, position):

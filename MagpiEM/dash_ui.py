@@ -283,26 +283,26 @@ def main():
     @app.callback(
         Output("button-set-cone-size", "n_clicks"),
         State("button-set-cone-size", "n_clicks"),
+        State("dropdown-tomo", "value"),
         Input("button-toggle-convex", "n_clicks"),
         prevent_initial_call=True,
     )
-    def select_convex(clicks, _):
+    def select_convex(clicks, current_tomo, _):
         global tomograms
-        for tomo in tomograms.values():
-            tomo.toggle_convex_arrays()
-        return clicks + 1
+        tomograms[current_tomo].toggle_convex_arrays()
+        return int(clicks or 0) + 1
 
     @app.callback(
         Output("button-set-cone-size", "n_clicks"),
         State("button-set-cone-size", "n_clicks"),
+        State("dropdown-tomo", "value"),
         Input("button-toggle-concave", "n_clicks"),
         prevent_initial_call=True,
     )
-    def select_concave(clicks, _):
+    def select_concave(clicks, current_tomo, _):
         global tomograms
-        for tomo in tomograms.values():
-            tomo.toggle_concave_arrays()
-        return clicks + 1
+        tomograms[current_tomo].toggle_concave_arrays()
+        return int(clicks or 0) + 1
 
     @app.callback(
         Output("download-file", "data"),
@@ -495,11 +495,10 @@ def main():
         State("upload-data", "filename"),
         State("upload-data", "contents"),
         State("slider-num-images", "value"),
-        State("radio-cleantype", "value"),
         long_callback=True,
         prevent_initial_call=True,
     )
-    def read_tomograms(clicks, filename, contents, num_images, cleaning_type):
+    def read_tomograms(clicks, filename, contents, num_images):
         if ctx.triggered_id != "button-read":
             filename = None
 
@@ -813,14 +812,14 @@ def main():
                 )
             ),
             html.Tr(
-                dcc.RadioItems(
-                    [
-                        "Clean based on orientation",
-                        # "Clean based on reference particles",
-                    ],
-                    "Clean based on orientation",
-                    id="radio-cleantype",
-                )
+                # dcc.RadioItems(
+                #     [
+                #        "Clean based on orientation",
+                #         # "Clean based on reference particles",
+                #     ],
+                #     "Clean based on orientation",
+                #     id="radio-cleantype",
+                # )
             ),
             html.Tr([html.Td("Number of Images to Process")]),
             html.Tr(
@@ -905,9 +904,11 @@ def main():
             ),
             html.Tr(
                 [
-                    html.Td(dbc.Button("Toggle All Convex", id="button-toggle-convex")),
                     html.Td(
-                        dbc.Button("Toggle All Concave", id="button-toggle-concave")
+                        dbc.Button("Toggle Convex", id="button-toggle-convex"),
+                    ),
+                    html.Td(
+                        dbc.Button("Toggle Concave", id="button-toggle-concave"),
                     ),
                 ],
             ),
