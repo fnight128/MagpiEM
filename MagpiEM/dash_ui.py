@@ -176,7 +176,7 @@ def main():
             print("Clicked pos", clicked_particle_pos)
             params_message = tomo.show_particle_data(clicked_particle_pos)
 
-        should_make_cones = make_cones  # and not tomo.position_only
+        should_make_cones = make_cones
 
         has_ref = hasattr(tomo, "reference_df")
 
@@ -187,7 +187,7 @@ def main():
         fig["layout"]["uirevision"] = "a"
 
         # if tomo not yet cleaned, just plot all points
-        if len(tomo.protein_arrays) == 1:
+        if len(tomo.lattices) == 1:
             if should_make_cones:
 
                 nonchecking_df = pd.concat(

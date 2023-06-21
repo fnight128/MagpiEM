@@ -19,10 +19,10 @@ ADJ_AREA_GEN = tuple(
 class Cleaner:
     cc_threshold: float
     min_neighbours: int
-    min_array_size: int
+    min_lattice_size: int
     dist_range: list
     ori_range: list
-    pos_range: list
+    curv_range: list
 
     flipped_ori_range: list
 
@@ -37,16 +37,16 @@ class Cleaner:
         dist_tol,
         target_ori,
         ori_tol,
-        target_pos,
-        pos_tol,
+        target_curv,
+        curv_tol,
         allow_flips,
     ):
         self.cc_threshold = cc_thresh
         self.min_neighbours = min_neigh
-        self.min_array_size = min_array
+        self.min_lattice_size = min_array
         self.dist_range = Cleaner.dist_range(target_dist, dist_tol)
         self.ori_range = Cleaner.ang_range_dotprod(target_ori, ori_tol)
-        self.pos_range = Cleaner.ang_range_dotprod(target_pos, pos_tol)
+        self.curv_range = Cleaner.ang_range_dotprod(target_curv, curv_tol)
         self.flipped_ori_range = (
             [-x for x in reversed(self.ori_range)] if allow_flips else 0
         )
@@ -63,7 +63,7 @@ class Cleaner:
 
     def __str__(self):
         return "Allowed distances: {}-{}. Allowed orientations:{}-{}. Allowed curvatures:{}-{}.".format(
-            *self.dist_range, *self.ori_range, *self.pos_range
+            *self.dist_range, *self.ori_range, *self.curv_range
         )
 
     @staticmethod
@@ -111,38 +111,12 @@ class Cleaner:
 
         return [np.cos(np.radians(ang)) for ang in [max_ang, min_ang]]
 
-    # def clean_cc(self, particles):
-    #     return {particle for particle in particles if particle.cc_score > self.cc_threshold}
-
-    # def filter_neighbours(self, particle, func, val_range):
-    #     particle.neighbours = {
-    #         neighbour
-    #         for neighbour in particle.neighbours
-    #         if within(particle.func(neighbour), val_range)
-    #     }
-
-    # def clean_by_neigbours(self, particle, func):
-    #     self.filter_neighbours(particle)
-    #     if particle in
-
-    # def run_cleaning(self, particles):
-    #     particles = self.clean_cc(particles)
-
-    #     particles =
-
-    # def clean_orientation(self, particles):
-    #     return {
-    #         particle
-    #         for particle in particles
-    #         if within(particle.dot_direction(neighbour), self.ori_range)
-    #     }
-
 
 class Particle:
     particle_id: int
     cc_score: float
     position: np.ndarray
-    direction: np.ndarray
+    orientation: np.ndarray
 
     tomo: object
 
@@ -151,13 +125,13 @@ class Particle:
     regions: dict()
     neighbours: set()
 
-    protein_array: int = 0
+    lattice: int = 0
 
     def __init__(self, p_id, cc, position, orientation, tomo):
         self.particle_id = p_id
         self.cc_score = cc
         self.position = position
-        self.direction = normalise(orientation)
+        self.orientation = normalise(orientation)
         self.tomo = tomo
         self.neighbours = set()
 
@@ -168,32 +142,41 @@ class Particle:
         return "x:{:.2f}, y:{:.2f}, z:{:.2f}".format(*self.position)
 
     def output_dict(self):
-        return {"cc": self.cc_score, "pos": self.position, "ori": self.direction}
+        """
+        
+        Returns
+        -------
+        Dict of properties about particle:
+            "cc": cc score
+            "pos": position
+            "ori": orientation
+        """
+        return {"cc": self.cc_score, "pos": self.position, "ori": self.orientation}
 
     def displacement_from(self, particle):
-        "Displacement vector between two particles"
+        """Displacement vector between two particles"""
         return self.position - particle.position
 
-    def distance2(self, particle):
-        "Squared distance between particles"
-        displ = self.displacement_from(particle)
-        return np.vdot(displ, displ)
+    def distance_sq(self, particle):
+        """Squared distance between particles"""
+        disp = self.displacement_from(particle)
+        return np.vdot(disp, disp)
 
     def filter_neighbour_orientation(self, orange, flipped_range):
         good_orientation = set()
         for neighbour in self.neighbours:
-            ori = self.dot_direction(neighbour)
+            ori = self.dot_orientation(neighbour)
             if within(ori, orange):
                 good_orientation.add(neighbour)
             elif flipped_range and within(ori, flipped_range):
                 good_orientation.add(neighbour)
         self.neighbours = good_orientation
 
-    def filter_curvature(self, pos_range):
+    def filter_curvature(self, curv_range):
         good_curvature = {
             neighbour
             for neighbour in self.neighbours
-            if within(self.dot_curvature(neighbour), pos_range)
+            if within(self.dot_curvature(neighbour), curv_range)
         }
         self.neighbours = good_curvature
 
@@ -206,52 +189,52 @@ class Particle:
             dot = 1
         return dot
 
-    def dot_direction(self, particle):
+    def dot_orientation(self, particle):
         """Dot product of two particles' orientations"""
-        return Particle.dot_product(self.direction, particle.direction)
+        return Particle.dot_product(self.orientation, particle.orientation)
 
     def dot_curvature(self, particle):
         """Dot product of particle's orientation with its displacement from second particle"""
         return Particle.dot_product(
-            particle.direction, normalise(self.displacement_from(particle))
+            particle.orientation, normalise(self.displacement_from(particle))
         )
 
-    def choose_protein_array_new(self, array):
-        """Recursively assign particle and all neighbours to array"""
-        self.set_protein_array(array)
+    def choose_new_lattice(self, lattice):
+        """Recursively assign particle and all neighbours to lattice"""
+        self.set_lattice(lattice)
         for neighbour in self.neighbours:
-            if not neighbour.protein_array:
-                neighbour.choose_protein_array_new(array)
+            if not neighbour.lattice:
+                neighbour.choose_new_lattice(lattice)
 
-    def set_protein_array(self, ar: int):
-        if self.protein_array:
-            self.tomo.protein_arrays[self.protein_array].discard(self)
-        self.protein_array = ar
-        self.tomo.protein_arrays[ar].add(self)
+    def set_lattice(self, ar: int):
+        if self.lattice:
+            self.tomo.lattices[self.lattice].discard(self)
+        self.lattice = ar
+        self.tomo.lattices[ar].add(self)
 
-    def assimilate_protein_arrays(self, assimilate_arrays: set):
+    def assimilate_lattices(self, assimilate_lattices: set):
         """
-        Combine a set of arrays into a single larger array
+        Combine a set of lattices into a single larger lattice
 
         Parameters
         ----------
-        assimilate_arrays : set
-            DESCRIPTION.
+        assimilate_lattices : set
+            lattices to assimilate
 
         Returns
         -------
         None.
 
         """
-        # choose a random array to assimilate the rest into
-        all_arrays = self.tomo.protein_arrays
+        # choose a random lattice to assimilate the rest into
+        all_lattices = self.tomo.lattices
         particles = self.tomo.all_particles
-        assimilate_to = assimilate_arrays.pop()
+        assimilate_to = assimilate_lattices.pop()
         for particle in particles:
-            if particle.protein_array in assimilate_arrays:
-                particle.set_protein_array(assimilate_to)
-        for array in assimilate_arrays:
-            del all_arrays[array]
+            if particle.lattice in assimilate_lattices:
+                particle.set_lattice(assimilate_to)
+        for lattice in assimilate_lattices:
+            del all_lattices[lattice]
 
     def make_neighbours(self, particle2):
         """Define two particles as neighbours"""
@@ -260,8 +243,8 @@ class Particle:
 
     def calculate_params(self, particle2):
         """Return set of useful parameters about two particles"""
-        distance = self.distance2(particle2) ** 0.5
-        orientation = np.degrees(np.arccos(self.dot_direction(particle2)))
+        distance = self.distance_sq(particle2) ** 0.5
+        orientation = np.degrees(np.arccos(self.dot_orientation(particle2)))
         curvature = np.degrees(np.arccos(self.dot_curvature(particle2)))
         return "Distance: {:.1f}\nOrientation: {:.1f}°\nDisplacement: {:.1f}°".format(
             distance, orientation, curvature
@@ -270,19 +253,21 @@ class Particle:
     @staticmethod
     def from_array(plist, tomo, ids=None):
         """
-        Produce an array of particles from parameters
+        Produce a set of particles from parameters
 
         Parameters
         ----------
         plist : List of lists of parameters
-            List of particles. Each entry should be a list of parameters
-            in the following order:
+            List of particles. Each entry in the list
+            should be a list of parameters in the
+            following order:
                 cc value, [x, y, z], [u, v, w]
         tomo: tomogram
-            tomogram object from which the particles are from
+            tomogram object to assign particles to
         ids:
-            optional specification of what each particle's id should be
-            internally. If not specified, assigned incrementally from 0
+            optional specification of each particle's id
+            internally. If not specified, assigned
+            incrementally from 0
 
         Returns
         -------
@@ -293,10 +278,6 @@ class Particle:
             return {Particle(idx, *pdata, tomo) for idx, pdata in enumerate(plist)}
         else:
             return {Particle(ids[idx], *pdata, tomo) for idx, pdata in enumerate(plist)}
-
-        # def __init__(self, p_id, cc, position, orientation, particle_set, tomo):
-
-    # __init__(self, p_id, cc, position, orientation, particle_set, tomo):
 
     def get_avg_curvature(self):
         if len(self.neighbours) == 0:
@@ -328,7 +309,7 @@ class tomogram:
 
     position_only: bool
 
-    protein_arrays: defaultdict
+    lattices: defaultdict
 
     particles_fate: defaultdict
 
@@ -341,8 +322,8 @@ class tomogram:
     reference_df: set()
 
     def __init__(self, name):
-        self.protein_arrays = defaultdict(lambda: set())
-        self.protein_arrays[0] = set()
+        self.lattices = defaultdict(lambda: set())
+        self.lattices[0] = set()
         self.name = name
         self.selected_n = set()
         self.auto_cleaned_particles = set()
@@ -350,25 +331,6 @@ class tomogram:
         self.reference_points = set()
         self.checking_particles = []
         self.cone_fix = None
-
-    # @staticmethod
-    # def tomo_from_em(name, em_df):
-    #     tomo = tomogram(name)
-    #     particles = Particle.from_em(em_df, tomo)
-    #     tomo.position_only = False
-    #     return tomo
-
-    # @staticmethod
-    # def tomo_from_imod(name, imod_filename):
-    #     tomo = tomogram(name)
-    #     positions = read_write.positions_from_imod(imod_filename)
-    #     particles = set()
-    #     no_ori = np.array([0.0, 0.0, 1.0])
-    #     for x in np.nditer(positions, flags=['external_loop']):
-    #         particles.add(Particle(0, 9999, x, no_ori, particles, tomo))
-    #     tomo.set_particles(particles)
-    #     tomo.position_only = True
-    #     return tomo
 
     @staticmethod
     def assign_regions(particles: set, max_dist: float):
@@ -383,8 +345,8 @@ class tomogram:
     def find_nearby_keys(region_key):
         coords = [int(q) for q in region_key.split("_")]
         return [
-            "_".join([str(q) for q in np.array(coords) + np.array(adj_direction)])
-            for adj_direction in ADJ_AREA_GEN
+            "_".join([str(q) for q in np.array(coords) + np.array(adj_orientation)])
+            for adj_orientation in ADJ_AREA_GEN
         ]
 
     @staticmethod
@@ -411,7 +373,7 @@ class tomogram:
 
             for particle in region:
                 for ref in proximal_refs:
-                    if within(particle.distance2(ref), prox_range):
+                    if within(particle.distance_sq(ref), prox_range):
                         self.auto_cleaned_particles.add(particle)
                         break
         print("cleaned particles: ", len(self.auto_cleaned_particles))
@@ -424,10 +386,10 @@ class tomogram:
         }
 
     def reset_cleaning(self):
-        keys = set(self.protein_arrays.keys()).copy()
+        keys = set(self.lattices.keys()).copy()
         for n in keys:
-            self.delete_array(n)
-        self.protein_arrays[0] = set()
+            self.delete_lattice(n)
+        self.lattices[0] = set()
 
     def find_particle_neighbours(self, drange):
         particles = self.all_particles
@@ -445,7 +407,7 @@ class tomogram:
                 for particle2 in proximal_particles:
                     if particle == particle2:
                         continue
-                    if within(particle.distance2(particle2), drange):
+                    if within(particle.distance_sq(particle2), drange):
                         particle.make_neighbours(particle2)
 
             # remove all checked particles from further checks
@@ -456,7 +418,7 @@ class tomogram:
         return self.name
 
     def __str__(self):
-        return "tomogram {}, containing {} particles. Selected arrays: {}".format(
+        return "tomogram {}, containing {} particles. Selected lattices: {}".format(
             self.name,
             len(self.all_particles),
             ",".join({str(n) for n in self.selected_n}),
@@ -479,13 +441,13 @@ class tomogram:
         return {
             particle.particle_id
             for particle in self.auto_cleaned_particles
-            if (particle.protein_array in self.selected_n) == selected
+            if (particle.lattice in self.selected_n) == selected
         }
 
     def assign_ref_imod(self, imod_data):
         self.reference_points = Particle.from_imod(imod_data, self)
         particle_data = [
-            [*particle.position, *particle.direction, particle.protein_array]
+            [*particle.position, *particle.orientation, particle.lattice]
             for particle in self.reference_points
         ]
         self.reference_df = pd.DataFrame(
@@ -495,7 +457,7 @@ class tomogram:
     @staticmethod
     def particles_to_df(particles):
         particle_data = [
-            [*particle.position, *particle.direction, particle.protein_array]
+            [*particle.position, *particle.orientation, particle.lattice]
             for particle in particles
         ]
         return pd.DataFrame(particle_data, columns=["x", "y", "z", "u", "v", "w", "n"])
@@ -538,31 +500,30 @@ class tomogram:
         # t0 = tm()
         for particle in self.all_particles:  # temp for timing
             # check correct positioning
-            particle.filter_curvature(self.cleaning_params.pos_range)
+            particle.filter_curvature(self.cleaning_params.curv_range)
             if len(particle.neighbours) < self.cleaning_params.min_neighbours:
                 self.particles_fate["wrong_disp"].add(particle)
                 continue
         # print("Comparing curvatures", tm() - t0)
         # t0 = tm()
         for particle in self.all_particles:  # temp for timing
-            if particle.protein_array:
+            if particle.lattice:
                 continue
             # if good, assign to protein array
-            # particle.choose_protein_array()
-            particle.choose_protein_array_new(len(self.protein_arrays))
+            # particle.choose_lattice()
+            particle.choose_new_lattice(len(self.lattices))
 
-        bad_arrays = set()
-        for akey, protein_array in self.protein_arrays.items():
-            if len(protein_array) < self.cleaning_params.min_array_size:
-                bad_arrays.add(akey)
-                for particle in protein_array:
+        bad_lattices = set()
+        for lkey, lattice in self.lattices.items():
+            if len(lattice) < self.cleaning_params.min_lattice_size:
+                bad_lattices.add(lkey)
+                for particle in lattice:
                     self.particles_fate["small_array"].add(particle)
             else:
-                for particle in protein_array:
+                for particle in lattice:
                     self.auto_cleaned_particles.add(particle)
-        for akey in bad_arrays:
-            self.delete_array(akey)
-        # print("Time to assimilate arrays", tm() - t0)
+        for lkey in bad_lattices:
+            self.delete_lattice(lkey)
 
     def particle_fate_table(self):
         pf = self.particles_fate
@@ -630,12 +591,12 @@ class tomogram:
     def get_convex_arrays(self):
         return {
             a_id
-            for a_id, particles in self.protein_arrays.items()
+            for a_id, particles in self.lattices.items()
             if np.mean([particle.get_avg_curvature() for particle in particles]) < 0
         }
 
     def get_concave_arrays(self):
-        return set(self.protein_arrays.keys()).difference(self.get_convex_arrays())
+        return set(self.lattices.keys()).difference(self.get_convex_arrays())
 
     def toggle_convex_arrays(self):
         for a_id in self.get_convex_arrays():
@@ -658,20 +619,20 @@ class tomogram:
 
         return self.checking_particles[0].calculate_params(self.checking_particles[1])
 
-    def delete_array(self, n):
+    def delete_lattice(self, n):
         # can't change size of array while iterating
-        array_particles = self.protein_arrays[n].copy()
+        array_particles = self.lattices[n].copy()
         for particle in array_particles:
-            particle.set_protein_array(0)
+            particle.set_lattice(0)
             self.auto_cleaned_particles.discard(particle)
-        self.protein_arrays.pop(n)
+        self.lattices.pop(n)
 
     def write_prog_dict(self):
-        if len(self.protein_arrays.keys()) < 2:
+        if len(self.lattices.keys()) < 2:
             print("Skipping tomo {}, contains no arrays").format(self.name)
             return
         arr_dict = {}
-        for ind, arr in self.protein_arrays.items():
+        for ind, arr in self.lattices.items():
             # must use lists, or yaml interprets as dicts
             if ind == 0:
                 continue
@@ -695,12 +656,12 @@ class tomogram:
         for particle in self.all_particles:
             p_id = particle.particle_id
             if p_id in inverted_prog_dict.keys():
-                particle.set_protein_array(
+                particle.set_lattice(
                     int(inverted_prog_dict[particle.particle_id])
                 )
                 self.auto_cleaned_particles.add(particle)
             else:
-                particle.set_protein_array(0)
+                particle.set_lattice(0)
         self.selected_n = set(prog_dict["selected"])
         self.generate_particle_df()
 
