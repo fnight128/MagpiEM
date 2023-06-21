@@ -9,7 +9,7 @@ Please note that the software is still very actively in development, and you may
 ## Installation
 MagpiEM is currently designed to be run locally on your desktop, rather than on a high-performance computation cluster. 
 
-Open a python terminal (e.g. anaconda), with python 3.8 or above, and run
+Open a python terminal (e.g. [anaconda](https://www.anaconda.com/)), with python 3.8 or above, and run
 
     pip install MagpiEM
 This should install the software and all dependencies.
