@@ -551,7 +551,7 @@ class Tomogram:
         }
 
     @staticmethod
-    def particles_to_df(particles: set["Particles"]) -> pd.DataFrame:
+    def particles_to_df(particles: set["Particle"]) -> pd.DataFrame:
         """
         Create formatted dataframe of particles
         Dataframe has columns:
