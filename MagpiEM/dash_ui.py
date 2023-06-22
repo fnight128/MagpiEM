@@ -30,7 +30,7 @@ from flask import Flask
 
 
 from .classes import Cleaner
-from .read_write import read_relion, read_emC, modify_relion_star, modify_emc_mat
+from .read_write import read_relion, read_emc, modify_relion_star, modify_emc_mat
 
 
 WHITE = "#FFFFFF"
@@ -133,7 +133,7 @@ def main():
         State("inp-cone-size", "value"),
         Input("button-set-cone-size", "n_clicks"),
         Input("switch-show-removed", "on"),
-        Input("button-next-tomogram", "disabled"),
+        Input("button-next-Tomogram", "disabled"),
         prevent_initial_call=True,
     )
     def plot_tomo(
@@ -147,26 +147,22 @@ def main():
     ):
         global tomograms
         global last_click
-        # print("plot_tomo")
 
         params_message = ""
 
-        # Warning: must return a graph object in both of these, or breaks dash
+        # must always return a graph object or breaks dash
         if not tomo_selection or tomo_selection not in tomograms.keys():
             return empty_graph, params_message
 
         tomo = tomograms[tomo_selection]
 
-        # clicked point lingers between calls, causing unwanted toggling when e.g.
-        # switching to cones, and selected points can carry over to the next graph
-        # prevent by clearing clicked_point if not actually from clicking a point
+        # prevent clicked point lingering between callbacks
         if ctx.triggered_id != "graph-picking":
             clicked_point = None
         else:
             # strange error with cone plots makes completely random, erroneous clicks
-            # happen right after clicking on cone plot - add a cooldown to temporarily
-            # prevent this - clicks must now be 500ms apart
-            # print("Time since last click: ", time() - last_click)
+            # happen right after clicking on cone plot - adding a cooldown
+            # prevents this
             if time() - last_click < 0.5:
                 raise PreventUpdate
             last_click = time()
@@ -184,6 +180,7 @@ def main():
         fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
         fig.update_layout(margin={"l": 20, "r": 20, "t": 20, "b": 20})
         fig.update_layout(scene_aspectmode="data")
+        # keep camera constant
         fig["layout"]["uirevision"] = "a"
 
         # if tomo not yet cleaned, just plot all points
@@ -414,7 +411,7 @@ def main():
                 return [
                     "Keys do not match up between previous session and .mat file.",
                     html.Br(),
-                    "Previous session only contains {0} keys, did you save the session with only {0} tomogram(s) "
+                    "Previous session only contains {0} keys, did you save the session with only {0} Tomogram(s) "
                     "loaded?".format(len(prev_keys)),
                 ], *failed_upload
             geom_missing = list(prev_keys.difference(geom_keys))
@@ -447,8 +444,8 @@ def main():
         Output("dropdown-tomo", "value"),
         State("dropdown-tomo", "value"),
         Input("dropdown-tomo", "disabled"),
-        Input("button-next-tomogram", "n_clicks"),
-        Input("button-previous-tomogram", "n_clicks"),
+        Input("button-next-Tomogram", "n_clicks"),
+        Input("button-previous-Tomogram", "n_clicks"),
         prevent_initial_call=True,
     )
     def update_dropdown(current_val, disabled, _, __):
@@ -466,14 +463,14 @@ def main():
         if ctx.triggered_id == "dropdown-tomo":
             return tomo_keys, tomo_key_0
 
-        # moving to next/prev item in dropdown when next/prev tomogram button pressed
+        # moving to next/prev item in dropdown when next/prev Tomogram button pressed
         if not current_val:
             return tomo_keys, ""
 
         increment = 0
-        if ctx.triggered_id == "button-next-tomogram":
+        if ctx.triggered_id == "button-next-Tomogram":
             increment = 1
-        elif ctx.triggered_id == "button-previous-tomogram":
+        elif ctx.triggered_id == "button-previous-Tomogram":
             increment = -1
         chosen_index = tomo_keys.index(current_val) + increment
 
@@ -488,7 +485,7 @@ def main():
 
     def read_uploaded_tomo(data_path, num_images=-1):
         if ".mat" in data_path:
-            tomograms = read_emC(data_path, num_images=num_images)
+            tomograms = read_emc(data_path, num_images=num_images)
         elif ".star" in data_path:
             tomograms = read_relion(data_path, num_images=num_images)
         else:
@@ -543,7 +540,7 @@ def main():
 
         tomo.autoclean()
 
-        tomo.generate_particle_df()
+        tomo.generate_lattice_dfs()
 
     def prox_clean_tomo(tomo, dist_min, dist_max):
         if not any(tomo.reference_points):
@@ -561,7 +558,7 @@ def main():
             fp.write(base64.decodebytes(data))
 
     @app.callback(
-        Output("button-next-tomogram", "disabled"),
+        Output("button-next-Tomogram", "disabled"),
         Output("collapse-clean", "is_open"),
         Output("collapse-save", "is_open"),
         State("inp-dist-goal", "value"),
@@ -596,7 +593,7 @@ def main():
         if not clicks or clicks2:
             return True, True, False
         # print(inp_file)
-        # tomo = tomogram(name, particles)
+        # tomo = Tomogram(name, particles)
 
         clean_params = Cleaner(
             cc_thresh,
@@ -940,8 +937,8 @@ def main():
                 [
                     html.Td(
                         dbc.Button(
-                            "Previous tomogram",
-                            id="button-previous-tomogram",
+                            "Previous Tomogram",
+                            id="button-previous-Tomogram",
                         ),
                     )
                 ]
@@ -1031,8 +1028,8 @@ def main():
             dbc.Row(
                 html.Td(
                     dbc.Button(
-                        "Next tomogram",
-                        id="button-next-tomogram",
+                        "Next Tomogram",
+                        id="button-next-Tomogram",
                         size="lg",
                         style={"width": "100%", "height": "100px"},
                     )

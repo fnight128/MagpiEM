@@ -14,7 +14,7 @@ with open("requirements.txt") as reqs:
 setup(
     name="magpiem",
     version="0.2.11",
-    description="Automated cleaning of sub-tomogram particle picking",
+    description="Automated cleaning of sub-Tomogram particle picking",
     long_description=long_description,
     author="Frank Nightingale",
     author_email="frank.nightingale@linacre.ox.ac.uk",
