@@ -4,20 +4,22 @@ Created on Mon Nov  7 16:54:48 2022
 
 @author: Frank
 """
+from typing import Tuple, Any
+
 import numpy as np
 import pandas as pd
 import math
-from prettytable import PrettyTable
 from collections import defaultdict
+import plotly.graph_objects as go
 
 
 class Cleaner:
     cc_threshold: float
     min_neighbours: int
     min_lattice_size: int
-    dist_range: list
-    ori_range: list
-    curv_range: list
+    dist_range: tuple
+    ori_range: tuple
+    curv_range: tuple
 
     flipped_ori_range: list
 
@@ -62,7 +64,7 @@ class Cleaner:
         )
 
     @staticmethod
-    def dist_range(target_dist: float, dist_tol: float) -> list[float]:
+    def dist_range(target_dist: float, dist_tol: float) -> tuple[float, float]:
         """
         Create an ordered list of distances squared from 'target_dist' ± 'dist_tol'
         If lower bound would be < 0, it is clamped to 0.
@@ -80,15 +82,15 @@ class Cleaner:
         if target_dist < 0:
             target_dist = abs(target_dist)
             print("Target distance must be > 0, correcting to ", target_dist)
-        return [
+        return (
             (target_dist - dist_tol) ** 2
             if dist_tol < target_dist
             else 0.0001 * dist_tol,
             (target_dist + dist_tol) ** 2,
-        ]
+        )
 
     @staticmethod
-    def ang_range_dotprod(angle_ideal: float, angle_tolerance: float) -> list[float]:
+    def ang_range_dotprod(angle_ideal: float, angle_tolerance: float) -> tuple[float, ...]:
         """
         Given an angle and tolerance, generate an ordered list representing the
         dot product of unit vectors at these angles
@@ -105,11 +107,11 @@ class Cleaner:
         Ordered list of dot products
         """
 
-        if not within(angle_ideal, [0, 180]):
+        if not within(angle_ideal, (0, 180)):
             angle_ideal = angle_ideal % 180
             print("Angle between adjacent particles must be between 0 and 180 degrees")
             print("Corrected angle: ", angle_ideal)
-        elif not within(angle_tolerance, [0, 180]):
+        elif not within(angle_tolerance, (0, 180)):
             angle_tolerance = angle_tolerance % 180
             print("Angle tolerance must be between 0 and 180 degrees")
             print("Corrected tolerance: ", angle_tolerance)
@@ -124,23 +126,41 @@ class Cleaner:
             min_ang = min(min_ang, 360 - max_ang)
             max_ang = 180
 
-        return [np.cos(np.radians(ang)) for ang in [max_ang, min_ang]]
+        return tuple([float(np.cos(np.radians(ang))) for ang in [max_ang, min_ang]])
 
 
 class Particle:
+    """
+    Representation of a particle in a tomogram
+
+    Attributes
+    ----------
+    particle_id: int
+        Unique identifier for this particle. May be chosen
+        explicitly or assigned incrementally.
+    cc_score : float
+        quality score assigned to particle by
+        picking software
+    position : np array
+        [x,y,z] coordinates of particle in pixels
+    orientation: np array
+        [u,v,w] unit vector describing z-orientation of particle
+    tomo: Tomogram
+        'Tomogram particle is assigned to
+    lattice: set[Particle]
+        Protein lattice particle is assigned to
+    neighbours: set[Particle]
+        Set of particles immediately adjacent to particle
+    """
+
     particle_id: int
     cc_score: float
     position: np.ndarray
     orientation: np.ndarray
 
-    tomo: object
-
-    particles: set()
-
-    regions: dict()
-    neighbours: set()
-
+    tomo: "Tomogram"
     lattice: int = 0
+    neighbours: set["Particle"]
 
     def __init__(self, p_id, cc, position, orientation, tomo):
         self.particle_id = p_id
@@ -180,9 +200,9 @@ class Particle:
         Squared distance between particles
         """
         disp = self.displacement_from(particle)
-        return np.vdot(disp, disp)
+        return float(np.vdot(disp, disp))
 
-    def filter_neighbour_orientation(self, orange: list, flipped_range: list) -> None:
+    def filter_neighbour_orientation(self, orange: tuple, flipped_range: tuple) -> None:
         """
         Remove particles from neighbours if orientation is not within orange
 
@@ -241,7 +261,7 @@ class Particle:
         -------
         Dot product
         """
-        dot = np.vdot(v1, v2)
+        dot = float(np.vdot(v1, v2))
         return clamp(dot, -1, 1)
 
     def dot_orientation(self, particle) -> float:
@@ -307,7 +327,9 @@ class Particle:
         )
 
     @staticmethod
-    def from_array(plist: list[list], tomo: "Tomogram", ids: list[int] = None) -> set["Particle"]:
+    def from_array(
+        plist: list[list], tomo: "Tomogram", ids: list[int] = None
+    ) -> set["Particle"]:
         """
         Produce a set of particles from parameters
 
@@ -345,26 +367,14 @@ class Particle:
         """
         if len(self.neighbours) == 0:
             return 0.0
-        return np.mean([self.dot_curvature(neighbour) for neighbour in self.neighbours])
-
-
-class ReferenceParticle(Particle):
-    def __eq__(self, other):
-        """
-        Define two particles as equal if in same position
-        Rounded as very small differences often introduced
-        by e.g. binning
-        """
-        self_rough_pos = np.round(self.position, 2)
-        other_rough_pos = np.round(other.position, 2)
-        return (self_rough_pos == other_rough_pos).all()
+        return float(np.mean([self.dot_curvature(neighbour) for neighbour in self.neighbours]))
 
 
 class Tomogram:
     name: str
-    all_particles: set()
-    removed_particles: set()
-    selected_n: set()
+    all_particles: set
+    removed_particles: set
+    selected_n: set
 
     checking_particles: list
 
@@ -372,12 +382,12 @@ class Tomogram:
 
     particles_fate: defaultdict
 
-    particle_df_dict: dict()
+    particle_df_dict: dict
     cone_fix: pd.DataFrame
 
     cleaning_params: Cleaner
 
-    ADJ_AREA_GEN = tuple(
+    __ADJ_AREAS = tuple(
         [(i, j, k) for i in (-1, 0, 1) for j in (-1, 0, 1) for k in (-1, 0, 1)]
     )
 
@@ -388,7 +398,7 @@ class Tomogram:
         self.selected_n = set()
         self.particles_fate = defaultdict(lambda: set())
         self.checking_particles = []
-        self.cone_fix = None
+        self.cone_fix = pd.DataFrame(None)
 
     @staticmethod
     def assign_regions(particles: set["Particle"], max_dist: float) -> dict:
@@ -429,7 +439,7 @@ class Tomogram:
         coords = [int(q) for q in region_key.split("_")]
         return [
             "_".join([str(q) for q in np.array(coords) + np.array(adj_orientation)])
-            for adj_orientation in Tomogram.ADJ_AREA_GEN
+            for adj_orientation in Tomogram.__ADJ_AREAS
         ]
 
     @staticmethod
@@ -461,7 +471,7 @@ class Tomogram:
             self.delete_lattice(n)
         self.lattices[0] = set()
 
-    def find_particle_neighbours(self, drange: list[float]) -> None:
+    def find_particle_neighbours(self, drange: tuple[float]) -> None:
         """
         Assign neighbours to all particles in tomogram, according to given
             distance range
@@ -512,7 +522,6 @@ class Tomogram:
         for particle in self.all_particles:
             if all(np.around(particle.position, decimals=0) == rough_pos):
                 return particle
-        return None
 
     def get_auto_cleaned_particles(self) -> set["Particle"]:
         """
@@ -531,7 +540,7 @@ class Tomogram:
         """Assign cleaning parameters to tomogram"""
         self.cleaning_params = cp
 
-    def selected_particle_ids(self, selected: bool=True) -> set[int]:
+    def selected_particle_ids(self, selected: bool = True) -> set[int]:
         """
         Get all manually selected particle ids from tomogram
         If selected is False, instead get unselected particles
@@ -582,9 +591,7 @@ class Tomogram:
         return Tomogram.particles_to_df(self.all_particles)
 
     def nonchecking_particles_df(self):
-        """
-
-        """
+        """ """
         # TODO: delete this
         unchecking = self.all_particles.difference(set(self.checking_particles))
         return Tomogram.particles_to_df(unchecking)
@@ -682,7 +689,7 @@ class Tomogram:
 
         self.cone_fix = cone_fix_df
 
-    def generate_lattice_dfs(self) -> dict[int: pd.DataFrame]:
+    def generate_lattice_dfs(self) -> dict[int : pd.DataFrame]:
         """
         Generate a dict containing a df of each lattice's particles
         dict keys are lattice ids
@@ -759,7 +766,7 @@ class Tomogram:
             particle.set_lattice(0)
         self.lattices.pop(n)
 
-    def write_prog_dict(self) -> dict[str: dict]:
+    def write_prog_dict(self) -> dict[str:dict]:
         """
         Generate dict of current progress in tomogram
         Keys are tomogram ids, values are dicts of
@@ -771,7 +778,7 @@ class Tomogram:
             Dict
         """
         if len(self.lattices.keys()) < 2:
-            print("Skipping tomo {}, contains no lattices").format(self.name)
+            print("Skipping tomo {}, contains no lattices".format(self.name))
             return
         arr_dict = {}
         for ind, arr in self.lattices.items():
@@ -804,15 +811,11 @@ class Tomogram:
         for particle in self.all_particles:
             p_id = particle.particle_id
             if p_id in inverted_prog_dict.keys():
-                particle.set_lattice(
-                    int(inverted_prog_dict[particle.particle_id])
-                )
+                particle.set_lattice(int(inverted_prog_dict[particle.particle_id]))
             else:
                 particle.set_lattice(0)
         self.selected_n = set(prog_dict["selected"])
         self.generate_lattice_dfs()
-
-
 
 
 def normalise(vec: np.ndarray):

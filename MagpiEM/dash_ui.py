@@ -28,18 +28,20 @@ import dash_daq as daq
 
 from flask import Flask
 
-
+import MagpiEM.read_write
 from .classes import Cleaner
-from .read_write import read_relion, read_emc, modify_relion_star, modify_emc_mat
+from .read_write import read_relion_star, read_emc_mat, write_relion_star, write_emc_mat
 
 
 WHITE = "#FFFFFF"
 GREY = "#646464"
 BLACK = "#000000"
 
-tomograms = dict()
+__dash_tomograms = dict()
 
-last_click = 0.0
+__last_click = 0.0
+
+TEMP_FILE_DIR = "static/"
 
 
 def main():
@@ -51,8 +53,6 @@ def main():
     )
     load_figure_template("SOLAR")
 
-    TEMP_FILE_DIR = "static/"
-
     if not os.path.exists(TEMP_FILE_DIR):
         os.makedirs(TEMP_FILE_DIR)
 
@@ -61,7 +61,7 @@ def main():
         data=go.Cone(x=[0], y=[0], z=[0], u=[[0]], v=[0], w=[0], showscale=False)
     )
 
-    tomograms = dict()
+    __dash_tomograms = dict()
 
     @app.callback(
         Output("upload-data", "children"),
@@ -145,16 +145,16 @@ def main():
         show_removed: bool,
         __,
     ):
-        global tomograms
-        global last_click
+        global __dash_tomograms
+        global __last_click
 
         params_message = ""
 
         # must always return a graph object or breaks dash
-        if not tomo_selection or tomo_selection not in tomograms.keys():
+        if not tomo_selection or tomo_selection not in __dash_tomograms.keys():
             return empty_graph, params_message
 
-        tomo = tomograms[tomo_selection]
+        tomo = __dash_tomograms[tomo_selection]
 
         # prevent clicked point lingering between callbacks
         if ctx.triggered_id != "graph-picking":
@@ -163,9 +163,9 @@ def main():
             # strange error with cone plots makes completely random, erroneous clicks
             # happen right after clicking on cone plot - adding a cooldown
             # prevents this
-            if time() - last_click < 0.5:
+            if time() - __last_click < 0.5:
                 raise PreventUpdate
-            last_click = time()
+            __last_click = time()
             clicked_particle_pos = [
                 clicked_point["points"][0][c] for c in ["x", "y", "z"]
             ]
@@ -286,12 +286,12 @@ def main():
         prevent_initial_call=True,
     )
     def select_convex(clicks, current_tomo, all_tomos, _):
-        global tomograms
+        global __dash_tomograms
         if all_tomos:
-            for tomo in tomograms.values():
+            for tomo in __dash_tomograms.values():
                 tomo.toggle_convex_arrays()
         else:
-            tomograms[current_tomo].toggle_convex_arrays()
+            __dash_tomograms[current_tomo].toggle_convex_arrays()
         return int(clicks or 0) + 1
 
     @app.callback(
@@ -304,12 +304,12 @@ def main():
     )
     def select_concave(clicks, current_tomo, all_tomos, _):
         # TODO make these a single callback
-        global tomograms
+        global __dash_tomograms
         if all_tomos:
-            for tomo in tomograms.values():
+            for tomo in __dash_tomograms.values():
                 tomo.toggle_concave_arrays()
         else:
-            tomograms[current_tomo].toggle_concave_arrays()
+            __dash_tomograms[current_tomo].toggle_concave_arrays()
         return int(clicks or 0) + 1
 
     @app.callback(
@@ -325,16 +325,16 @@ def main():
         file_path = TEMP_FILE_DIR + filename + "_progress.yml"
 
         cleaning_params_key = ".__cleaning_parameters__."
-        global tomograms
+        global __dash_tomograms
         tomo_dict = {}
-        for name, tomo in tomograms.items():
+        for name, tomo in __dash_tomograms.items():
             if name == cleaning_params_key:
                 print("Tomo {} has an invalid name and cannot be saved!".format(name))
                 continue
             tomo_dict[name] = tomo.write_prog_dict()
         try:
             tomo_dict[".__cleaning_parameters__."] = next(
-                iter(tomograms.values())
+                iter(__dash_tomograms.values())
             ).cleaning_params.dict_to_print
         except Exception:
             print("No cleaning parameters found to save")
@@ -359,7 +359,7 @@ def main():
     def load_previous_progress(
         previous_filename, previous_contents, data_filename, data_contents
     ):
-        global tomograms
+        global __dash_tomograms
 
         failed_upload = [True, True, False, False]
         successful_upload = [False, False, True, True]
@@ -387,8 +387,8 @@ def main():
         data_path = TEMP_FILE_DIR + data_filename
         prev_path = TEMP_FILE_DIR + previous_filename
 
-        tomograms = read_uploaded_tomo(data_path)
-        if not tomograms:
+        __dash_tomograms = read_uploaded_tomo(data_path)
+        if not __dash_tomograms:
             return "Particle database (.mat/.star) unreadable", *failed_upload
 
         try:
@@ -398,7 +398,7 @@ def main():
             return "Previous session file unreadable", *failed_upload
 
         # check keys line up between files
-        geom_keys = set(tomograms.keys())
+        geom_keys = set(__dash_tomograms.keys())
         prev_keys = set(prev_yaml.keys())
         prev_keys.discard(".__cleaning_parameters__.")
 
@@ -434,7 +434,7 @@ def main():
                 prev_msg,
             ], *failed_upload
 
-        for tomo_name, tomo in tomograms.items():
+        for tomo_name, tomo in __dash_tomograms.items():
             tomo.apply_prog_dict(prev_yaml[tomo_name])
 
         return "", *successful_upload
@@ -449,12 +449,12 @@ def main():
         prevent_initial_call=True,
     )
     def update_dropdown(current_val, disabled, _, __):
-        global tomograms
+        global __dash_tomograms
 
         # unfortunately need to merge two callbacks here, dash does not allow multiple
         # callbacks with the same output so use ctx to distinguish between cases
         try:
-            tomo_keys = list(tomograms.keys())
+            tomo_keys = list(__dash_tomograms.keys())
             tomo_key_0 = tomo_keys[0]
         except Exception:
             return [], ""
@@ -485,9 +485,9 @@ def main():
 
     def read_uploaded_tomo(data_path, num_images=-1):
         if ".mat" in data_path:
-            tomograms = read_emc(data_path, num_images=num_images)
+            tomograms = read_emc_mat(data_path, num_images=num_images)
         elif ".star" in data_path:
-            tomograms = read_relion(data_path, num_images=num_images)
+            tomograms = read_relion_star(data_path, num_images=num_images)
         else:
             return
         return tomograms
@@ -516,7 +516,7 @@ def main():
         num_img_dict = {0: 1, 1: 5, 2: -1}
         num_images = num_img_dict[num_images]
 
-        global tomograms
+        global __dash_tomograms
 
         # ensure temp directory clear
         files = glob.glob(TEMP_FILE_DIR + "*")
@@ -527,9 +527,9 @@ def main():
         save_dash_upload(filename, contents)
         temp_file_path = TEMP_FILE_DIR + filename
 
-        tomograms = read_uploaded_tomo(temp_file_path, num_images)
+        __dash_tomograms = read_uploaded_tomo(temp_file_path, num_images)
 
-        if not tomograms:
+        if not __dash_tomograms:
             return "File Unreadable", True, True, False, False, False
         return "Tomograms read", False, False, True, True, False
 
@@ -610,18 +610,18 @@ def main():
 
         print("Clean")
 
-        global tomograms
+        global __dash_tomograms
 
         if ctx.triggered_id == "button-preview-clean":
             print("Preview")
-            clean_tomo(list(tomograms.values())[0], clean_params)
+            clean_tomo(list(__dash_tomograms.values())[0], clean_params)
             return False, True, True
         else:
             print("Full")
             clean_count = 0
             clean_total_time = 0
-            total_tomos = len(tomograms.keys())
-            for tomo in tomograms.values():
+            total_tomos = len(__dash_tomograms.keys())
+            for tomo in __dash_tomograms.values():
                 t0 = time()
                 clean_tomo(tomo, clean_params)
                 clean_total_time += time() - t0
@@ -1046,10 +1046,10 @@ def main():
         Input("dropdown-tomo", "value"),
     )
     def graph_visibility(t_id):
-        global tomograms
+        global __dash_tomograms
         if not t_id:
             return {"display": "none"}
-        elif t_id not in tomograms.keys():
+        elif t_id not in __dash_tomograms.keys():
             return {"display": "none"}
         else:
             return {}
@@ -1065,8 +1065,8 @@ def main():
         prevent_initial_call=True,
         long_callback=True,
     )
-    def save_result(output_name, input_name, keep_selected, save_additional, clicks):
-        global tomograms
+    def save_result(output_name, input_name, keep_selected, save_additional, _):
+        global __dash_tomograms
         if not output_name:
             return None
         if output_name == input_name:
@@ -1075,7 +1075,7 @@ def main():
 
         saving_ids = {
             tomo_name: tomo.selected_particle_ids(keep_selected)
-            for tomo_name, tomo in tomograms.items()
+            for tomo_name, tomo in __dash_tomograms.items()
         }
 
         #  temporarily disabled until em file saving is fixed
@@ -1086,13 +1086,13 @@ def main():
         #     dcc.send_file(TEMP_FILE_DIR + output_name)
 
         if ".mat" in input_name:
-            modify_emc_mat(
+            write_emc_mat(
                 saving_ids,
                 TEMP_FILE_DIR + output_name,
                 TEMP_FILE_DIR + input_name,
             )
         elif ".star" in input_name:
-            modify_relion_star(
+            write_relion_star(
                 saving_ids,
                 TEMP_FILE_DIR + output_name,
                 TEMP_FILE_DIR + input_name,

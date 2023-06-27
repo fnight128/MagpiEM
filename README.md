@@ -30,7 +30,7 @@ Upload the file containing your particle data.
 
 You may choose to read a small number of tomograms initially, to test the software on a small dataset and find good parameters.
 
-Once you’re happy, choose “read tomograms”. The software will read all tomograms within the file.
+Once you’re happy, choose "read tomograms". The software will read all tomograms within the file.
 
 ## Setting Cleaning Parameters
 The parameters used for cleaning will vary based on the system. MagpiEM can calculate these parameters directly, for ease of use. Locate a good lattice within the uncleaned tomogram which appears in white. Click two adjacent particles, and the parameters between those will be printed above the diagram.
@@ -49,15 +49,15 @@ If your lattice has a large variance in curvatures, you may wish to repeat this 
 | Allow Flipped Particles | If enabled, particles with alternating, opposite orientations will be allowed, and count as correct |
 
 ## Choosing Correct Lattices
-After cleaning has been run, inspect the tomograms given. The option “Show removed particles” can be helpful to ensure no good particles have been removed. 
+After cleaning has been run, inspect the tomograms given. The option "Show removed particles" can be helpful to ensure no good particles have been removed. 
 
 Once you’re satisfied with the automated step, the last step is to remove any unwanted lattices if necessary. Typically these will be lattices with opposite orientations, which obey the lattice geometry but were picked erroneously during template matching.
 
-Selecting “Cone plot” can be useful here, but due to some very unfortunate quirks of the graphing software, this can sometimes generate comically large cones (see "cone_fix_readme.txt" for more information). Simply clicking "Set" next to "Overall Cone Size" will fix this problem. I hope to one day find a more pleasing solution.
+Selecting "Cone plot" can be useful here, but due to some very unfortunate quirks of the graphing software, this can sometimes generate comically large cones (see "cone_fix_readme.txt" for more information). Simply clicking "Set" next to "Overall Cone Size" will fix this problem. I hope to one day find a more pleasing solution.
 
 The final step is to select which lattices are correct in the results given. Chosen lattices are highlighted in white. There are two ways to do this, depending on how many correct lattices are present in each image:
-*	If only a small number of correct lattices are present in each image (for example, if the image has been divided into sub-regions for template matching), it is more convenient to select each correct lattice. In this case, ensure the toggle under “Save Result” is set to “Keep selected particles”
-*	If a large number of correct lattices are present (for example, a picking result of an entire undivided image at once), it may be impractical to select each correct lattice. Instead, select each incorrect lattice, and then change the setting under “Save Result” to “Keep unselected particles”. This will save all lattices EXCEPT the ones chosen.
+*	If only a small number of correct lattices are present in each image (for example, if the image has been divided into sub-regions for template matching), it is more convenient to select each correct lattice. In this case, ensure the toggle under "Save Result" is set to "Keep selected particles"
+*	If a large number of correct lattices are present (for example, a picking result of an entire undivided image at once), it may be impractical to select each correct lattice. Instead, select each incorrect lattice, and then change the setting under "Save Result" to "Keep unselected particles". This will save all lattices EXCEPT the ones chosen.
 
 Buttons are available to select all concave or convex lattices i.e. lattices with curvature greater than or less than 90°. This can sometimes prove useful.
 
@@ -66,8 +66,8 @@ Clicking "Save Particles" will create a file identical to the uploaded file (.ma
 
 
 ## Pausing Manual Selection
-If your dataset contains a large number of images, it may be preferable to inspect the lattices over multiple sessions. In this case, click “Save Current Progress” at any time to save a snapshot of your work. This will include all autocleaning steps (so you will not have to set parameters or run autocleaning again), as well as saving the lattices you’ve already selected (so you will not have to click lattices again that you’ve already clicked). This will create a file ending in “progress.yml”, which contains all the work you've done so far in a human-readable format.
+If your dataset contains a large number of images, it may be preferable to inspect the lattices over multiple sessions. In this case, click "Save Current Progress" at any time to save a snapshot of your work. This will include all autocleaning steps (so you will not have to set parameters or run autocleaning again), as well as saving the lattices you’ve already selected (so you will not have to click lattices again that you’ve already clicked). This will create a file ending in "progress.yml", which contains all the work you've done so far in a human-readable format.
 
-To load your previous progress, upload the same .mat/.star file as before, but click “Load previous session” instead of “Read tomograms”. This may take a few seconds. Do NOT click “Read tomograms” at any point!
+To load your previous progress, upload the same .mat/.star file as before, but click "Load previous session" instead of "Read tomograms". This may take a few seconds. Do NOT click "Read tomograms" at any point!
  
 Note that because this feature stores the results of automated cleaning, it cannot be used if only a subset (1 or 5) of the tomograms were initially loaded - in this case, the software has no data for which particles to include in the rest of the tomograms.
