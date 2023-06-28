@@ -314,6 +314,8 @@ class Particle:
 
     def make_neighbours(self, particle2: "Particle") -> None:
         """Define two particles as neighbours"""
+        if self is particle2:
+            return
         self.neighbours.add(particle2)
         particle2.neighbours.add(self)
 
@@ -368,6 +370,26 @@ class Particle:
         if len(self.neighbours) == 0:
             return 0.0
         return float(np.mean([self.dot_curvature(neighbour) for neighbour in self.neighbours]))
+
+    @staticmethod
+    def get_property_array(particles: list["Particle"], prop: str) -> np.ndarray:
+        """
+
+        Parameters
+        ----------
+        particles
+            List of N particles from which to extract "prop"
+        prop
+            Name of property to extract
+            Should be either "position" or "orientation"
+        Returns
+        -------
+            Nx3 array specifying property for all particles
+        """
+        return np.array([getattr(particle, prop) for particle in particles], dtype=float)
+
+    def get_neighbour_array(self, prop: str) -> np.ndarray:
+        return Particle.get_property_array(self.neighbours, prop)
 
 
 class Tomogram:
@@ -471,7 +493,7 @@ class Tomogram:
             self.delete_lattice(n)
         self.lattices[0] = set()
 
-    def find_particle_neighbours(self, drange: tuple[float]) -> None:
+    def find_particle_neighbours(self) -> None:
         """
         Assign neighbours to all particles in tomogram, according to given
             distance range
@@ -480,6 +502,7 @@ class Tomogram:
         drange
             Ordered list of min/max distances, squared.
         """
+        drange = self.cleaning_params.dist_range
         particles = self.all_particles
         regions = Tomogram.assign_regions(particles, max(drange) ** 0.5)
         for r_key, region in regions.items():
@@ -493,6 +516,39 @@ class Tomogram:
                         continue
                     if within(particle.distance_sq(particle2), drange):
                         particle.make_neighbours(particle2)
+            regions[r_key] = set()
+
+    def find_particle_neighbours_vectorised(self) -> None:
+        """
+        Assign neighbours to all particles in tomogram, according to given
+            distance range
+        """
+        print("vec")
+        drange = self.cleaning_params.dist_range
+        particles = self.all_particles
+        regions = Tomogram.assign_regions(particles, max(drange) ** 0.5)
+        for r_key, region in regions.items():
+            region_particles = list(region)
+            if len(region) == 0:
+                continue
+            proximal_particles = list(Tomogram.find_nearby_particles(regions, r_key))
+            proximal_positions = Particle.get_property_array(proximal_particles, "position")
+            particle_positions = Particle.get_property_array(region, "position")
+
+            proximal_count = len(proximal_particles)
+            region_count = len(region_particles)
+
+            proximal_positions_repeated = np.tile(proximal_positions, (region_count,1))
+            particle_positions_repeated = np.tile(particle_positions, (proximal_count,1))
+            particle_displacements = proximal_positions_repeated - particle_positions_repeated
+            particle_distances_sq = np.einsum('ij,ij->i', particle_displacements, particle_displacements)
+
+            for idx, dist_sq in enumerate(particle_distances_sq):
+                if within(dist_sq, drange):
+                    particle1_index = math.floor(idx/proximal_count)
+                    particle2_index = idx % proximal_count
+                    region_particles[particle1_index].make_neighbours(proximal_particles[particle2_index])
+
             regions[r_key] = set()
 
     def __hash__(self):
@@ -620,7 +676,8 @@ class Tomogram:
             for particle in self.all_particles
             if particle.cc_score > self.cleaning_params.cc_threshold
         }
-        self.find_particle_neighbours(self.cleaning_params.dist_range)
+
+        self.find_particle_neighbours()
         for particle in self.all_particles:
             neighbours = particle.neighbours
 
