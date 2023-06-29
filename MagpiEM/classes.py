@@ -520,7 +520,7 @@ class Tomogram:
         sorted_region_keys = sorted(regions, key=lambda k: len(regions[k]), reverse=True)
 
         for r_key in sorted_region_keys:
-            if len(regions[rkey]) == 0:
+            if len(regions[r_key]) == 0:
                 continue
             proximal_particles = Tomogram.find_nearby_particles(regions, r_key)
 
@@ -672,12 +672,6 @@ class Tomogram:
         """
         return Tomogram.particles_to_df(self.all_particles)
 
-    def nonchecking_particles_df(self):
-        """ """
-        # TODO: delete this
-        unchecking = self.all_particles.difference(set(self.checking_particles))
-        return Tomogram.particles_to_df(unchecking)
-
     def checking_particles_df(self) -> pd.DataFrame:
         """
         Dataframe of specific "checking particles" used in dash to
@@ -782,7 +776,11 @@ class Tomogram:
         self.lattice_df_dict = dict(iter(particle_df.groupby("n")))
 
     def toggle_selected(self, n: int) -> None:
-        """Toggle whether lattice n is manually selected or not"""
+        """
+            Toggle whether lattice n is manually selected or not
+            Note that lattice 0 can never be selected - this represents
+            unclean particles
+        """
         if n in self.selected_n:
             self.selected_n.remove(n)
         # 0 always represents unclean particles - cannot be selected
@@ -950,8 +948,8 @@ class Tomogram:
         )
         return self.particles_trace(self.lattice_df_dict[lattice_id], **kwargs)
 
-    def selected_particle_trace(self, **kwargs):
-        return self.particles_trace(self.checking_particles_df(), **kwargs)
+    def checking_particle_trace(self, **kwargs):
+        return self.particles_trace(self.checking_particles_df(), colour=BLACK, opacity=1.0, **kwargs)
 
     def plot_all_lattices(self, showing_removed_particles=False, **kwargs) -> go.Figure:
         fig = simple_figure()
@@ -987,6 +985,9 @@ class Tomogram:
                 )
             )
 
+        # Checking Particles
+        fig.add_trace(self.checking_particle_trace(**kwargs))
+
         return fig
 
 
@@ -995,7 +996,7 @@ def simple_figure():
     fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
     fig.update_layout(scene_aspectmode="cube")
     fig["layout"]["uirevision"] = "a"
-    #fig.update_layout(margin={"l": 20, "r": 20, "t": 20, "b": 20})
+    fig.update_layout(margin={"l": 10, "r": 10, "t": 10, "b": 10})
     return fig
 
 

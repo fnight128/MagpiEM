@@ -134,6 +134,7 @@ def main():
             ]
             print("Clicked pos", clicked_particle_pos)
             params_message = tomo.show_particle_data(clicked_particle_pos)
+            tomo.toggle_selected(clicked_point["points"][0]["text"])
 
         fig = tomo.plot_all_lattices(
             showing_removed_particles=show_removed, cone_size=cone_size
@@ -173,7 +174,7 @@ def main():
         prevent_initial_call=True,
     )
     def cone_clicks(_):
-        # dummy
+        # dummy function to trigger graph updating
         return 1
 
     @app.callback(
