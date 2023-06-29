@@ -4,6 +4,7 @@ Created on Mon Nov  7 16:54:48 2022
 
 @author: Frank
 """
+import colorsys
 from typing import Tuple, Any
 
 import numpy as np
@@ -11,6 +12,10 @@ import pandas as pd
 import math
 from collections import defaultdict
 import plotly.graph_objects as go
+
+WHITE = "#FFFFFF"
+GREY = "#646464"
+BLACK = "#000000"
 
 
 class Cleaner:
@@ -90,7 +95,9 @@ class Cleaner:
         )
 
     @staticmethod
-    def ang_range_dotprod(angle_ideal: float, angle_tolerance: float) -> tuple[float, ...]:
+    def ang_range_dotprod(
+        angle_ideal: float, angle_tolerance: float
+    ) -> tuple[float, ...]:
         """
         Given an angle and tolerance, generate an ordered list representing the
         dot product of unit vectors at these angles
@@ -369,7 +376,9 @@ class Particle:
         """
         if len(self.neighbours) == 0:
             return 0.0
-        return float(np.mean([self.dot_curvature(neighbour) for neighbour in self.neighbours]))
+        return float(
+            np.mean([self.dot_curvature(neighbour) for neighbour in self.neighbours])
+        )
 
     @staticmethod
     def get_property_array(particles: list["Particle"], prop: str) -> np.ndarray:
@@ -386,7 +395,9 @@ class Particle:
         -------
             Nx3 array specifying property for all particles
         """
-        return np.array([getattr(particle, prop) for particle in particles], dtype=float)
+        return np.array(
+            [getattr(particle, prop) for particle in particles], dtype=float
+        )
 
     def get_neighbour_array(self, prop: str) -> np.ndarray:
         return Particle.get_property_array(self.neighbours, prop)
@@ -404,7 +415,7 @@ class Tomogram:
 
     particles_fate: defaultdict
 
-    particle_df_dict: dict
+    lattice_df_dict: dict
     cone_fix: pd.DataFrame
 
     cleaning_params: Cleaner
@@ -420,7 +431,6 @@ class Tomogram:
         self.selected_n = set()
         self.particles_fate = defaultdict(lambda: set())
         self.checking_particles = []
-        self.cone_fix = pd.DataFrame(None)
 
     @staticmethod
     def assign_regions(particles: set["Particle"], max_dist: float) -> dict:
@@ -505,8 +515,12 @@ class Tomogram:
         drange = self.cleaning_params.dist_range
         particles = self.all_particles
         regions = Tomogram.assign_regions(particles, max(drange) ** 0.5)
-        for r_key, region in regions.items():
-            if len(region) == 0:
+        # Start with most populated region, so to maximise the number of particles which
+        # do not need to be checked again
+        sorted_region_keys = sorted(regions, key=lambda k: len(regions[k]), reverse=True)
+
+        for r_key in sorted_region_keys:
+            if len(regions[rkey]) == 0:
                 continue
             proximal_particles = Tomogram.find_nearby_particles(regions, r_key)
 
@@ -532,22 +546,32 @@ class Tomogram:
             if len(region) == 0:
                 continue
             proximal_particles = list(Tomogram.find_nearby_particles(regions, r_key))
-            proximal_positions = Particle.get_property_array(proximal_particles, "position")
+            proximal_positions = Particle.get_property_array(
+                proximal_particles, "position"
+            )
             particle_positions = Particle.get_property_array(region, "position")
 
             proximal_count = len(proximal_particles)
             region_count = len(region_particles)
 
-            proximal_positions_repeated = np.tile(proximal_positions, (region_count,1))
-            particle_positions_repeated = np.tile(particle_positions, (proximal_count,1))
-            particle_displacements = proximal_positions_repeated - particle_positions_repeated
-            particle_distances_sq = np.einsum('ij,ij->i', particle_displacements, particle_displacements)
+            proximal_positions_repeated = np.tile(proximal_positions, (region_count, 1))
+            particle_positions_repeated = np.tile(
+                particle_positions, (proximal_count, 1)
+            )
+            particle_displacements = (
+                proximal_positions_repeated - particle_positions_repeated
+            )
+            particle_distances_sq = np.einsum(
+                "ij,ij->i", particle_displacements, particle_displacements
+            )
 
             for idx, dist_sq in enumerate(particle_distances_sq):
                 if within(dist_sq, drange):
-                    particle1_index = math.floor(idx/proximal_count)
+                    particle1_index = math.floor(idx / proximal_count)
                     particle2_index = idx % proximal_count
-                    region_particles[particle1_index].make_neighbours(proximal_particles[particle2_index])
+                    region_particles[particle1_index].make_neighbours(
+                        proximal_particles[particle2_index]
+                    )
 
             regions[r_key] = set()
 
@@ -591,6 +615,8 @@ class Tomogram:
         Assign set of particles to tomogram
         """
         self.all_particles = particles
+        self.generate_lattice_dfs()
+        self.assign_cone_fix_df()
 
     def set_clean_params(self, cp: "Cleaner") -> None:
         """Assign cleaning parameters to tomogram"""
@@ -702,21 +728,19 @@ class Tomogram:
             particle.choose_new_lattice(len(self.lattices))
 
         bad_lattices = set()
-        for lkey, lattice in self.lattices.items():
+        for lattice_key, lattice in self.lattices.items():
             if len(lattice) < self.cleaning_params.min_lattice_size:
-                bad_lattices.add(lkey)
+                bad_lattices.add(lattice_key)
                 for particle in lattice:
                     self.particles_fate["small_array"].add(particle)
-        for lkey in bad_lattices:
-            self.delete_lattice(lkey)
+        for lattice_key in bad_lattices:
+            self.delete_lattice(lattice_key)
 
-    def cone_fix_df(self) -> pd.DataFrame:
+    def assign_cone_fix_df(self) -> None:
         """
         Generate a df to fix cone plot size for this tomogram
         See cone_fix_readme.txt for full explanation
         """
-        if self.cone_fix is not None:
-            return self.cone_fix
 
         particle_df = self.all_particles_df()
 
@@ -746,7 +770,7 @@ class Tomogram:
 
         self.cone_fix = cone_fix_df
 
-    def generate_lattice_dfs(self) -> dict[int : pd.DataFrame]:
+    def generate_lattice_dfs(self) -> None:
         """
         Generate a dict containing a df of each lattice's particles
         dict keys are lattice ids
@@ -755,7 +779,7 @@ class Tomogram:
         """
         particle_df = self.all_particles_df()
         # split by lattice
-        self.particle_df_dict = dict(iter(particle_df.groupby("n")))
+        self.lattice_df_dict = dict(iter(particle_df.groupby("n")))
 
     def toggle_selected(self, n: int) -> None:
         """Toggle whether lattice n is manually selected or not"""
@@ -873,6 +897,115 @@ class Tomogram:
                 particle.set_lattice(0)
         self.selected_n = set(prog_dict["selected"])
         self.generate_lattice_dfs()
+
+    @staticmethod
+    def scatter3d_trace(
+        df: pd.DataFrame, colour="#000000", opacity=1.0
+    ) -> go.Scatter3d:
+        return go.Scatter3d(
+            x=df["x"],
+            y=df["y"],
+            z=df["z"],
+            mode="markers",
+            text=df["n"],
+            marker=dict(size=6, color=colour, opacity=opacity),
+            showlegend=False,
+        )
+
+    @staticmethod
+    def cone_trace(
+        df: pd.DataFrame, colour="#000000", opacity=1, cone_size=10.0
+    ) -> go.Cone:
+        return go.Cone(
+            x=df["x"],
+            y=df["y"],
+            z=df["z"],
+            u=df["u"],
+            v=df["v"],
+            w=df["w"],
+            text=df["n"],
+            sizemode="absolute",
+            sizeref=cone_size,
+            colorscale=[[0, colour], [1, colour]],
+            showscale=False,
+            opacity=opacity,
+        )
+
+    def particles_trace(
+        self, df: pd.DataFrame, cone_size=False, **kwargs
+    ) -> go.Cone | go.Scatter3d:
+        if cone_size > 0:
+            df = pd.concat([df, self.cone_fix])
+            return Tomogram.cone_trace(df, cone_size=cone_size, **kwargs)
+        else:
+            return Tomogram.scatter3d_trace(df, **kwargs)
+
+    def plot_all_particles(self, **kwargs) -> go.Cone | go.Scatter3d:
+        return self.particles_trace(self.all_particles_df(), **kwargs)
+
+    def lattice_trace(self, lattice_id: int, **kwargs) -> go.Cone | go.Scatter3d:
+        assert lattice_id in self.lattice_df_dict.keys(), (
+            "Attempted to plot lattice {} from tomogram {}, but could "
+            "not be found".format(lattice_id, self.name)
+        )
+        return self.particles_trace(self.lattice_df_dict[lattice_id], **kwargs)
+
+    def selected_particle_trace(self, **kwargs):
+        return self.particles_trace(self.checking_particles_df(), **kwargs)
+
+    def plot_all_lattices(self, showing_removed_particles=False, **kwargs) -> go.Figure:
+        fig = simple_figure()
+        colour_dict = dict()
+        hex_vals = colour_range(len(self.lattices))
+        tomo_is_uncleaned = len(self.lattices) == 1
+        for idx, lattice_key in enumerate(self.lattices.keys()):
+            hex_val = WHITE if lattice_key in self.selected_n else hex_vals[idx]
+            colour_dict.update({lattice_key: hex_val})
+
+        # assign colours and plot array
+        for lattice_key in self.lattices.keys():
+            clean_lattice = lattice_key > 0
+            selected_lattice = lattice_key in self.selected_n
+            if selected_lattice:
+                colour = WHITE
+                opacity = 1
+            elif clean_lattice:
+                colour = colour_dict[lattice_key]
+                opacity = 1
+            else:
+                # uncleaned particles
+                opacity = 0.6
+                if tomo_is_uncleaned:
+                    colour = WHITE
+                elif showing_removed_particles:
+                    colour = BLACK
+                else:
+                    continue
+            fig.add_trace(
+                self.lattice_trace(
+                    lattice_key, colour=colour, opacity=opacity, **kwargs
+                )
+            )
+
+        return fig
+
+
+def simple_figure():
+    fig = go.Figure()
+    fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
+    fig.update_layout(scene_aspectmode="cube")
+    fig["layout"]["uirevision"] = "a"
+    #fig.update_layout(margin={"l": 20, "r": 20, "t": 20, "b": 20})
+    return fig
+
+
+def colour_range(num_points):
+    hsv_tuples = [(x * 1.0 / num_points, 0.75, 0.75) for x in range(num_points)]
+    rgb_tuples = [colorsys.hsv_to_rgb(*x) for x in hsv_tuples]
+    return [
+        "rgb({},{},{})".format(int(r * 255), int(g * 255), int(b * 255))
+        for (r, g, b) in rgb_tuples
+    ]
 
 
 def normalise(vec: np.ndarray):

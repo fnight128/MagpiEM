@@ -84,46 +84,6 @@ def main():
         bar = "<{}{}> {}/{}".format("#" * progress, "-" * to_do, current_index, goal)
         return bar
 
-    def colour_range(num_points):
-        hsv_tuples = [(x * 1.0 / num_points, 0.75, 0.75) for x in range(num_points)]
-        rgb_tuples = [colorsys.hsv_to_rgb(*x) for x in hsv_tuples]
-        return [
-            "rgb({},{},{})".format(int(r * 255), int(g * 255), int(b * 255))
-            for (r, g, b) in rgb_tuples
-        ]
-
-    # def mesh3d_trace(df, colour, opacity):
-    #     return go.Mesh3d(
-    #         x=df["x"], y=df["y"], z=df["z"], opacity=opacity, color=colour, alphahull=-1
-    #     )
-
-    def scatter3d_trace(df, colour, opacity):
-        return go.Scatter3d(
-            x=df["x"],
-            y=df["y"],
-            z=df["z"],
-            mode="markers",
-            text=df["n"],
-            marker=dict(size=6, color=colour, opacity=opacity),
-            showlegend=False,
-        )
-
-    def cone_trace(df, colour, opacity, sizeref=10.0):
-        return go.Cone(
-            x=df["x"],
-            y=df["y"],
-            z=df["z"],
-            u=df["u"],
-            v=df["v"],
-            w=df["w"],
-            text=df["n"],
-            sizemode="scaled",
-            sizeref=sizeref,
-            colorscale=[[0, colour], [1, colour]],
-            showscale=False,
-            opacity=opacity,
-        )
-
     @app.callback(
         Output("graph-picking", "figure"),
         Output("div-graph-data", "children"),
@@ -147,6 +107,9 @@ def main():
     ):
         global __dash_tomograms
         global __last_click
+
+        if not make_cones:
+            cone_size = -1
 
         params_message = ""
 
@@ -172,73 +135,9 @@ def main():
             print("Clicked pos", clicked_particle_pos)
             params_message = tomo.show_particle_data(clicked_particle_pos)
 
-        should_make_cones = make_cones
-
-        has_ref = hasattr(tomo, "reference_df")
-
-        fig = go.Figure()
-        fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
-        fig.update_layout(margin={"l": 20, "r": 20, "t": 20, "b": 20})
-        fig.update_layout(scene_aspectmode="data")
-        # keep camera constant
-        fig["layout"]["uirevision"] = "a"
-
-        # if tomo not yet cleaned, just plot all points
-        if len(tomo.lattices) == 1:
-            if should_make_cones:
-
-                nonchecking_df = pd.concat(
-                    (tomo.nonchecking_particles_df(), tomo.cone_fix_df())
-                )
-                checking_df = pd.concat(
-                    (tomo.checking_particles_df(), tomo.cone_fix_df())
-                )
-                fig.add_trace(cone_trace(nonchecking_df, WHITE, 0.6, cone_size))
-                fig.add_trace(cone_trace(checking_df, BLACK, 1, cone_size))
-            else:
-                fig.add_trace(scatter3d_trace(tomo.all_particles_df(), WHITE, 0.6))
-                fig.add_trace(scatter3d_trace(tomo.checking_particles_df(), BLACK, 1))
-
-            return fig, params_message
-
-        if clicked_point:
-            tomo.toggle_selected(clicked_point["points"][0]["text"])
-
-        array_dict = tomo.particle_df_dict
-
-        # define linear range of colours
-        hex_vals = colour_range(len(array_dict))
-
-        # assign one colour to each protein array index
-        colour_dict = dict()
-        for idx, akey in enumerate(array_dict.keys()):
-            hex_val = WHITE if akey in tomo.selected_n else hex_vals[idx]
-            colour_dict.update({akey: hex_val})
-
-        # assign colours and plot array
-        for akey in array_dict.keys():
-            array = array_dict[akey]
-            opacity = 1
-            if akey == 0:
-                if show_removed:
-                    colour = BLACK
-                    opacity = 0.6
-                else:
-                    continue
-            else:
-                colour = colour_dict[akey]
-
-            if should_make_cones:
-                # cone fix
-                array = pd.concat([tomo.cone_fix_df(), array])
-                fig.add_trace(cone_trace(array, colour, opacity, cone_size))
-                if has_ref:
-                    fig.add_trace(scatter3d_trace(tomo.reference_df, GREY, 0.2))
-            else:
-                fig.add_trace(scatter3d_trace(array, colour, opacity))
-                # fig.add_trace(mesh3d_trace(array, colour, opacity))
-                if has_ref:
-                    fig.add_trace(scatter3d_trace(tomo.reference_df, GREY, 0.2))
+        fig = tomo.plot_all_lattices(
+            showing_removed_particles=show_removed, cone_size=cone_size
+        )
         return fig, params_message
 
     @app.callback(
@@ -394,7 +293,7 @@ def main():
         try:
             with open(prev_path, "r") as prev_yaml:
                 prev_yaml = yaml.safe_load(prev_yaml)
-        except Exception:
+        except yaml.YAMLError:
             return "Previous session file unreadable", *failed_upload
 
         # check keys line up between files
@@ -451,13 +350,14 @@ def main():
     def update_dropdown(current_val, disabled, _, __):
         global __dash_tomograms
 
+        tomo_keys = list(__dash_tomograms.keys())
+
         # unfortunately need to merge two callbacks here, dash does not allow multiple
         # callbacks with the same output so use ctx to distinguish between cases
-        try:
-            tomo_keys = list(__dash_tomograms.keys())
-            tomo_key_0 = tomo_keys[0]
-        except Exception:
+        if len(tomo_keys) == 0:
             return [], ""
+
+        tomo_key_0 = tomo_keys[0]
 
         # enabling dropdown once cleaning finishes
         if ctx.triggered_id == "dropdown-tomo":
