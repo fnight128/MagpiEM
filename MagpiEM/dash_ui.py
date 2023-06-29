@@ -399,7 +399,6 @@ def main():
         Output("collapse-upload", "is_open"),
         Output("collapse-graph-control", "is_open"),
         Output("collapse-clean", "is_open"),
-        Output("collapse-proximity", "is_open"),
         Input("button-read", "n_clicks"),
         State("upload-data", "filename"),
         State("upload-data", "contents"),
@@ -412,7 +411,7 @@ def main():
             filename = None
 
         if not filename:
-            return "", True, True, False, False, False
+            return "", True, True, False, False
 
         num_img_dict = {0: 1, 1: 5, 2: -1}
         num_images = num_img_dict[num_images]
@@ -431,8 +430,8 @@ def main():
         __dash_tomograms = read_uploaded_tomo(temp_file_path, num_images)
 
         if not __dash_tomograms:
-            return "File Unreadable", True, True, False, False, False
-        return "Tomograms read", False, False, True, True, False
+            return "File Unreadable", True, True, False, False
+        return "Tomograms read", False, False, True, True
 
     def clean_tomo(tomo, clean_params):
         tomo.set_clean_params(clean_params)
@@ -442,15 +441,6 @@ def main():
         tomo.autoclean()
 
         tomo.generate_lattice_dfs()
-
-    def prox_clean_tomo(tomo, dist_min, dist_max):
-        if not any(tomo.reference_points):
-            print("tomo {} has no reference points uploaded".format(tomo.name))
-        t0 = time()
-
-        tomo.proximity_clean((dist_min**2, dist_max**2))
-
-        print("time for {}:".format(tomo.name), time() - t0)
 
     def save_dash_upload(filename, contents):
         print("Uploading file:", filename)
@@ -613,63 +603,6 @@ def main():
         style={"overflow": "hidden", "margin": "3px", "width": "100%"},
     )
 
-    prox_table = html.Table(
-        [
-            html.Tr(
-                [
-                    html.Td(
-                        dcc.Upload(
-                            id="upload-ref",
-                            children="Choose Reference",
-                            style={
-                                "height": "60px",
-                                "lineHeight": "60px",
-                                "borderWidth": "1px",
-                                "borderStyle": "dashed",
-                                "borderRadius": "5px",
-                                "textAlign": "center",
-                                "margin": "20px",
-                                "overflow": "hidden",
-                            },
-                            multiple=True,
-                        ),
-                        colSpan=4,
-                    )
-                ]
-            ),
-            html.Tr(
-                [
-                    html.Td("Files requiring references: "),
-                    html.Td(
-                        html.Div(id="div-need-refs", className="text-danger"), colSpan=3
-                    ),
-                ]
-            ),
-            html.Tr(
-                [
-                    html.Td("Distance from Reference Particles"),
-                    inp_num("dist-min", 30),
-                    html.Td("-"),
-                    inp_num("dist-max", 35),
-                ]
-            ),
-            html.Tr(
-                html.Td(
-                    dbc.Button(
-                        "Preview Cleaning", id="button-preview-prox", color="secondary"
-                    ),
-                    colSpan=4,
-                ),
-            ),
-            html.Tr(
-                html.Td(
-                    dbc.Button("Run Full Cleaning", id="button-full-prox"), colSpan=4
-                ),
-            ),
-        ],
-        style={"overflow": "hidden", "margin": "3px", "width": "100%"},
-    )
-
     upload_file = dcc.Upload(
         id="upload-data",
         children="Choose File",
@@ -719,16 +652,6 @@ def main():
                     id="dropdown-filetype",
                     clearable=False,
                 )
-            ),
-            html.Tr(
-                # dcc.RadioItems(
-                #     [
-                #        "Clean based on orientation",
-                #         # "Clean based on reference particles",
-                #     ],
-                #     "Clean based on orientation",
-                #     id="radio-cleantype",
-                # )
             ),
             html.Tr([html.Td("Number of Images to Process")]),
             html.Tr(
@@ -887,10 +810,7 @@ def main():
         style={"overflow": "hidden", "margin": "3px", "width": "100%"},
     )
 
-    cleaning_params_card = collapsing_card(card("Cleaning", param_table), "clean")
-    proximity_params_card = collapsing_card(
-        card("Proximity Cleaning", prox_table), "proximity"
-    )
+    cleaning_params_card = collapsing_card(card("Cleaning", param_table), "clean",)
     upload_card = collapsing_card(
         card("Choose File", upload_table), "upload", start_open=True
     )
@@ -919,7 +839,6 @@ def main():
                         [
                             html.Td(upload_card),
                             html.Td(cleaning_params_card),
-                            html.Td(proximity_params_card),
                             html.Td(graph_controls_card),
                             html.Td(save_card),
                         ]
