@@ -32,7 +32,6 @@ import MagpiEM.read_write
 from .classes import Cleaner
 from .read_write import read_relion_star, read_emc_mat, write_relion_star, write_emc_mat
 
-
 WHITE = "#FFFFFF"
 GREY = "#646464"
 BLACK = "#000000"
@@ -97,13 +96,13 @@ def main():
         prevent_initial_call=True,
     )
     def plot_tomo(
-        tomo_selection: str,
-        clicked_point,
-        make_cones: bool,
-        cone_size: float,
-        _,
-        show_removed: bool,
-        __,
+            tomo_selection: str,
+            clicked_point,
+            make_cones: bool,
+            cone_size: float,
+            _,
+            show_removed: bool,
+            __,
     ):
         global __dash_tomograms
         global __last_click
@@ -214,13 +213,18 @@ def main():
 
     @app.callback(
         Output("download-file", "data"),
+        Output("confirm-cant-save-progress", "displayed"),
         Input("button-save-progress", "n_clicks"),
         State("upload-data", "filename"),
+        State("slider-num-images", "value"),
         prevent_initial_call=True,
     )
-    def save_current_progress(clicks, filename):
+    def save_current_progress(clicks, filename, num_images):
         if not clicks:
-            return None
+            return None, False
+
+        if num_images != 2:
+            return None, True
 
         file_path = TEMP_FILE_DIR + filename + "_progress.yml"
 
@@ -242,7 +246,7 @@ def main():
         prog = yaml.safe_dump(tomo_dict)
         with open(file_path, "w") as yaml_file:
             yaml_file.write(prog)
-        return dcc.send_file(file_path)
+        return dcc.send_file(file_path), False
 
     @app.callback(
         Output("label-read", "children"),
@@ -257,7 +261,7 @@ def main():
         prevent_initial_call=True,
     )
     def load_previous_progress(
-        previous_filename, previous_contents, data_filename, data_contents
+            previous_filename, previous_contents, data_filename, data_contents
     ):
         global __dash_tomograms
 
@@ -468,18 +472,18 @@ def main():
         long_callback=True,
     )
     def run_cleaning(
-        dist_goal: float,
-        dist_tol: float,
-        ori_goal: float,
-        ori_tol: float,
-        disp_goal: float,
-        disp_tol: float,
-        min_neighbours: int,
-        cc_thresh: float,
-        array_size: int,
-        allow_flips: bool,
-        clicks,
-        clicks2,
+            dist_goal: float,
+            dist_tol: float,
+            ori_goal: float,
+            ori_tol: float,
+            disp_goal: float,
+            disp_tol: float,
+            min_neighbours: int,
+            cc_thresh: float,
+            array_size: int,
+            allow_flips: bool,
+            clicks,
+            clicks2,
     ):
         if not clicks or clicks2:
             return True, True, False
@@ -634,7 +638,7 @@ def main():
         )
 
     def collapsing_card(
-        display_card: dbc.Card, collapse_id: str, start_open: bool = False
+            display_card: dbc.Card, collapse_id: str, start_open: bool = False
     ):
         return dbc.Collapse(
             display_card,
@@ -810,7 +814,7 @@ def main():
         style={"overflow": "hidden", "margin": "3px", "width": "100%"},
     )
 
-    cleaning_params_card = collapsing_card(card("Cleaning", param_table), "clean",)
+    cleaning_params_card = collapsing_card(card("Cleaning", param_table), "clean", )
     upload_card = collapsing_card(
         card("Choose File", upload_table), "upload", start_open=True
     )
@@ -857,8 +861,14 @@ def main():
             ),
             dbc.Row(html.Div(id="div-graph-data")),
             dbc.Row([graph]),
+            dbc.Row(html.Div(dcc.Link("Documentation and instructions", href="https://github.com/fnight128/MagpiEM",
+                                      target="_blank"))),
             emptydiv,
-        ]
+            dcc.ConfirmDialog(
+                id='confirm-cant-save-progress',
+                message='Progress can only be saved if cleaning was run on all tomograms.',
+            ),
+        ],
     )
 
     @app.callback(
