@@ -42,6 +42,7 @@ __last_click = 0.0
 __dash_camera = None
 
 TEMP_FILE_DIR = "static/"
+__CLEAN_YAML_NAME = "prev_clean_params.yml"
 
 
 def main():
@@ -239,7 +240,7 @@ def main():
             if name == cleaning_params_key:
                 print("Tomo {} has an invalid name and cannot be saved!".format(name))
                 continue
-            tomo_dict[name] = tomo.write_prog_dict()
+            tomo_dict[name] = tomo.write_progress_dict()
         try:
             tomo_dict[".__cleaning_parameters__."] = next(
                 iter(__dash_tomograms.values())
@@ -251,6 +252,14 @@ def main():
         with open(file_path, "w") as yaml_file:
             yaml_file.write(prog)
         return dcc.send_file(file_path), False
+
+    @app.callback(
+        Input("upload-previous-session", "filename"),
+        Output("button-read", "disabled"),
+        prevent_initial_call=True
+    )
+    def hide_read_button(_):
+        return True
 
     @app.callback(
         Output("label-read", "children"),
@@ -283,11 +292,14 @@ def main():
             )
 
         # ensure temp directory clear
-        files = glob.glob(TEMP_FILE_DIR + "*")
-        if files:
-            print("Pre-existing temp files found, removing:", files)
-        for f in files:
-            os.remove(f)
+        all_files = glob.glob(TEMP_FILE_DIR + "*")
+        print("all", all_files)
+        all_files = [file for file in all_files if __CLEAN_YAML_NAME not in file]
+        print("all", all_files)
+        if all_files:
+            print("Pre-existing temp files found, removing:", all_files)
+            for f in all_files:
+                os.remove(f)
 
         save_dash_upload(previous_filename, previous_contents)
         save_dash_upload(data_filename, data_contents)
@@ -343,7 +355,7 @@ def main():
             ], *failed_upload
 
         for tomo_name, tomo in __dash_tomograms.items():
-            tomo.apply_prog_dict(prev_yaml[tomo_name])
+            tomo.apply_progress_dict(prev_yaml[tomo_name])
 
         return "", *successful_upload
 
@@ -427,10 +439,14 @@ def main():
         global __dash_tomograms
 
         # ensure temp directory clear
-        files = glob.glob(TEMP_FILE_DIR + "*")
-        print(files)
-        for f in files:
-            os.remove(f)
+        all_files = glob.glob(TEMP_FILE_DIR + "*")
+        print("all", all_files)
+        all_files = [file for file in all_files if __CLEAN_YAML_NAME not in file]
+        print("all", all_files)
+        if all_files:
+            print("Pre-existing temp files found, removing:", all_files)
+            for f in all_files:
+                os.remove(f)
 
         save_dash_upload(filename, contents)
         temp_file_path = TEMP_FILE_DIR + filename
@@ -440,6 +456,43 @@ def main():
         if not __dash_tomograms:
             return "File Unreadable", True, True, False, False
         return "Tomograms read", False, False, True, True
+
+    @app.callback(
+        Input("upload-data", "filename"),
+        Output("inp-dist-goal", "value"),
+        Output("inp-dist-tol", "value"),
+        Output("inp-ori-goal", "value"),
+        Output("inp-ori-tol", "value"),
+        Output("inp-curv-goal", "value"),
+        Output("inp-curv-tol", "value"),
+        Output("inp-min-neighbours", "value"),
+        Output("inp-cc-thresh", "value"),
+        Output("inp-array-size", "value"),
+        Output("switch-allow-flips", "on"),
+        prevent_initial_call=True,
+    )
+    def read_previous_clean_params(is_open):
+        global TEMP_FILE_DIR, __CLEAN_YAML_NAME
+        clean_keys = [
+            "distance",
+            "distance tolerance",
+            "orientation",
+            "orientation tolerance",
+            "curvature",
+            "curvature tolerance",
+            "cc threshold",
+            "min " "neighbours",
+            "min array size",
+            "allow flips",
+        ]
+        try:
+            with open(TEMP_FILE_DIR + __CLEAN_YAML_NAME, "r") as prev_yaml:
+                prev_yaml = yaml.safe_load(prev_yaml)
+                prev_vals = [prev_yaml[key] for key in clean_keys]
+                return prev_vals
+        except FileNotFoundError or yaml.YAMLError or KeyError:
+            print("Couldn't find or read a previous cleaning file.")
+            raise PreventUpdate
 
     def clean_tomo(tomo, clean_params):
         tomo.set_clean_params(clean_params)
@@ -509,7 +562,7 @@ def main():
 
         print("Clean")
 
-        global __dash_tomograms
+        global __dash_tomograms, __clean_yaml_name
 
         if ctx.triggered_id == "button-preview-clean":
             print("Preview")
@@ -534,16 +587,20 @@ def main():
                 print(prog_bar(clean_count, total_tomos))
                 print("Time remaining:", formatted_time_remaining)
                 print()
+
+        print("Saving cleaning parameters")
+        cleaning_params_dict = clean_params.dict_to_print
+        with open(TEMP_FILE_DIR + __CLEAN_YAML_NAME, "w") as yaml_file:
+            print("written", yaml_file.write(yaml.safe_dump(cleaning_params_dict)))
         return False, False, True
 
     size = "50px"
 
-    def inp_num(id_suffix, default=None):
+    def inp_num(id_suffix):
         return html.Td(
             dbc.Input(
                 id="inp-" + id_suffix,
                 type="number",
-                value=default,
                 style={"appearance": "textfield", "width": size},
             ),
             style={"width": size},
@@ -562,30 +619,30 @@ def main():
             html.Tr(
                 [
                     html.Td("Distance (px)"),
-                    inp_num("dist-goal", 25),
+                    inp_num("dist-goal"),
                     html.Td("±"),
-                    inp_num("dist-tol", 10),
+                    inp_num("dist-tol"),
                 ]
             ),
             html.Tr(
                 [
                     html.Td("Orientation (°)"),
-                    inp_num("ori-goal", 9),
+                    inp_num("ori-goal"),
                     html.Td("±"),
-                    inp_num("ori-tol", 10),
+                    inp_num("ori-tol"),
                 ]
             ),
             html.Tr(
                 [
                     html.Td("Curvature (°)"),
-                    inp_num("curv-goal", 90),
+                    inp_num("curv-goal"),
                     html.Td("±"),
-                    inp_num("curv-tol", 20),
+                    inp_num("curv-tol"),
                 ]
             ),
-            html.Tr([html.Td("Min. Neighbours"), inp_num("min-neighbours", 2)]),
-            html.Tr([html.Td("CC Threshold"), inp_num("cc-thresh", 5)]),
-            html.Tr([html.Td("Min. Lattice Size"), inp_num("array-size", 5)]),
+            html.Tr([html.Td("Min. Neighbours"), inp_num("min-neighbours")]),
+            html.Tr([html.Td("CC Threshold"), inp_num("cc-thresh")]),
+            html.Tr([html.Td("Min. Lattice Size"), inp_num("array-size")]),
             html.Tr(
                 [
                     html.Td("Allow Flipped Particles"),
@@ -651,6 +708,14 @@ def main():
             style={"width": "450px", "height": "100%"},
         )  # ,style={"float":"right"})
 
+    emptydiv = html.Div(
+        [
+            # nonexistent outputs for callbacks with no visible effect
+            html.Div(id="div-null", style={"display": "none"}),
+        ],
+        style={"display": "none"},
+    )
+
     upload_table = html.Table(
         [
             html.Tr([html.Td(upload_file)]),
@@ -680,24 +745,27 @@ def main():
                     )
                 ]
             ),
+            html.Tr(html.Br()),
             html.Tr(
                 [
-                    html.Td(dbc.Button("Read tomograms", id="button-read")),
+                    html.Td(dbc.Button("Read tomograms", id="button-read", style={"width":  "100%"})),
                 ]
             ),
-            html.Td(
-                dcc.Upload(
-                    "Load Previous Session",
-                    id="upload-previous-session",
-                    multiple=False,
-                    style={
-                        "borderWidth": "1px",
-                        "borderStyle": "dashed",
-                        "borderRadius": "3px",
-                        "textAlign": "center",
-                        "margin": "20px",
-                        "overflow": "hidden",
-                    },
+            html.Tr(
+                html.Td(
+                    dcc.Upload(
+                        "Load Previous Session",
+                        id="upload-previous-session",
+                        multiple=False,
+                        style={
+                            "borderWidth": "1px",
+                            "borderStyle": "dashed",
+                            "borderRadius": "3px",
+                            "textAlign": "center",
+                            "margin": "20px",
+                            "overflow": "hidden",
+                        },
+                    )
                 )
             ),
             html.Tr(html.Div(id="label-read")),
@@ -845,14 +913,6 @@ def main():
         },
     )
 
-    emptydiv = html.Div(
-        [
-            # nonexistent outputs for callbacks with no visible effect
-            html.Div(id="div-null", style={"display": "none"}),
-        ],
-        style={"display": "none"},
-    )
-
     app.layout = html.Div(
         [
             dbc.Row(html.H1("MagpiEM")),
@@ -880,7 +940,7 @@ def main():
             ),
             dbc.Row(html.Div(id="div-graph-data")),
             dbc.Row([graph]),
-            dbc.Row(
+            html.Footer(
                 html.Div(
                     dcc.Link(
                         "Documentation and instructions",
@@ -911,7 +971,6 @@ def main():
             return {}
 
     @app.callback(
-        # Output("link-download", "href"),
         Output("download-file", "data"),
         State("input-save-filename", "value"),
         State("upload-data", "filename"),

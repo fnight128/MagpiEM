@@ -57,6 +57,8 @@ class Cleaner:
             "distance tolerance": dist_tol,
             "orientation": target_ori,
             "orientation tolerance": ori_tol,
+            "curvature": target_curv,
+            "curvature tolerance": curv_tol,
             "cc threshold": cc_thresh,
             "min neighbours": min_neigh,
             "min array size": min_lattice_size,
@@ -407,7 +409,7 @@ class Tomogram:
     name: str
     all_particles: set
     removed_particles: set
-    selected_n: set
+    selected_lattices: set
 
     checking_particles: list
 
@@ -428,7 +430,7 @@ class Tomogram:
         self.lattices = defaultdict(lambda: set())
         self.lattices[0] = set()
         self.name = name
-        self.selected_n = set()
+        self.selected_lattices = set()
         self.particles_fate = defaultdict(lambda: set())
         self.checking_particles = []
 
@@ -584,7 +586,7 @@ class Tomogram:
         return "Tomogram {}, containing {} particles. Selected lattices: {}".format(
             self.name,
             len(self.all_particles),
-            ",".join({str(n) for n in self.selected_n}),
+            ",".join({str(n) for n in self.selected_lattices}),
         )
 
     def get_particle_from_position(self, position: np.ndarray) -> "Particle":
@@ -640,7 +642,7 @@ class Tomogram:
         return {
             particle.particle_id
             for particle in self.get_auto_cleaned_particles()
-            if (particle.lattice in self.selected_n) == selected
+            if (particle.lattice in self.selected_lattices) == selected
         }
 
     @staticmethod
@@ -784,11 +786,11 @@ class Tomogram:
         Note that lattice 0 can never be selected - this represents
         unclean particles
         """
-        if n in self.selected_n:
-            self.selected_n.remove(n)
+        if n in self.selected_lattices:
+            self.selected_lattices.remove(n)
         # 0 always represents unclean particles - cannot be selected
         elif n != 0:
-            self.selected_n.add(n)
+            self.selected_lattices.add(n)
 
     def get_convex_arrays(self) -> set[int]:
         """Get set of all array ids with an average convex curvature"""
@@ -848,7 +850,7 @@ class Tomogram:
             particle.set_lattice(0)
         self.lattices.pop(n)
 
-    def write_prog_dict(self) -> dict[str:dict]:
+    def write_progress_dict(self) -> dict[str:dict]:
         """
         Generate dict of current progress in tomogram
         Keys are tomogram ids, values are dicts of
@@ -869,18 +871,18 @@ class Tomogram:
                 continue
             p_ids = [p.particle_id for p in arr]
             arr_dict[ind] = p_ids
-        selected_lattices = list(self.selected_n)
+        selected_lattices = list(self.selected_lattices)
         arr_dict["selected"] = selected_lattices
         return arr_dict
 
-    def apply_prog_dict(self, prog_dict: dict) -> None:
+    def apply_progress_dict(self, prog_dict: dict) -> None:
         """
         Reapply previous progress to tomogram, assigning all particles
             to lattices and re-selecting lattices
         Parameters
         ----------
         prog_dict
-            Dict formatted according to Tomogram.write_prog_dict
+            Dict formatted according to Tomogram.write_progress_dict
         """
         inverted_prog_dict = {}
         for array, particles in prog_dict.items():
@@ -896,7 +898,7 @@ class Tomogram:
                 particle.set_lattice(int(inverted_prog_dict[particle.particle_id]))
             else:
                 particle.set_lattice(0)
-        self.selected_n = set(prog_dict["selected"])
+        self.selected_lattices = set(prog_dict["selected"])
         self.generate_lattice_dfs()
 
     @staticmethod
@@ -968,13 +970,13 @@ class Tomogram:
         hex_vals = colour_range(len(self.lattices))
         tomo_is_uncleaned = len(self.lattices) == 1
         for idx, lattice_key in enumerate(self.lattices.keys()):
-            hex_val = WHITE if lattice_key in self.selected_n else hex_vals[idx]
+            hex_val = WHITE if lattice_key in self.selected_lattices else hex_vals[idx]
             colour_dict.update({lattice_key: hex_val})
 
         # assign colours and plot lattice
         for lattice_key in self.lattices.keys():
             clean_lattice = lattice_key > 0
-            selected_lattice = lattice_key in self.selected_n
+            selected_lattice = lattice_key in self.selected_lattices
             if selected_lattice:
                 colour = WHITE
                 opacity = 1
