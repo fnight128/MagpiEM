@@ -517,7 +517,9 @@ class Tomogram:
         regions = Tomogram.assign_regions(particles, max(drange) ** 0.5)
         # Start with most populated region, so to maximise the number of particles which
         # do not need to be checked again
-        sorted_region_keys = sorted(regions, key=lambda k: len(regions[k]), reverse=True)
+        sorted_region_keys = sorted(
+            regions, key=lambda k: len(regions[k]), reverse=True
+        )
 
         for r_key in sorted_region_keys:
             if len(regions[r_key]) == 0:
@@ -729,6 +731,7 @@ class Tomogram:
                     self.particles_fate["small_array"].add(particle)
         for lattice_key in bad_lattices:
             self.delete_lattice(lattice_key)
+        self.generate_lattice_dfs()
 
     def assign_cone_fix_df(self) -> None:
         """
@@ -748,7 +751,7 @@ class Tomogram:
         )
 
         # create two extremely small vectors extremely close together
-        scaling = 10000
+        scaling = 1000000
         fudge_factor = 1000
 
         min_plus_mag = min_series.add(range_magnitude / (scaling * fudge_factor))
@@ -777,9 +780,9 @@ class Tomogram:
 
     def toggle_selected(self, n: int) -> None:
         """
-            Toggle whether lattice n is manually selected or not
-            Note that lattice 0 can never be selected - this represents
-            unclean particles
+        Toggle whether lattice n is manually selected or not
+        Note that lattice 0 can never be selected - this represents
+        unclean particles
         """
         if n in self.selected_n:
             self.selected_n.remove(n)
@@ -930,10 +933,11 @@ class Tomogram:
         )
 
     def particles_trace(
-        self, df: pd.DataFrame, cone_size=False, **kwargs
+        self, df: pd.DataFrame, cone_size=False, cone_fix=True, **kwargs
     ) -> go.Cone | go.Scatter3d:
         if cone_size > 0:
-            df = pd.concat([df, self.cone_fix])
+            if cone_fix:
+                df = pd.concat([df, self.cone_fix])
             return Tomogram.cone_trace(df, cone_size=cone_size, **kwargs)
         else:
             return Tomogram.scatter3d_trace(df, **kwargs)
@@ -942,17 +946,24 @@ class Tomogram:
         return self.particles_trace(self.all_particles_df(), **kwargs)
 
     def lattice_trace(self, lattice_id: int, **kwargs) -> go.Cone | go.Scatter3d:
-        assert lattice_id in self.lattice_df_dict.keys(), (
-            "Attempted to plot lattice {} from tomogram {}, but could "
-            "not be found".format(lattice_id, self.name)
-        )
+        # assert lattice_id in self.lattice_df_dict.keys(), (
+        #     "Attempted to plot lattice {} from tomogram {}, but could "
+        #     "not be found".format(lattice_id, self.name)
+        # )
         return self.particles_trace(self.lattice_df_dict[lattice_id], **kwargs)
 
     def checking_particle_trace(self, **kwargs):
-        return self.particles_trace(self.checking_particles_df(), colour=BLACK, opacity=1.0, **kwargs)
+        return self.particles_trace(
+            self.checking_particles_df(), colour=BLACK, opacity=1.0, **kwargs
+        )
 
-    def plot_all_lattices(self, showing_removed_particles=False, **kwargs) -> go.Figure:
-        fig = simple_figure()
+    def plot_all_lattices(
+        self, showing_removed_particles=False, fig: go.Figure = None, **kwargs
+    ) -> go.Figure:
+        if not fig or type(fig) != go.Figure:
+            fig = simple_figure()
+        else:
+            fig["data"] = []
         colour_dict = dict()
         hex_vals = colour_range(len(self.lattices))
         tomo_is_uncleaned = len(self.lattices) == 1
@@ -960,7 +971,7 @@ class Tomogram:
             hex_val = WHITE if lattice_key in self.selected_n else hex_vals[idx]
             colour_dict.update({lattice_key: hex_val})
 
-        # assign colours and plot array
+        # assign colours and plot lattice
         for lattice_key in self.lattices.keys():
             clean_lattice = lattice_key > 0
             selected_lattice = lattice_key in self.selected_n
@@ -992,7 +1003,8 @@ class Tomogram:
 
 
 def simple_figure():
-    fig = go.Figure()
+    layout = go.Layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+    fig = go.Figure(layout=layout)
     fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
     fig.update_layout(scene_aspectmode="cube")
     fig["layout"]["uirevision"] = "a"
