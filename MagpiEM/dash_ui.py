@@ -256,17 +256,31 @@ def main():
     @app.callback(
         Input("upload-previous-session", "filename"),
         Output("button-read", "disabled"),
-        prevent_initial_call=True
+        prevent_initial_call=True,
     )
     def hide_read_button(_):
         return True
 
+    # desynchronise opening card from processing
+    # otherwise looks laggy when opening
     @app.callback(
-        Output("label-read", "children"),
-        Output("dropdown-tomo", "disabled"),
         Output("collapse-upload", "is_open"),
         Output("collapse-graph-control", "is_open"),
         Output("collapse-save", "is_open"),
+        Input("dropdown-tomo", "disabled"),
+        prevent_initial_callback=True,
+    )
+    def open_cards(should_close):
+        cards_open = False, True, True
+        cards_closed = True, False, False
+        if should_close:
+            return cards_closed
+        else:
+            return cards_open
+
+    @app.callback(
+        Output("label-read", "children"),
+        Output("dropdown-tomo", "disabled"),
         Input("upload-previous-session", "filename"),
         Input("upload-previous-session", "contents"),
         State("upload-data", "filename"),
@@ -278,8 +292,8 @@ def main():
     ):
         global __dash_tomograms
 
-        failed_upload = [True, True, False, False]
-        successful_upload = [False, False, True, True]
+        failed_upload = True
+        successful_upload = False
         if ctx.triggered_id != "upload-previous-session":
             data_filename = None
 
@@ -416,9 +430,6 @@ def main():
     @app.callback(
         Output("label-read", "children"),
         Output("dropdown-tomo", "disabled"),
-        Output("collapse-upload", "is_open"),
-        Output("collapse-graph-control", "is_open"),
-        Output("collapse-clean", "is_open"),
         Input("button-read", "n_clicks"),
         State("upload-data", "filename"),
         State("upload-data", "contents"),
@@ -431,7 +442,7 @@ def main():
             filename = None
 
         if not filename:
-            return "", True, True, False, False
+            return "", True
 
         num_img_dict = {0: 1, 1: 5, 2: -1}
         num_images = num_img_dict[num_images]
@@ -454,8 +465,8 @@ def main():
         __dash_tomograms = read_uploaded_tomo(temp_file_path, num_images=num_images)
 
         if not __dash_tomograms:
-            return "File Unreadable", True, True, False, False
-        return "Tomograms read", False, False, True, True
+            return "File Unreadable", True
+        return "Tomograms read", False
 
     @app.callback(
         Input("upload-data", "filename"),
@@ -748,7 +759,11 @@ def main():
             html.Tr(html.Br()),
             html.Tr(
                 [
-                    html.Td(dbc.Button("Read tomograms", id="button-read", style={"width":  "100%"})),
+                    html.Td(
+                        dbc.Button(
+                            "Read tomograms", id="button-read", style={"width": "100%"}
+                        )
+                    ),
                 ]
             ),
             html.Tr(
@@ -787,6 +802,7 @@ def main():
                         id="dropdown-tomo",
                         style={"width": "300px"},
                         clearable=False,
+                        disabled=True
                     ),
                 ]
             ),
