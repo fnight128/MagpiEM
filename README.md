@@ -1,10 +1,10 @@
 # MagpiEM
 MagpiEM is a program for automating much of the cleaning process during sub-tomo averaging of proteins in regular lattices, such as membrane proteins or viral coats. 
 
-See the poster: 
+See the poster [here](https://figshare.com/articles/poster/MagpiEM_Poster/23631759).
 
 The software is not suitable for proteins which do not form any kind of regular lattice, such as individual ribosomes in solution. 
-Please note that the software is still very actively in development, and you may run into errors. Please report any issues here, or by email.
+Please note that the software is still very actively in development, and you may run into errors. Please report any issues here or by email.
 
 ## Installation
 MagpiEM is currently designed to be run locally on your desktop, rather than on a high-performance computation cluster. 
