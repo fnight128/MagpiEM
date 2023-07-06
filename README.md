@@ -1,7 +1,7 @@
 # MagpiEM
 MagpiEM is a program for automating much of the cleaning process during sub-tomo averaging of proteins in regular lattices, such as membrane proteins or viral coats. 
 
-See the poster [here](https://figshare.com/articles/poster/MagpiEM_Poster/23631759).
+See the poster [here](https://figshare.com/articles/poster/MagpiEM_Poster/23631759/).
 
 The software is not suitable for proteins which do not form any kind of regular lattice, such as individual ribosomes in solution. 
 Please note that the software is still very actively in development, and you may run into errors. Please report any issues here or by email.
@@ -12,6 +12,7 @@ MagpiEM is currently designed to be run locally on your desktop, rather than on 
 Open a python terminal (e.g. [anaconda](https://www.anaconda.com/)), with python 3.8 or above, and run
 
     pip install MagpiEM
+
 This should install the software and all dependencies.
 
 Note: to update the package in future, run
@@ -24,6 +25,7 @@ MagpiEM is currently started in the terminal and will open a dash-based GUI in y
 To start the software, type 
 
     magpiem
+
  in your python terminal. This will open the GUI in your default browser.
  
 Upload the file containing your particle data.

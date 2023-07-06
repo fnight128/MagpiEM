@@ -12,9 +12,10 @@ with open("requirements.txt") as reqs:
     requirements = reqs.read()
 
 setup(
-    name="magpiem",
-    version="0.2.12",
-    description="Automated cleaning of sub-tomogram particle picking",
+    name="MagpiEM",
+    version="0.2.14",
+    description="Automated cleaning of sub-tomogram particle picking data",
+    long_description_content_type="text/markdown",
     long_description=long_description,
     author="Frank Nightingale",
     author_email="frank.nightingale@linacre.ox.ac.uk",

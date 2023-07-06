@@ -265,8 +265,8 @@ def main():
     # otherwise looks laggy when opening
     @app.callback(
         Output("collapse-upload", "is_open"),
+        Output("collapse-clean", "is_open"),
         Output("collapse-graph-control", "is_open"),
-        Output("collapse-save", "is_open"),
         Input("dropdown-tomo", "disabled"),
         prevent_initial_callback=True,
     )
