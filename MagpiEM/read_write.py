@@ -244,7 +244,7 @@ def read_emc_mat(
         particles = Particle.from_array(pdata, tomo)
         tomo.assign_particles(particles)
         tomograms[gkey] = tomo
-        print("Tomo {}/{}: {}".format(idx, total_tomos, gkey))
+        print("Tomo {}/{}: {}".format(idx + 1, total_tomos, gkey))
     return tomograms
 
 

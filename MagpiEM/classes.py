@@ -960,12 +960,9 @@ class Tomogram:
         )
 
     def plot_all_lattices(
-        self, showing_removed_particles=False, fig: go.Figure = None, **kwargs
+        self, showing_removed_particles=False, **kwargs
     ) -> go.Figure:
-        if not fig or type(fig) != go.Figure:
-            fig = simple_figure()
-        else:
-            fig["data"] = []
+        fig = simple_figure()
         colour_dict = dict()
         hex_vals = colour_range(len(self.lattices))
         tomo_is_uncleaned = len(self.lattices) == 1
@@ -1008,7 +1005,7 @@ def simple_figure():
     layout = go.Layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
     fig = go.Figure(layout=layout)
     fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
-    fig.update_layout(scene_aspectmode="cube")
+    fig.update_layout(scene_aspectmode="data")
     fig["layout"]["uirevision"] = "a"
     fig.update_layout(margin={"l": 10, "r": 10, "t": 10, "b": 10})
     return fig

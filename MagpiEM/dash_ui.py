@@ -39,8 +39,6 @@ __dash_tomograms = dict()
 
 __last_click = 0.0
 
-__dash_camera = None
-
 TEMP_FILE_DIR = "static/"
 __CLEAN_YAML_NAME = "prev_clean_params.yml"
 
@@ -86,9 +84,18 @@ def main():
         return bar
 
     @app.callback(
+        Input("graph-picking", "figure"),
+        Output("div-null", "children"),
+    )
+    def check_graph(fig):
+        print(fig["data"][0].keys())
+        return ""
+
+
+    @app.callback(
         Output("graph-picking", "figure"),
         Output("div-graph-data", "children"),
-        Output("graph-picking", "relayoutData"),
+        # Output("graph-picking", "relayoutData"),
         Input("dropdown-tomo", "value"),
         Input("graph-picking", "clickData"),
         Input("switch-cone-plot", "on"),
@@ -96,7 +103,7 @@ def main():
         Input("button-set-cone-size", "n_clicks"),
         Input("switch-show-removed", "on"),
         Input("button-next-Tomogram", "disabled"),
-        State("graph-picking", "relayoutData"),
+        State("graph-picking", "figure"),
         prevent_initial_call=True,
     )
     def plot_tomo(
@@ -107,7 +114,7 @@ def main():
         _,
         show_removed: bool,
         __,
-        cam_data,
+        old_fig
     ):
         global __dash_tomograms
         global __last_click
@@ -119,7 +126,9 @@ def main():
 
         # must always return a graph object or breaks dash
         if not tomo_selection or tomo_selection not in __dash_tomograms.keys():
-            return empty_graph, params_message, cam_data
+            fig = empty_graph
+            fig.update_layout(uirevision="a")
+            return empty_graph, params_message  # , cam_data
 
         tomo = __dash_tomograms[tomo_selection]
 
@@ -143,7 +152,8 @@ def main():
             showing_removed_particles=show_removed, cone_size=cone_size
         )
 
-        return fig, params_message, cam_data
+        fig.update_layout(uirevision="a")
+        return fig, params_message
 
     @app.callback(
         Output("dropdown-filetype", "value"),
@@ -307,9 +317,7 @@ def main():
 
         # ensure temp directory clear
         all_files = glob.glob(TEMP_FILE_DIR + "*")
-        print("all", all_files)
         all_files = [file for file in all_files if __CLEAN_YAML_NAME not in file]
-        print("all", all_files)
         if all_files:
             print("Pre-existing temp files found, removing:", all_files)
             for f in all_files:
@@ -602,7 +610,7 @@ def main():
         print("Saving cleaning parameters")
         cleaning_params_dict = clean_params.dict_to_print
         with open(TEMP_FILE_DIR + __CLEAN_YAML_NAME, "w") as yaml_file:
-            print("written", yaml_file.write(yaml.safe_dump(cleaning_params_dict)))
+            yaml_file.write(yaml.safe_dump(cleaning_params_dict))
         return False, False, True
 
     size = "50px"
