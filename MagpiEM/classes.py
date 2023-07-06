@@ -936,7 +936,7 @@ class Tomogram:
 
     def particles_trace(
         self, df: pd.DataFrame, cone_size=False, cone_fix=True, **kwargs
-    ) -> go.Cone | go.Scatter3d:
+    ) -> "go.Cone | go.Scatter3d":
         if cone_size > 0:
             if cone_fix:
                 df = pd.concat([df, self.cone_fix])
@@ -944,10 +944,10 @@ class Tomogram:
         else:
             return Tomogram.scatter3d_trace(df, **kwargs)
 
-    def plot_all_particles(self, **kwargs) -> go.Cone | go.Scatter3d:
+    def plot_all_particles(self, **kwargs) -> "go.Cone | go.Scatter3d":
         return self.particles_trace(self.all_particles_df(), **kwargs)
 
-    def lattice_trace(self, lattice_id: int, **kwargs) -> go.Cone | go.Scatter3d:
+    def lattice_trace(self, lattice_id: int, **kwargs) -> "go.Cone | go.Scatter3d":
         # assert lattice_id in self.lattice_df_dict.keys(), (
         #     "Attempted to plot lattice {} from tomogram {}, but could "
         #     "not be found".format(lattice_id, self.name)
