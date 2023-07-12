@@ -130,7 +130,7 @@ def main():
             params_message = tomo.show_particle_data(clicked_particle_pos)
             tomo.toggle_selected(clicked_point["points"][0]["text"])
 
-        fig = tomo.plot_all_lattices()
+        fig = tomo.plot_all_lattices(cone_size=cone_size, showing_removed_particles=show_removed)
 
         return fig, params_message
 
@@ -256,109 +256,73 @@ def main():
         Output("collapse-upload", "is_open"),
         Output("collapse-clean", "is_open"),
         Output("collapse-graph-control", "is_open"),
+        Output("collapse-save", "is_open"),
         Input("dropdown-tomo", "disabled"),
         prevent_initial_callback=True,
     )
-    def open_cards(should_close):
-        cards_open = False, True, True
-        cards_closed = True, False, False
-        if should_close:
-            return cards_closed
-        else:
-            return cards_open
-
-    @app.callback(
-        Output("label-read", "children"),
-        Output("dropdown-tomo", "disabled"),
-        Input("upload-previous-session", "filename"),
-        Input("upload-previous-session", "contents"),
-        State("upload-data", "filename"),
-        State("upload-data", "contents"),
-        prevent_initial_call=True,
-    )
-    def load_previous_progress(
-        previous_filename, previous_contents, data_filename, data_contents
-    ):
+    def open_cards(_):
+        upload_phase = True, False, False, False
+        cleaning_phase = False, True, True, False
+        saving_phase = False, False, True, True
         global __dash_tomograms
 
-        failed_upload = True
-        successful_upload = False
-        if ctx.triggered_id != "upload-previous-session":
-            data_filename = None
-
-        if not previous_filename:
-            return "", *failed_upload
-        if not data_filename:
-            return (
-                "Please select a particle database (.mat or .star) first",
-                *failed_upload,
-            )
-
-        # ensure temp directory clear
-        all_files = glob.glob(TEMP_FILE_DIR + "*")
-        all_files = [file for file in all_files if __CLEAN_YAML_NAME not in file]
-        if all_files:
-            print("Pre-existing temp files found, removing:", all_files)
-            for f in all_files:
-                os.remove(f)
-
-        save_dash_upload(previous_filename, previous_contents)
-        save_dash_upload(data_filename, data_contents)
-
-        data_path = TEMP_FILE_DIR + data_filename
-        prev_path = TEMP_FILE_DIR + previous_filename
-
-        __dash_tomograms = read_uploaded_tomo(data_path)
         if not __dash_tomograms:
-            return "Particle database (.mat/.star) unreadable", *failed_upload
+            return upload_phase
 
-        try:
-            with open(prev_path, "r") as prev_yaml:
-                prev_yaml = yaml.safe_load(prev_yaml)
-        except yaml.YAMLError:
-            return "Previous session file unreadable", *failed_upload
+        random_tomo = next(iter(__dash_tomograms.values()))
+        if len(random_tomo.lattices.keys()) > 1:
+            return saving_phase
+        else:
+            return cleaning_phase
 
-        # check keys line up between files
-        geom_keys = set(__dash_tomograms.keys())
-        prev_keys = set(prev_yaml.keys())
-        prev_keys.discard(".__cleaning_parameters__.")
-
-        print("geom keys", geom_keys)
-        print("prev keys", prev_keys)
-
-        if not geom_keys == prev_keys:
-            if len(prev_keys) in {1, 5}:
-                # likely saved result after only loading few tomograms
-                return [
-                    "Keys do not match up between previous session and .mat file.",
-                    html.Br(),
-                    "Previous session only contains {0} keys, did you save the session with only {0} Tomogram(s) "
-                    "loaded?".format(len(prev_keys)),
-                ], *failed_upload
-            geom_missing = list(prev_keys.difference(geom_keys))
-            geom_msg = ""
-            if len(geom_missing) > 0:
-                geom_msg = "Keys present in previous session but not .mat: {}".format(
-                    ",".join(geom_missing)
-                )
-            prev_missing = list(geom_keys.difference(prev_keys))
-            prev_msg = ""
-            if len(prev_missing) > 0:
-                prev_msg = "Keys present in previous session but not .mat: {}".format(
-                    ",".join(geom_missing)
-                )
-            return [
-                "Keys do not match up between previous session and .mat file.",
-                html.Br(),
-                geom_msg,
-                html.Br(),
-                prev_msg,
-            ], *failed_upload
-
-        for tomo_name, tomo in __dash_tomograms.items():
-            tomo.apply_progress_dict(prev_yaml[tomo_name])
-
-        return "", *successful_upload
+    # @app.callback(
+    #     Output("label-read", "children"),
+    #     Output("dropdown-tomo", "disabled"),
+    #     Input("upload-previous-session", "filename"),
+    #     Input("upload-previous-session", "contents"),
+    #     State("upload-data", "filename"),
+    #     State("upload-data", "contents"),
+    #     prevent_initial_call=True,
+    # )
+    # def load_previous_progress(
+    #     previous_filename, previous_contents, data_filename, data_contents
+    # ):
+    #     global __dash_tomograms
+    #
+    #     failed_upload = True
+    #     successful_upload = False
+    #     if ctx.triggered_id != "upload-previous-session":
+    #         data_filename = None
+    #
+    #     if not previous_filename:
+    #         return "", *failed_upload
+    #     if not data_filename:
+    #         return (
+    #             "Please select a particle database (.mat or .star) first",
+    #             *failed_upload,
+    #         )
+    #
+    #     # ensure temp directory clear
+    #     all_files = glob.glob(TEMP_FILE_DIR + "*")
+    #     all_files = [file for file in all_files if __CLEAN_YAML_NAME not in file]
+    #     if all_files:
+    #         print("Pre-existing temp files found, removing:", all_files)
+    #         for f in all_files:
+    #             os.remove(f)
+    #
+    #     save_dash_upload(previous_filename, previous_contents)
+    #     save_dash_upload(data_filename, data_contents)
+    #
+    #     data_path = TEMP_FILE_DIR + data_filename
+    #     prev_path = TEMP_FILE_DIR + previous_filename
+    #
+    #     __dash_tomograms = read_uploaded_tomo(data_path)
+    #     if not __dash_tomograms:
+    #         return "Particle database (.mat/.star) unreadable", *failed_upload
+    #
+    #
+    #
+    #     return "", *successful_upload
 
     @app.callback(
         Output("dropdown-tomo", "options"),
@@ -414,22 +378,70 @@ def main():
             return
         return tomograms
 
+    def read_previous_progress(progress_file):
+        global __dash_tomograms
+
+        try:
+            with open(progress_file, "r") as prev_yaml:
+                prev_yaml = yaml.safe_load(prev_yaml)
+        except yaml.YAMLError:
+            return "Previous session file unreadable"
+
+        # check keys line up between files
+        geom_keys = set(__dash_tomograms.keys())
+        prev_keys = set(prev_yaml.keys())
+        prev_keys.discard(".__cleaning_parameters__.")
+
+        print(geom_keys)
+        print(prev_keys)
+
+        if not geom_keys == prev_keys:
+            if len(prev_keys) in {1, 5}:
+                # likely saved result after only loading few tomograms
+                return [
+                    "Keys do not match up between previous session and .mat file.",
+                    html.Br(),
+                    "Previous session only contains {0} keys, did you save the session with only {0} Tomogram(s) "
+                    "loaded?".format(len(prev_keys)),
+                ]
+            geom_missing = list(prev_keys.difference(geom_keys))
+            geom_msg = ""
+            if len(geom_missing) > 0:
+                geom_msg = "Keys present in previous session but not .mat: {}".format(
+                    ",".join(geom_missing)
+                )
+            prev_missing = list(geom_keys.difference(prev_keys))
+            prev_msg = ""
+            if len(prev_missing) > 0:
+                prev_msg = "Keys present in previous session but not .mat: {}".format(
+                    ",".join(geom_missing)
+                )
+            return [
+                "Keys do not match up between previous session and .mat file.",
+                html.Br(),
+                geom_msg,
+                html.Br(),
+                prev_msg,
+            ]
+
+        for tomo_name, tomo in __dash_tomograms.items():
+            tomo.apply_progress_dict(prev_yaml[tomo_name])
+
     @app.callback(
         Output("label-read", "children"),
         Output("dropdown-tomo", "disabled"),
         Input("button-read", "n_clicks"),
+        Input("upload-previous-session", "filename"),
+        Input("upload-previous-session", "contents"),
         State("upload-data", "filename"),
         State("upload-data", "contents"),
         State("slider-num-images", "value"),
         long_callback=True,
         prevent_initial_call=True,
     )
-    def read_tomograms(clicks, filename, contents, num_images):
-        if ctx.triggered_id != "button-read":
-            filename = None
-
+    def read_tomograms(_, previous_filename, previous_contents, filename, contents, num_images):
         if not filename:
-            return "", True
+            return "Please choose a particle database", True
 
         num_img_dict = {0: 1, 1: 5, 2: -1}
         num_images = num_img_dict[num_images]
@@ -445,12 +457,19 @@ def main():
                 os.remove(f)
 
         save_dash_upload(filename, contents)
-        temp_file_path = TEMP_FILE_DIR + filename
 
-        __dash_tomograms = read_uploaded_tomo(temp_file_path, num_images=num_images)
+        data_file_path = TEMP_FILE_DIR + filename
+
+        __dash_tomograms = read_uploaded_tomo(data_file_path, num_images=num_images)
 
         if not __dash_tomograms:
-            return "File Unreadable", True
+            return "Data file Unreadable", True
+
+        if ctx.triggered_id == "upload-previous-session":
+            save_dash_upload(previous_filename, previous_contents)
+            progress_path = TEMP_FILE_DIR + previous_filename
+            read_previous_progress(progress_path)
+
         return "Tomograms read", False
 
     @app.callback(

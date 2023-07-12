@@ -534,12 +534,15 @@ class Tomogram:
                         continue
                     if within(particle.distance_sq(particle2), drange):
                         particle.make_neighbours(particle2)
+            # clear region so no particles are checked twice
             regions[r_key] = set()
 
     def find_particle_neighbours_vectorised(self) -> None:
         """
         Assign neighbours to all particles in tomogram, according to given
-            distance range
+            distance range.
+            Vectorised version of find_particle_neighbours
+            Performance increase not significant (~5%),
         """
         print("vec")
         drange = self.cleaning_params.dist_range
@@ -905,6 +908,9 @@ class Tomogram:
     def scatter3d_trace(
         df: pd.DataFrame, colour="#000000", opacity=1.0
     ) -> go.Scatter3d:
+        """
+        Produce 3d scatter plot of given dataframe of particles
+        """
         return go.Scatter3d(
             x=df["x"],
             y=df["y"],
@@ -919,6 +925,9 @@ class Tomogram:
     def cone_trace(
         df: pd.DataFrame, colour="#000000", opacity=1, cone_size=10.0
     ) -> go.Cone:
+        """
+        Produce cone plot of given dataframe of particles
+        """
         return go.Cone(
             x=df["x"],
             y=df["y"],
@@ -937,6 +946,18 @@ class Tomogram:
     def particles_trace(
         self, df: pd.DataFrame, cone_size=False, cone_fix=True, **kwargs
     ) -> "go.Cone | go.Scatter3d":
+        """
+        Produce a plotly trace of a dataframe of particles.
+        Parameters
+        ----------
+        df: dataframe of particles
+        cone_size: size of cones to plot. A negative value instead plots points.
+        cone_fix: force the size of cones to be constant by adding an extra plot.
+
+        Returns
+        -------
+        Cone or Scatter3d trace of particles
+        """
         if cone_size > 0:
             if cone_fix:
                 df = pd.concat([df, self.cone_fix])
@@ -948,10 +969,6 @@ class Tomogram:
         return self.particles_trace(self.all_particles_df(), **kwargs)
 
     def lattice_trace(self, lattice_id: int, **kwargs) -> "go.Cone | go.Scatter3d":
-        # assert lattice_id in self.lattice_df_dict.keys(), (
-        #     "Attempted to plot lattice {} from tomogram {}, but could "
-        #     "not be found".format(lattice_id, self.name)
-        # )
         return self.particles_trace(self.lattice_df_dict[lattice_id], **kwargs)
 
     def checking_particle_trace(self, **kwargs):
@@ -998,6 +1015,15 @@ class Tomogram:
         return traces
 
     def plot_all_lattices(self, **kwargs) -> go.Figure:
+        """
+        Returns a figure of all lattices in a tomogram
+
+        kwargs:
+            "showing_removed_particles": True to show unclean particles. Defaults to False
+            "cone_size": size of cones to plot. Set to negative value to instead plot points.
+            "cone_fix": True to include a small set of cones which forces all cones to have the same
+                size. Defaults to True
+        """
         fig = simple_figure()
         traces = self.all_lattices_trace(**kwargs)
         for trace in traces:
@@ -1005,7 +1031,10 @@ class Tomogram:
         return fig
 
 
-def simple_figure():
+def simple_figure() -> go.Figure():
+    """
+    Returns a simple empty figure with generally appropriate settings for particle display
+    """
     layout = go.Layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
     fig = go.Figure(layout=layout)
     fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
@@ -1015,7 +1044,19 @@ def simple_figure():
     return fig
 
 
-def colour_range(num_points):
+def colour_range(num_points: int) -> list[str]:
+    """
+    Create an even range of colours across the spectrum
+
+    Parameters
+    ----------
+    num_points
+        Number of colours to create
+
+    Returns
+    -------
+        List of colours in the form "rgb({},{},{})"
+    """
     hsv_tuples = [(x * 1.0 / num_points, 0.75, 0.75) for x in range(num_points)]
     rgb_tuples = [colorsys.hsv_to_rgb(*x) for x in hsv_tuples]
     return [
