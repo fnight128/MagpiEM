@@ -28,7 +28,7 @@ import dash_daq as daq
 
 from flask import Flask
 
-from .classes import Cleaner
+from .classes import Cleaner, simple_figure
 from .read_write import read_relion_star, read_emc_mat, write_relion_star, write_emc_mat
 
 WHITE = "#FFFFFF"
@@ -36,6 +36,7 @@ GREY = "#646464"
 BLACK = "#000000"
 
 __dash_tomograms = dict()
+EMPTY_FIG = simple_figure()
 
 __last_click = 0.0
 
@@ -54,11 +55,6 @@ def main():
 
     if not os.path.exists(TEMP_FILE_DIR):
         os.makedirs(TEMP_FILE_DIR)
-
-    # set 'u' invalid so no points will show
-    empty_graph = go.Figure(
-        data=go.Cone(x=[0], y=[0], z=[0], u=[[0]], v=[0], w=[0], showscale=False)
-    )
 
     __dash_tomograms = dict()
 
@@ -84,18 +80,8 @@ def main():
         return bar
 
     @app.callback(
-        Input("graph-picking", "figure"),
-        Output("div-null", "children"),
-    )
-    def check_graph(fig):
-        print(fig["data"][0].keys())
-        return ""
-
-
-    @app.callback(
         Output("graph-picking", "figure"),
         Output("div-graph-data", "children"),
-        # Output("graph-picking", "relayoutData"),
         Input("dropdown-tomo", "value"),
         Input("graph-picking", "clickData"),
         Input("switch-cone-plot", "on"),
@@ -103,7 +89,6 @@ def main():
         Input("button-set-cone-size", "n_clicks"),
         Input("switch-show-removed", "on"),
         Input("button-next-Tomogram", "disabled"),
-        State("graph-picking", "figure"),
         prevent_initial_call=True,
     )
     def plot_tomo(
@@ -114,7 +99,6 @@ def main():
         _,
         show_removed: bool,
         __,
-        old_fig
     ):
         global __dash_tomograms
         global __last_click
@@ -124,11 +108,9 @@ def main():
 
         params_message = ""
 
-        # must always return a graph object or breaks dash
+        # must always return a graph object or can break dash
         if not tomo_selection or tomo_selection not in __dash_tomograms.keys():
-            fig = empty_graph
-            fig.update_layout(uirevision="a")
-            return empty_graph, params_message  # , cam_data
+            return EMPTY_FIG, params_message
 
         tomo = __dash_tomograms[tomo_selection]
 
@@ -148,11 +130,8 @@ def main():
             params_message = tomo.show_particle_data(clicked_particle_pos)
             tomo.toggle_selected(clicked_point["points"][0]["text"])
 
-        fig = tomo.plot_all_lattices(
-            showing_removed_particles=show_removed, cone_size=cone_size
-        )
+        fig = tomo.plot_all_lattices()
 
-        fig.update_layout(uirevision="a")
         return fig, params_message
 
     @app.callback(
@@ -459,9 +438,7 @@ def main():
 
         # ensure temp directory clear
         all_files = glob.glob(TEMP_FILE_DIR + "*")
-        print("all", all_files)
         all_files = [file for file in all_files if __CLEAN_YAML_NAME not in file]
-        print("all", all_files)
         if all_files:
             print("Pre-existing temp files found, removing:", all_files)
             for f in all_files:
@@ -810,7 +787,7 @@ def main():
                         id="dropdown-tomo",
                         style={"width": "300px"},
                         clearable=False,
-                        disabled=True
+                        disabled=True,
                     ),
                 ]
             ),
@@ -925,8 +902,7 @@ def main():
 
     graph = dcc.Graph(
         id="graph-picking",
-        figure=empty_graph,
-        responsive=True,
+        figure=EMPTY_FIG,
         config={
             "toImageButtonOptions": {
                 "format": "svg",
@@ -980,19 +956,6 @@ def main():
             ),
         ],
     )
-
-    @app.callback(
-        Output("graph-picking", "style"),
-        Input("dropdown-tomo", "value"),
-    )
-    def graph_visibility(t_id):
-        global __dash_tomograms
-        if not t_id:
-            return {"display": "none"}
-        elif t_id not in __dash_tomograms.keys():
-            return {"display": "none"}
-        else:
-            return {}
 
     @app.callback(
         Output("download-file", "data"),

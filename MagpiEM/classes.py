@@ -959,10 +959,8 @@ class Tomogram:
             self.checking_particles_df(), colour=BLACK, opacity=1.0, **kwargs
         )
 
-    def plot_all_lattices(
-        self, showing_removed_particles=False, **kwargs
-    ) -> go.Figure:
-        fig = simple_figure()
+    def all_lattices_trace(self, showing_removed_particles=False, **kwargs):
+        traces = []
         colour_dict = dict()
         hex_vals = colour_range(len(self.lattices))
         tomo_is_uncleaned = len(self.lattices) == 1
@@ -989,15 +987,21 @@ class Tomogram:
                     colour = BLACK
                 else:
                     continue
-            fig.add_trace(
+            traces.append(
                 self.lattice_trace(
                     lattice_key, colour=colour, opacity=opacity, **kwargs
                 )
             )
-
         # Checking Particles
-        fig.add_trace(self.checking_particle_trace(**kwargs))
+        traces.append(self.checking_particle_trace(**kwargs))
 
+        return traces
+
+    def plot_all_lattices(self, **kwargs) -> go.Figure:
+        fig = simple_figure()
+        traces = self.all_lattices_trace(**kwargs)
+        for trace in traces:
+            fig.add_trace(trace)
         return fig
 
 
@@ -1006,8 +1010,8 @@ def simple_figure():
     fig = go.Figure(layout=layout)
     fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
     fig.update_layout(scene_aspectmode="data")
-    fig["layout"]["uirevision"] = "a"
     fig.update_layout(margin={"l": 10, "r": 10, "t": 10, "b": 10})
+    fig["layout"]["uirevision"] = "a"
     return fig
 
 
