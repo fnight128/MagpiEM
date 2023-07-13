@@ -232,7 +232,8 @@ def read_emc_mat(
         ][geom_key]
     except NotImplementedError:
         # Occurs if file is formatted for older versions of matlab
-        full_geom = None
+        print(".mat file is from an old version of matlab. Please update the file.")
+        return None
 
     tomograms = dict()
     total_tomos = len(list(full_geom.keys()))
@@ -281,7 +282,7 @@ def read_relion_star(filename, num_images=-1) -> dict[str, Tomogram]:
         tomo_df = tomo_data[1]
 
         # relion uses preset ids
-        ids = tomo_df["rlnTomoParticleId"].to_numpy()
+        ids = list(tomo_df["rlnTomoParticleId"])
 
         # extract euler angles and convert to z-vectors
         angles = tomo_df[["rlnAngleRot", "rlnAngleTilt", "rlnAnglePsi"]]

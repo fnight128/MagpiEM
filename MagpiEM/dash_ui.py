@@ -222,21 +222,12 @@ def main():
 
         file_path = TEMP_FILE_DIR + filename + "_progress.yml"
 
-        cleaning_params_key = ".__cleaning_parameters__."
         global __dash_tomograms
         tomo_dict = {}
         for name, tomo in __dash_tomograms.items():
-            if name == cleaning_params_key:
-                print("Tomo {} has an invalid name and cannot be saved!".format(name))
-                continue
             tomo_dict[name] = tomo.write_progress_dict()
-        try:
-            tomo_dict[".__cleaning_parameters__."] = next(
-                iter(__dash_tomograms.values())
-            ).cleaning_params.dict_to_print
-        except Exception:
-            print("No cleaning parameters found to save")
         print("Saving keys:", tomo_dict.keys())
+        print(tomo_dict)
         prog = yaml.safe_dump(tomo_dict)
         with open(file_path, "w") as yaml_file:
             yaml_file.write(prog)
@@ -274,55 +265,6 @@ def main():
             return saving_phase
         else:
             return cleaning_phase
-
-    # @app.callback(
-    #     Output("label-read", "children"),
-    #     Output("dropdown-tomo", "disabled"),
-    #     Input("upload-previous-session", "filename"),
-    #     Input("upload-previous-session", "contents"),
-    #     State("upload-data", "filename"),
-    #     State("upload-data", "contents"),
-    #     prevent_initial_call=True,
-    # )
-    # def load_previous_progress(
-    #     previous_filename, previous_contents, data_filename, data_contents
-    # ):
-    #     global __dash_tomograms
-    #
-    #     failed_upload = True
-    #     successful_upload = False
-    #     if ctx.triggered_id != "upload-previous-session":
-    #         data_filename = None
-    #
-    #     if not previous_filename:
-    #         return "", *failed_upload
-    #     if not data_filename:
-    #         return (
-    #             "Please select a particle database (.mat or .star) first",
-    #             *failed_upload,
-    #         )
-    #
-    #     # ensure temp directory clear
-    #     all_files = glob.glob(TEMP_FILE_DIR + "*")
-    #     all_files = [file for file in all_files if __CLEAN_YAML_NAME not in file]
-    #     if all_files:
-    #         print("Pre-existing temp files found, removing:", all_files)
-    #         for f in all_files:
-    #             os.remove(f)
-    #
-    #     save_dash_upload(previous_filename, previous_contents)
-    #     save_dash_upload(data_filename, data_contents)
-    #
-    #     data_path = TEMP_FILE_DIR + data_filename
-    #     prev_path = TEMP_FILE_DIR + previous_filename
-    #
-    #     __dash_tomograms = read_uploaded_tomo(data_path)
-    #     if not __dash_tomograms:
-    #         return "Particle database (.mat/.star) unreadable", *failed_upload
-    #
-    #
-    #
-    #     return "", *successful_upload
 
     @app.callback(
         Output("dropdown-tomo", "options"),
