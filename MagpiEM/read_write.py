@@ -265,7 +265,7 @@ def read_relion_star(filename, num_images=-1) -> dict[str, Tomogram]:
     Returns
     ----------
     tomograms : dict {string : Tomogram}
-        Dictionary of read tomgrams
+        Dictionary of read tomograms
         If file is unreadable, returns nothing
 
     """

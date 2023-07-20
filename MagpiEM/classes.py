@@ -505,7 +505,7 @@ class Tomogram:
             self.delete_lattice(n)
         self.lattices[0] = set()
 
-    def find_particle_neighbours(self) -> None:
+    def find_particle_neighbours(self, drange=None) -> None:
         """
         Assign neighbours to all particles in tomogram, according to given
             distance range
@@ -514,7 +514,8 @@ class Tomogram:
         drange
             Ordered list of min/max distances, squared.
         """
-        drange = self.cleaning_params.dist_range
+        if not drange:
+            drange = self.cleaning_params.dist_range
         particles = self.all_particles
         regions = Tomogram.assign_regions(particles, max(drange) ** 0.5)
         # Start with most populated region, so to maximise the number of particles which
