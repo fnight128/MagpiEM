@@ -17,7 +17,7 @@ release = ''
 
 # -- Options for HTML output ---------------------------------------------------
 
-html_theme = 'renku'
+html_theme = 'classic'
 html_theme_path = ['themes']
 html_title = "MagpiEM"
 #html_short_title = None
