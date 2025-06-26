@@ -4,7 +4,7 @@ prettytable
 scipy
 plotly==5.15.0
 pathlib
-dash==2.9.3
+dash==2.15.0
 dash_bootstrap_components==1.4.1
 dash_bootstrap_templates==1.0.8
 dash_extensions==1.0.1
