@@ -28,8 +28,8 @@ import dash_daq as daq
 
 from flask import Flask
 
-from .classes import Cleaner, simple_figure
-from .read_write import read_relion_star, read_emc_mat, write_relion_star, write_emc_mat
+from classes import Cleaner, simple_figure
+from read_write import read_relion_star, read_emc_mat, write_relion_star, write_emc_mat
 
 WHITE = "#FFFFFF"
 GREY = "#646464"
