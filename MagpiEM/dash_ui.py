@@ -39,6 +39,7 @@ __dash_tomograms = dict()
 EMPTY_FIG = simple_figure()
 
 __last_click = 0.0
+__progress = 0.0
 
 TEMP_FILE_DIR = "static/"
 __CLEAN_YAML_NAME = "prev_clean_params.yml"
@@ -69,15 +70,6 @@ def main():
             return "Choose File", ""
         else:
             return filename, "out_" + filename
-
-    def prog_bar(current_index, goal):
-        if current_index < 0 or goal < 0 or current_index > goal:
-            return "Unable to generate progress bar"
-        bar_length = 20
-        progress = math.floor((current_index / goal) * bar_length)
-        to_do = bar_length - progress
-        bar = "<{}{}> {}/{}".format("#" * progress, "-" * to_do, current_index, goal)
-        return bar
 
     @app.callback(
         Output("graph-picking", "figure"),
@@ -311,7 +303,7 @@ def main():
         chosen_tomo = tomo_keys[chosen_index]
         return tomo_keys, chosen_tomo
 
-    def read_uploaded_tomo(data_path, num_images=-1):
+    def read_uploaded_tomo(data_path, progress, num_images=-1):
         if ".mat" in data_path:
             tomograms = read_emc_mat(data_path, num_images=num_images)
         elif ".star" in data_path:
@@ -385,6 +377,9 @@ def main():
         if not filename:
             return "Please choose a particle database", True
 
+        global __progress
+        __progress = 0.0
+
         num_img_dict = {0: 1, 1: 5, 2: -1}
         num_images = num_img_dict[num_images]
 
@@ -402,7 +397,7 @@ def main():
 
         data_file_path = TEMP_FILE_DIR + filename
 
-        __dash_tomograms = read_uploaded_tomo(data_file_path, num_images=num_images)
+        __dash_tomograms = read_uploaded_tomo(data_file_path, __progress, num_images=num_images)
 
         if not __dash_tomograms:
             return "Data file Unreadable", True
@@ -467,6 +462,13 @@ def main():
             fp.write(base64.decodebytes(data))
 
     @app.callback(
+        Output("progress-processing", "value"),
+        Input("interval-processing", "n_intervals"))
+    def update_progress(_):
+        global __progress
+        return __progress * 100
+
+    @app.callback(
         Output("button-next-Tomogram", "disabled"),
         Output("collapse-clean", "is_open"),
         Output("collapse-save", "is_open"),
@@ -519,7 +521,9 @@ def main():
 
         print("Clean")
 
-        global __dash_tomograms, __clean_yaml_name
+        global __dash_tomograms, __clean_yaml_name, __progress
+
+        __progress = 0.0
 
         if ctx.triggered_id == "button-preview-clean":
             print("Preview")
@@ -541,7 +545,7 @@ def main():
                 formatted_time_remaining = str(
                     datetime.timedelta(seconds=secs_remaining)
                 ).split(".")[0]
-                print(prog_bar(clean_count, total_tomos))
+                __progress = clean_count/total_tomos
                 print("Time remaining:", formatted_time_remaining)
                 print()
 
@@ -900,6 +904,9 @@ def main():
                 )
             ),
             dbc.Row(html.Div(id="div-graph-data")),
+            dbc.Row([dbc.Progress(value=0, id="progress-processing", animated=True, striped=True,
+                                  style={"height": "30px"}),
+                     dcc.Interval(id="interval-processing", interval=100),]),
             dbc.Row([graph]),
             html.Footer(
                 html.Div(
