@@ -759,7 +759,7 @@ def main():
             html.Tr(
                 [
                     html.Td("Cone Plot", id="label-cone-plot"),
-                    daq.BooleanSwitch(id="switch-cone-plot", on=False),
+                    daq.BooleanSwitch(id="switch-cone-plot", on=True),
                 ]
             ),
             html.Tr(
