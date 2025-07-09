@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "magpiem"
-version = "0.2.21"
+version = "0.2.22"
 authors = [
   { name="Frank Nightingale", email="fnight128@gmail.com" },
 ]
