@@ -90,9 +90,11 @@ class Cleaner:
             target_dist = abs(target_dist)
             print("Target distance must be > 0, correcting to ", target_dist)
         return (
-            (target_dist - dist_tol) ** 2
-            if dist_tol < target_dist
-            else 0.0001 * dist_tol,
+            (
+                (target_dist - dist_tol) ** 2
+                if dist_tol < target_dist
+                else 0.0001 * dist_tol
+            ),
             (target_dist + dist_tol) ** 2,
         )
 

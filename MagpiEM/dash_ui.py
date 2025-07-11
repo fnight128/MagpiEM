@@ -122,7 +122,9 @@ def main():
             params_message = tomo.show_particle_data(clicked_particle_pos)
             tomo.toggle_selected(clicked_point["points"][0]["text"])
 
-        fig = tomo.plot_all_lattices(cone_size=cone_size, showing_removed_particles=show_removed)
+        fig = tomo.plot_all_lattices(
+            cone_size=cone_size, showing_removed_particles=show_removed
+        )
 
         return fig, params_message
 
@@ -373,7 +375,9 @@ def main():
         long_callback=True,
         prevent_initial_call=True,
     )
-    def read_tomograms(_, previous_filename, previous_contents, filename, contents, num_images):
+    def read_tomograms(
+        _, previous_filename, previous_contents, filename, contents, num_images
+    ):
         if not filename:
             return "Please choose a particle database", True
 
@@ -397,7 +401,9 @@ def main():
 
         data_file_path = TEMP_FILE_DIR + filename
 
-        __dash_tomograms = read_uploaded_tomo(data_file_path, __progress, num_images=num_images)
+        __dash_tomograms = read_uploaded_tomo(
+            data_file_path, __progress, num_images=num_images
+        )
 
         if not __dash_tomograms:
             return "Data file Unreadable", True
@@ -463,7 +469,8 @@ def main():
 
     @app.callback(
         Output("progress-processing", "value"),
-        Input("interval-processing", "n_intervals"))
+        Input("interval-processing", "n_intervals"),
+    )
     def update_progress(_):
         global __progress
         return __progress * 100
@@ -545,7 +552,7 @@ def main():
                 formatted_time_remaining = str(
                     datetime.timedelta(seconds=secs_remaining)
                 ).split(".")[0]
-                __progress = clean_count/total_tomos
+                __progress = clean_count / total_tomos
                 print("Time remaining:", formatted_time_remaining)
                 print()
 
@@ -652,7 +659,7 @@ def main():
             style={
                 "width": "100%",
                 "margin": "5px",
-                "height": "100%"
+                "height": "100%",
                 # "padding": "100px"
                 # "float": "right",
             },
@@ -904,9 +911,18 @@ def main():
                 )
             ),
             dbc.Row(html.Div(id="div-graph-data")),
-            dbc.Row([dbc.Progress(value=0, id="progress-processing", animated=True, striped=True,
-                                  style={"height": "30px"}),
-                     dcc.Interval(id="interval-processing", interval=100),]),
+            dbc.Row(
+                [
+                    dbc.Progress(
+                        value=0,
+                        id="progress-processing",
+                        animated=True,
+                        striped=True,
+                        style={"height": "30px"},
+                    ),
+                    dcc.Interval(id="interval-processing", interval=100),
+                ]
+            ),
             dbc.Row([graph]),
             html.Footer(
                 html.Div(
