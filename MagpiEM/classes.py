@@ -25,13 +25,28 @@ class Cleaner:
     dist_range: tuple
     ori_range: tuple
     curv_range: tuple
-
-    flipped_ori_range: list
-
-    dict_to_print: dict
+    flipped_ori_range: tuple
 
     def __init__(
         self,
+        cc_thresh: float,
+        min_neighbours: int,
+        min_lattice_size: int,
+        dist_range: tuple[float],
+        ori_range: tuple[float],
+        curv_range: tuple[float],
+        flipped_ori_range: tuple[float] | None,
+    ):
+        self.cc_threshold = cc_thresh
+        self.min_neighbours = min_neighbours
+        self.min_lattice_size = min_lattice_size
+        self.dist_range = dist_range
+        self.ori_range = ori_range
+        self.curv_range = curv_range
+        self.flipped_ori_range = flipped_ori_range
+
+    @staticmethod
+    def from_user_params(
         cc_thresh: float,
         min_neigh: int,
         min_lattice_size: int,
@@ -42,32 +57,41 @@ class Cleaner:
         target_curv: float,
         curv_tol: float,
         allow_flips: bool = False,
-    ):
-        self.cc_threshold = cc_thresh
-        self.min_neighbours = min_neigh
-        self.min_lattice_size = min_lattice_size
-        self.dist_range = Cleaner.dist_range(target_dist, dist_tol)
-        self.ori_range = Cleaner.ang_range_dotprod(target_ori, ori_tol)
-        self.curv_range = Cleaner.ang_range_dotprod(target_curv, curv_tol)
-        self.flipped_ori_range = (
-            [-x for x in reversed(self.ori_range)] if allow_flips else 0
+    ) -> "Cleaner":
+        dist_range = Cleaner.dist_range(target_dist, dist_tol)
+        ori_range = Cleaner.ang_range_dotprod(target_ori, ori_tol)
+        curv_range = Cleaner.ang_range_dotprod(target_curv, curv_tol)
+        flipped_ori_range = (-x for x in reversed(ori_range)) if allow_flips else 0
+        return Cleaner(
+            cc_thresh,
+            min_neigh,
+            min_lattice_size,
+            dist_range,
+            ori_range,
+            curv_range,
+            flipped_ori_range,
         )
-        self.dict_to_print = {
-            "distance": target_dist,
-            "distance tolerance": dist_tol,
-            "orientation": target_ori,
-            "orientation tolerance": ori_tol,
-            "curvature": target_curv,
-            "curvature tolerance": curv_tol,
-            "cc threshold": cc_thresh,
-            "min neighbours": min_neigh,
-            "min array size": min_lattice_size,
-            "allow flips": allow_flips,
+
+    def to_dict(self):
+        return {
+            "cc threshold": self.cc_threshold,
+            "min neighbours": self.min_neighbours,
+            "min lattice size": self.min_lattice_size,
+            "distance range": self.dist_range,
+            "orientation range": self.ori_range,
+            "curvature range": self.curv_range,
+            "flipped ori range": self.flipped_ori_range,
         }
 
+    @staticmethod
+    def from_dict(clean_dict: dict) -> "Cleaner":
+        return Cleaner(**clean_dict)
+
     def __str__(self):
+        dist_range = [np.round(dist ** 0.5, decimals=1) for dist in self.dist_range]
+        angle_ranges = [np.round(np.degrees(np.arccos(ang)), decimals=1) for ang in [*self.ori_range, *self.curv_range]]
         return "Allowed distances: {}-{}. Allowed orientations:{}-{}. Allowed curvatures:{}-{}.".format(
-            *self.dist_range, *self.ori_range, *self.curv_range
+            *dist_range, *angle_ranges
         )
 
     @staticmethod
@@ -405,6 +429,34 @@ class Particle:
 
     def get_neighbour_array(self, prop: str) -> np.ndarray:
         return Particle.get_property_array(self.neighbours, prop)
+
+    def to_dict(self) -> dict:
+        """
+        Serialise for JSON conversion
+        """
+        return {
+            "particle_id": self.particle_id,
+            "cc_score": self.cc_score,
+            "position": tuple(self.position),
+            "orientation": tuple(self.orientation),
+            "lattice": self.lattice,
+            # "tomogram" and "neighbours" fields do not need to be stored. Can be reassigned when reading if necessary.
+        }
+
+    @staticmethod
+    def from_dict(particle_dict: dict, tomogram: "Tomogram") -> "Particle":
+        """
+        Deserialise from JSON dict
+        """
+        particle = Particle(
+            particle_dict["particle_id"],
+            particle_dict["cc_score"],
+            np.array(particle_dict["position"]),
+            np.array(particle_dict["orientation"]),
+            tomogram,
+        )
+        particle.set_lattice(particle_dict["lattice"])
+        return particle
 
 
 class Tomogram:
@@ -1032,6 +1084,27 @@ class Tomogram:
         for trace in traces:
             fig.add_trace(trace)
         return fig
+
+    def to_dict(self) -> dict:
+        """
+        Serialise for JSON conversion
+        """
+        return {
+            "name": self.name,
+            "all_particles": [particle.to_dict() for particle in self.all_particles],
+        }
+
+    @staticmethod
+    def from_dict(tomo_dict: dict, cleaner: "Cleaner") -> "Tomogram":
+        """
+        Deserialise from JSON dict
+        """
+        tomo = Tomogram(tomo_dict["name"])
+        tomo_particles = {
+            Particle.from_dict(particle_dict, tomo)
+            for particle_dict in tomo_dict["all_particles"]
+        }
+        tomo.assign_particles(tomo_particles)
 
 
 def simple_figure() -> go.Figure():

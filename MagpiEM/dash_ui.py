@@ -513,7 +513,7 @@ def main():
         # print(inp_file)
         # tomo = Tomogram(name, particles)
 
-        clean_params = Cleaner(
+        clean_params = Cleaner.from_user_params(
             cc_thresh,
             min_neighbours,
             array_size,
@@ -557,7 +557,18 @@ def main():
                 print()
 
         print("Saving cleaning parameters")
-        cleaning_params_dict = clean_params.dict_to_print
+        cleaning_params_dict = {
+            "distance": dist_goal,
+            "distance tolerance": dist_tol,
+            "orientation": ori_goal,
+            "orientation tolerance": ori_tol,
+            "curvature": disp_goal,
+            "curvature tolerance": disp_tol,
+            "cc threshold": cc_thresh,
+            "min neighbours": min_neighbours,
+            "min array size": array_size,
+            "allow flips": allow_flips,
+        }
         with open(TEMP_FILE_DIR + __CLEAN_YAML_NAME, "w") as yaml_file:
             yaml_file.write(yaml.safe_dump(cleaning_params_dict))
         return False, False, True
