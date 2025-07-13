@@ -359,7 +359,7 @@ class Particle:
         distance = self.distance_sq(particle2) ** 0.5
         orientation = np.degrees(np.arccos(self.dot_orientation(particle2)))
         curvature = np.degrees(np.arccos(self.dot_curvature(particle2)))
-        return "Distance: {:.1f}\nOrientation: {:.1f}°\nDisplacement: {:.1f}°".format(
+        return "Distance: {:.1f}\nOrientation: {:.1f}°\nCurvature: {:.1f}°".format(
             distance, orientation, curvature
         )
 
