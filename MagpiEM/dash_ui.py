@@ -366,6 +366,7 @@ def main():
     @app.callback(
         Output("label-read", "children"),
         Output("dropdown-tomo", "disabled"),
+        Output("div-data-storage", "children"),
         Input("button-read", "n_clicks"),
         Input("upload-previous-session", "filename"),
         Input("upload-previous-session", "contents"),
@@ -413,7 +414,12 @@ def main():
             progress_path = TEMP_FILE_DIR + previous_filename
             read_previous_progress(progress_path)
 
-        return "Tomograms read", False
+        tomo_data_stores = []
+
+        for tomogram in __dash_tomograms.items():
+            tomo_data_stores.append(dcc.Store(id="store-tomogram-" + tomogram[0], data=tomogram[1].to_dict()))
+
+        return "Tomograms read", False, tomo_data_stores
 
     @app.callback(
         Input("upload-data", "filename"),
@@ -944,6 +950,7 @@ def main():
                     )
                 )
             ),
+            html.Div(id="div-data-storage"),
             emptydiv,
             dcc.ConfirmDialog(
                 id="confirm-cant-save-progress",
