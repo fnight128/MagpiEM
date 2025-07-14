@@ -88,8 +88,11 @@ class Cleaner:
         return Cleaner(**clean_dict)
 
     def __str__(self):
-        dist_range = [np.round(dist ** 0.5, decimals=1) for dist in self.dist_range]
-        angle_ranges = [np.round(np.degrees(np.arccos(ang)), decimals=1) for ang in [*self.ori_range, *self.curv_range]]
+        dist_range = [np.round(dist**0.5, decimals=1) for dist in self.dist_range]
+        angle_ranges = [
+            np.round(np.degrees(np.arccos(ang)), decimals=1)
+            for ang in [*self.ori_range, *self.curv_range]
+        ]
         return "Allowed distances: {}-{}. Allowed orientations:{}-{}. Allowed curvatures:{}-{}.".format(
             *dist_range, *angle_ranges
         )
