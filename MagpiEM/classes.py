@@ -88,8 +88,11 @@ class Cleaner:
         return Cleaner(**clean_dict)
 
     def __str__(self):
-        dist_range = [np.round(dist ** 0.5, decimals=1) for dist in self.dist_range]
-        angle_ranges = [np.round(np.degrees(np.arccos(ang)), decimals=1) for ang in [*self.ori_range, *self.curv_range]]
+        dist_range = [np.round(dist**0.5, decimals=1) for dist in self.dist_range]
+        angle_ranges = [
+            np.round(np.degrees(np.arccos(ang)), decimals=1)
+            for ang in [*self.ori_range, *self.curv_range]
+        ]
         return "Allowed distances: {}-{}. Allowed orientations:{}-{}. Allowed curvatures:{}-{}.".format(
             *dist_range, *angle_ranges
         )
@@ -409,7 +412,7 @@ class Particle:
         )
 
     @staticmethod
-    def get_property_array(particles: list["Particle"], prop: str) -> np.ndarray:
+    def get_property_array(particles: set["Particle"], prop: str) -> np.ndarray:
         """
 
         Parameters
@@ -1105,6 +1108,8 @@ class Tomogram:
             for particle_dict in tomo_dict["all_particles"]
         }
         tomo.assign_particles(tomo_particles)
+
+        return tomo
 
 
 def simple_figure() -> go.Figure():
