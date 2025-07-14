@@ -439,9 +439,9 @@ class Particle:
         """
         return {
             "particle_id": self.particle_id,
-            "cc_score": self.cc_score,
-            "position": tuple(self.position),
-            "orientation": tuple(self.orientation),
+            "cc_score": self.cc_score.item(),
+            "position": tuple(x.item() for x in self.position),
+            "orientation": tuple(x.item() for x in self.orientation),
             "lattice": self.lattice,
             # "tomogram" and "neighbours" fields do not need to be stored. Can be reassigned when reading if necessary.
         }

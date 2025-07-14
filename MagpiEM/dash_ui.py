@@ -11,6 +11,7 @@ import os
 import base64
 import math
 import yaml
+import json
 from pathlib import Path
 
 import webbrowser
@@ -417,6 +418,9 @@ def main():
         store_tomograms = {
             tomogram[0]: tomogram[1].to_dict() for tomogram in __dash_tomograms.items()
         }
+
+        with open("demofile.txt", "w") as f:
+            json.dump(store_tomograms, f)
 
         return "Tomograms read", False, {}
 
