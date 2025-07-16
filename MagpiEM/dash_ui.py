@@ -28,8 +28,9 @@ import dash_daq as daq
 
 from flask import Flask
 
-from .classes import Cleaner, simple_figure
-from .read_write import read_relion_star, read_emc_mat, write_relion_star, write_emc_mat
+from .classes import Tomogram, Cleaner, simple_figure
+from .read_write import read_relion_star, read_multiple_tomograms, write_relion_star, write_emc_mat, read_tomo_names, \
+    read_single_tomogram
 
 WHITE = "#FFFFFF"
 GREY = "#646464"
@@ -81,16 +82,22 @@ def main():
         Input("button-set-cone-size", "n_clicks"),
         Input("switch-show-removed", "on"),
         Input("button-next-Tomogram", "disabled"),
+        State("store-lattice-data", "data"),
+        State("upload-data", "filename"),
+        State("store-current-tomo", "data"),
         prevent_initial_call=True,
     )
     def plot_tomo(
-        tomo_selection: str,
-        clicked_point,
-        make_cones: bool,
-        cone_size: float,
-        _,
-        show_removed: bool,
-        __,
+            tomo_selection: str,
+            clicked_point,
+            make_cones: bool,
+            cone_size: float,
+            _,
+            show_removed: bool,
+            __,
+            data_test: list,
+            filename: str,
+            current_tomo: dict
     ):
         global __dash_tomograms
         global __last_click
@@ -100,11 +107,15 @@ def main():
 
         params_message = ""
 
+        print(current_tomo)
+
         # must always return a graph object or can break dash
-        if not tomo_selection or tomo_selection not in __dash_tomograms.keys():
+        if not current_tomo:
             return EMPTY_FIG, params_message
 
-        tomo = __dash_tomograms[tomo_selection]
+        tomo = Tomogram.from_dict(current_tomo)
+
+        print(tomo)
 
         # prevent clicked point lingering between callbacks
         if ctx.triggered_id != "graph-picking":
@@ -126,6 +137,7 @@ def main():
             cone_size=cone_size, showing_removed_particles=show_removed
         )
 
+        print(fig)
         return fig, params_message
 
     @app.callback(
@@ -263,31 +275,32 @@ def main():
     @app.callback(
         Output("dropdown-tomo", "options"),
         Output("dropdown-tomo", "value"),
+        Output("store-current-tomo", "data"),
         State("dropdown-tomo", "value"),
         Input("dropdown-tomo", "disabled"),
         Input("button-next-Tomogram", "n_clicks"),
         Input("button-previous-Tomogram", "n_clicks"),
+        State("store-lattice-data", "data"),
+        State("upload-data", "filename"),
         prevent_initial_call=True,
     )
-    def update_dropdown(current_val, disabled, _, __):
+    def update_dropdown(current_val, disabled, _, __, tomo_keys, filename):
         global __dash_tomograms
-
-        tomo_keys = list(__dash_tomograms.keys())
 
         # unfortunately need to merge two callbacks here, dash does not allow multiple
         # callbacks with the same output so use ctx to distinguish between cases
-        if len(tomo_keys) == 0:
-            return [], ""
+        if not tomo_keys:
+            return [], "", {}
 
         tomo_key_0 = tomo_keys[0]
 
         # enabling dropdown once cleaning finishes
         if ctx.triggered_id == "dropdown-tomo":
-            return tomo_keys, tomo_key_0
+            return tomo_keys, tomo_key_0, {}
 
         # moving to next/prev item in dropdown when next/prev Tomogram button pressed
         if not current_val:
-            return tomo_keys, ""
+            return tomo_keys, "", {}
 
         increment = 0
         if ctx.triggered_id == "button-next-Tomogram":
@@ -303,13 +316,17 @@ def main():
             chosen_index = 0
 
         chosen_tomo = tomo_keys[chosen_index]
-        return tomo_keys, chosen_tomo
+
+        current_tomo_dict = read_single_tomogram(TEMP_FILE_DIR + filename, chosen_tomo).to_dict()
+
+        return tomo_keys, chosen_tomo, current_tomo_dict
 
     def read_uploaded_tomo(data_path, progress, num_images=-1):
         if ".mat" in data_path:
-            tomograms = read_emc_mat(data_path, num_images=num_images)
+            tomograms = read_multiple_tomograms(data_path, num_images=num_images)
         elif ".star" in data_path:
-            tomograms = read_relion_star(data_path, num_images=num_images)
+            raise NotImplementedError("Support for .star files is not yet implemented")
+            # tomograms = read_relion_star(data_path, num_images=num_images)
         else:
             return
         return tomograms
@@ -327,9 +344,6 @@ def main():
         geom_keys = set(__dash_tomograms.keys())
         prev_keys = set(prev_yaml.keys())
         prev_keys.discard(".__cleaning_parameters__.")
-
-        print(geom_keys)
-        print(prev_keys)
 
         if not geom_keys == prev_keys:
             if len(prev_keys) in {1, 5}:
@@ -366,6 +380,7 @@ def main():
     @app.callback(
         Output("label-read", "children"),
         Output("dropdown-tomo", "disabled"),
+        Output("store-lattice-data", "data"),
         Input("button-read", "n_clicks"),
         Input("upload-previous-session", "filename"),
         Input("upload-previous-session", "contents"),
@@ -376,7 +391,7 @@ def main():
         prevent_initial_call=True,
     )
     def read_tomograms(
-        _, previous_filename, previous_contents, filename, contents, num_images
+            _, previous_filename, previous_contents, filename, contents, num_images
     ):
         if not filename:
             return "Please choose a particle database", True
@@ -413,7 +428,11 @@ def main():
             progress_path = TEMP_FILE_DIR + previous_filename
             read_previous_progress(progress_path)
 
-        return "Tomograms read", False
+        tomo_names = read_tomo_names(data_file_path)
+        if num_images != -1:
+            tomo_names = tomo_names[:num_images]
+
+        return "Tomograms read", False, tomo_names
 
     @app.callback(
         Input("upload-data", "filename"),
@@ -495,18 +514,18 @@ def main():
         long_callback=True,
     )
     def run_cleaning(
-        dist_goal: float,
-        dist_tol: float,
-        ori_goal: float,
-        ori_tol: float,
-        curv_goal: float,
-        curv_tol: float,
-        min_neighbours: int,
-        cc_thresh: float,
-        array_size: int,
-        allow_flips: bool,
-        clicks,
-        clicks2,
+            dist_goal: float,
+            dist_tol: float,
+            ori_goal: float,
+            ori_tol: float,
+            curv_goal: float,
+            curv_tol: float,
+            min_neighbours: int,
+            cc_thresh: float,
+            array_size: int,
+            allow_flips: bool,
+            clicks,
+            clicks2,
     ):
         if not clicks or clicks2:
             return True, True, False
@@ -678,7 +697,7 @@ def main():
         )
 
     def collapsing_card(
-        display_card: dbc.Card, collapse_id: str, start_open: bool = False
+            display_card: dbc.Card, collapse_id: str, start_open: bool = False
     ):
         return dbc.Collapse(
             display_card,
@@ -935,6 +954,7 @@ def main():
                 ]
             ),
             dbc.Row([graph]),
+            html.Div([dcc.Store(id="store-lattice-data"), dcc.Store("store-current-tomo")]),
             html.Footer(
                 html.Div(
                     dcc.Link(

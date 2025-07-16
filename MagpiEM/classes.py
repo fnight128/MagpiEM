@@ -1098,7 +1098,7 @@ class Tomogram:
         }
 
     @staticmethod
-    def from_dict(tomo_dict: dict, cleaner: "Cleaner") -> "Tomogram":
+    def from_dict(tomo_dict: dict) -> "Tomogram":
         """
         Deserialise from JSON dict
         """
@@ -1108,6 +1108,7 @@ class Tomogram:
             for particle_dict in tomo_dict["all_particles"]
         }
         tomo.assign_particles(tomo_particles)
+        return tomo
 
 
 def simple_figure() -> go.Figure():
