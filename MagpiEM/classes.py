@@ -58,6 +58,9 @@ class Cleaner:
         curv_tol: float,
         allow_flips: bool = False,
     ) -> "Cleaner":
+        """
+        Define a set of cleaning parameters from user specification
+        """
         dist_range = Cleaner.dist_range(target_dist, dist_tol)
         ori_range = Cleaner.ang_range_dotprod(target_ori, ori_tol)
         curv_range = Cleaner.ang_range_dotprod(target_curv, curv_tol)
@@ -72,7 +75,10 @@ class Cleaner:
             flipped_ori_range,
         )
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
+        """
+        Serialise
+        """
         return {
             "cc threshold": self.cc_threshold,
             "min neighbours": self.min_neighbours,
@@ -85,6 +91,9 @@ class Cleaner:
 
     @staticmethod
     def from_dict(clean_dict: dict) -> "Cleaner":
+        """
+        Deserialise
+        """
         return Cleaner(**clean_dict)
 
     def __str__(self):
@@ -320,6 +329,7 @@ class Particle:
                 neighbour.choose_new_lattice(lattice)
 
     def set_lattice(self, ar: int) -> None:
+        """Assign lattice to particle"""
         if self.lattice:
             self.tomo.lattices[self.lattice].discard(self)
         self.lattice = ar
