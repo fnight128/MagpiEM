@@ -81,8 +81,11 @@ def main():
     @app.callback(
         Output("graph-picking", "figure"),
         Output("div-graph-data", "children"),
+        Output("store-clicked-point", "data"),
         Input("dropdown-tomo", "value"),
         Input("graph-picking", "clickData"),
+        State("graph-picking", "figure"),
+        State("store-clicked-point", "data"),
         Input("switch-cone-plot", "on"),
         State("inp-cone-size", "value"),
         Input("button-set-cone-size", "n_clicks"),
@@ -96,6 +99,8 @@ def main():
     def plot_tomo(
         tomo_selection: str,
         clicked_point,
+        previous_figure,
+        previous_point_data,
         make_cones: bool,
         cone_size: float,
         _,
@@ -105,6 +110,7 @@ def main():
         filename: str,
         current_tomo: dict,
     ):
+        previous_data = previous_figure["data"]
         global __dash_tomograms
         global __last_click
 
@@ -115,32 +121,38 @@ def main():
 
         # must always return a graph object or can break dash
         if not current_tomo:
-            return EMPTY_FIG, params_message
+            return EMPTY_FIG, params_message, previous_point_data
 
         tomo = Tomogram.from_dict(current_tomo)
 
         # prevent clicked point lingering between callbacks
-        if ctx.triggered_id != "graph-picking":
-            clicked_point = None
-        else:
+        if ctx.triggered_id == "graph-picking":
             # strange error with cone plots makes completely random, erroneous clicks
             # happen right after clicking on cone plot - adding a cooldown
             # prevents this
             if time() - __last_click < 0.5:
                 raise PreventUpdate
             __last_click = time()
-            clicked_particle_pos = [
-                clicked_point["points"][0][c] for c in ["x", "y", "z"]
-            ]
-            params_message = tomo.show_particle_data(clicked_particle_pos)
-            tomo.toggle_selected(clicked_point["points"][0]["text"])
+            if previous_point_data:
+                print("calculating values")
+            else:
+                print(clicked_point["points"][0])
+                clicked_particle = clicked_point["points"][0]
+                particle_data_keys = ["x", "y", "z", "u", "v", "w"]
+                previous_point_data = {
+                    key: clicked_particle[key] for key in particle_data_keys
+                }
+            print(previous_point_data)
+            # params_message = tomo.show_particle_data(clicked_particle_pos)
+        else:
+            clicked_point = None
 
         fig = tomo.plot_all_lattices(
             cone_size=cone_size, showing_removed_particles=show_removed
         )
 
-        print(fig)
-        return fig, params_message
+        # print(fig)
+        return fig, params_message, previous_point_data
 
     @app.callback(
         Output("dropdown-filetype", "value"),
@@ -953,7 +965,11 @@ def main():
             ),
             dbc.Row([graph]),
             html.Div(
-                [dcc.Store(id="store-lattice-data"), dcc.Store("store-current-tomo")]
+                [
+                    dcc.Store(id="store-lattice-data"),
+                    dcc.Store(id="store-current-tomo"),
+                    dcc.Store(id="store-clicked-point"),
+                ]
             ),
             html.Footer(
                 html.Div(
