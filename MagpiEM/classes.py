@@ -372,7 +372,11 @@ class Particle:
         distance = self.distance_sq(particle2) ** 0.5
         orientation = np.degrees(np.arccos(self.dot_orientation(particle2)))
         curvature = np.degrees(np.arccos(self.dot_curvature(particle2)))
-        return {"Distance": distance, "Orientation": orientation, "Curvature": curvature}
+        return {
+            "Distance": distance,
+            "Orientation": orientation,
+            "Curvature": curvature,
+        }
 
     @staticmethod
     def from_array(
