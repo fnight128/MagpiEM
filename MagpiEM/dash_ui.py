@@ -117,7 +117,7 @@ def main():
         if not make_cones:
             cone_size = -1
 
-        params_message = ""
+        params_message = []
 
         # must always return a graph object or can break dash
         if not current_tomo:
@@ -125,7 +125,6 @@ def main():
 
         tomo = Tomogram.from_dict(current_tomo)
 
-        # prevent clicked point lingering between callbacks
         if ctx.triggered_id == "graph-picking":
             # strange error with cone plots makes completely random, erroneous clicks
             # happen right after clicking on cone plot - adding a cooldown
@@ -137,8 +136,8 @@ def main():
             orientation_keys = ["u", "v", "w"]
             __last_click = time()
             if previous_point_data:
+                # Calculate and return relation between particles
                 current_point_data = clicked_point["points"][0]
-                print("calculating values")
                 particles = []
                 for idx, particle_data in enumerate(
                     [previous_point_data, current_point_data]
@@ -159,17 +158,22 @@ def main():
                             Tomogram(""),
                         )
                     )
-
-                params_message = particles[0].calculate_params(particles[1])
+                if particles[0].distance_sq(particles[1]) < 0.001:
+                    # Picked the same particle twice
+                    raise PreventUpdate
+                params_dict = particles[0].calculate_params(particles[1])
+                for param_name, param_value in params_dict.items():
+                    params_message.append(f"{param_name}: {param_value:.2f}")
+                    params_message.append(html.Br())
                 previous_point_data = {}
             else:
-                print(clicked_point["points"][0])
                 clicked_particle = clicked_point["points"][0]
                 particle_data_keys = position_keys + orientation_keys
                 previous_point_data = {
                     key: clicked_particle[key] for key in particle_data_keys
                 }
         else:
+            # Necessary to prevent clicks from lingering between graphs
             clicked_point = None
 
         fig = tomo.plot_all_lattices(

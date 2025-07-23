@@ -367,14 +367,12 @@ class Particle:
         self.neighbours.add(particle2)
         particle2.neighbours.add(self)
 
-    def calculate_params(self, particle2: "Particle") -> str:
+    def calculate_params(self, particle2: "Particle") -> dict:
         """Return string describing parameters about two particles"""
         distance = self.distance_sq(particle2) ** 0.5
         orientation = np.degrees(np.arccos(self.dot_orientation(particle2)))
         curvature = np.degrees(np.arccos(self.dot_curvature(particle2)))
-        return "Distance: {:.1f}\nOrientation: {:.1f}°\nCurvature: {:.1f}°".format(
-            distance, orientation, curvature
-        )
+        return {"Distance": distance, "Orientation": orientation, "Curvature": curvature}
 
     @staticmethod
     def from_array(
