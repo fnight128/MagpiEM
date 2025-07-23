@@ -28,7 +28,7 @@ import dash_daq as daq
 
 from flask import Flask
 
-from .classes import Tomogram, Cleaner, simple_figure
+from .classes import Particle, Tomogram, Cleaner, simple_figure
 from .read_write import (
     read_relion_star,
     read_multiple_tomograms,
@@ -132,18 +132,43 @@ def main():
             # prevents this
             if time() - __last_click < 0.5:
                 raise PreventUpdate
+
+            position_keys = ["x", "y", "z"]
+            orientation_keys = ["u", "v", "w"]
             __last_click = time()
             if previous_point_data:
+                current_point_data = clicked_point["points"][0]
                 print("calculating values")
+                particles = []
+                for idx, particle_data in enumerate(
+                    [previous_point_data, current_point_data]
+                ):
+                    particles.append(
+                        Particle.from_dict(
+                            {
+                                "particle_id": idx,
+                                "cc_score": 1,
+                                "position": [
+                                    particle_data[key] for key in position_keys
+                                ],
+                                "orientation": [
+                                    particle_data[key] for key in orientation_keys
+                                ],
+                                "lattice": 1,
+                            },
+                            Tomogram(""),
+                        )
+                    )
+
+                params_message = particles[0].calculate_params(particles[1])
+                previous_point_data = {}
             else:
                 print(clicked_point["points"][0])
                 clicked_particle = clicked_point["points"][0]
-                particle_data_keys = ["x", "y", "z", "u", "v", "w"]
+                particle_data_keys = position_keys + orientation_keys
                 previous_point_data = {
                     key: clicked_particle[key] for key in particle_data_keys
                 }
-            print(previous_point_data)
-            # params_message = tomo.show_particle_data(clicked_particle_pos)
         else:
             clicked_point = None
 
