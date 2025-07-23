@@ -478,8 +478,6 @@ class Tomogram:
     removed_particles: set
     selected_lattices: set
 
-    checking_particles: list
-
     lattices: defaultdict
 
     particles_fate: defaultdict
@@ -499,7 +497,6 @@ class Tomogram:
         self.name = name
         self.selected_lattices = set()
         self.particles_fate = defaultdict(lambda: set())
-        self.checking_particles = []
 
     @staticmethod
     def assign_regions(particles: set["Particle"], max_dist: float) -> dict:
@@ -747,19 +744,6 @@ class Tomogram:
         """
         return Tomogram.particles_to_df(self.all_particles)
 
-    def checking_particles_df(self) -> pd.DataFrame:
-        """
-        Dataframe of specific "checking particles" used in dash to
-        calculate parameters between two particles
-
-        df formatted as described by :func:`~MagpiEM.Tomogram.particles_to_df`
-
-        Returns
-        -------
-            df of 0-2 particles
-        """
-        return Tomogram.particles_to_df(set(self.checking_particles))
-
     def autoclean(self) -> None:
         """
         Clean all particles in tomogram according to its
@@ -887,33 +871,6 @@ class Tomogram:
         for a_id in self.get_concave_arrays():
             self.toggle_selected(a_id)
 
-    def show_particle_data(self, position: np.ndarray) -> str:
-        """
-        Generate human-readable string describing relation between
-        two particles
-        First call of function assigns one particle
-        Second call calculates relation between the two (and resets state)
-        Parameters
-        ----------
-        position
-            Position of desired particle
-
-        Returns
-        -------
-            String describing particles' relationship
-        """
-        new_particle = self.get_particle_from_position(position)
-        if len(self.checking_particles) != 1:
-            self.checking_particles = [new_particle]
-            return "Pick a second point"
-
-        self.checking_particles.append(new_particle)
-
-        if self.checking_particles[0] == self.checking_particles[1]:
-            return "Please choose two separate points"
-
-        return self.checking_particles[0].calculate_params(self.checking_particles[1])
-
     def delete_lattice(self, n: int) -> None:
         """Delete lattice from tomogram and un-assign all its particles"""
         array_particles = self.lattices[n].copy()
@@ -1039,11 +996,6 @@ class Tomogram:
     def lattice_trace(self, lattice_id: int, **kwargs) -> "go.Cone | go.Scatter3d":
         return self.particles_trace(self.lattice_df_dict[lattice_id], **kwargs)
 
-    def checking_particle_trace(self, **kwargs):
-        return self.particles_trace(
-            self.checking_particles_df(), colour=BLACK, opacity=1.0, **kwargs
-        )
-
     def all_lattices_trace(self, showing_removed_particles=False, **kwargs):
         traces = []
         colour_dict = dict()
@@ -1077,8 +1029,6 @@ class Tomogram:
                     lattice_key, colour=colour, opacity=opacity, **kwargs
                 )
             )
-        # Checking Particles
-        traces.append(self.checking_particle_trace(**kwargs))
 
         return traces
 
