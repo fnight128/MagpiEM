@@ -944,7 +944,7 @@ class Tomogram:
             z=df["z"],
             mode="markers",
             text=df["n"],
-            marker=dict(size=6, color=colour, opacity=opacity),
+            marker={"size": 6, "color": colour, "opacity": opacity},
             showlegend=False,
             **kwargs,
         )
