@@ -51,6 +51,8 @@ __progress = 0.0
 TEMP_FILE_DIR = "static/"
 __CLEAN_YAML_NAME = "prev_clean_params.yml"
 
+CAMERA_KEY = "scene.camera"
+
 
 def main():
     server = Flask(__name__)
@@ -85,6 +87,7 @@ def main():
         Input("dropdown-tomo", "value"),
         Input("graph-picking", "clickData"),
         State("graph-picking", "figure"),
+        State("store-camera", "data"),
         State("store-clicked-point", "data"),
         Input("switch-cone-plot", "on"),
         State("inp-cone-size", "value"),
@@ -94,12 +97,14 @@ def main():
         State("store-lattice-data", "data"),
         State("upload-data", "filename"),
         State("store-current-tomo", "data"),
+        State("div-graph-data", "children"),
         prevent_initial_call=True,
     )
     def plot_tomo(
         tomo_selection: str,
         clicked_point,
         fig,
+        camera_data,
         previous_point_data,
         make_cones: bool,
         cone_size: float,
@@ -109,14 +114,13 @@ def main():
         data_test: list,
         filename: str,
         current_tomo: dict,
+        params_message,
     ):
         global __dash_tomograms
         global __last_click
 
         if not make_cones:
             cone_size = -1
-
-        params_message = []
 
         # must always return a graph object or can break dash
         if not current_tomo:
@@ -159,6 +163,7 @@ def main():
                     # Picked the same particle twice
                     raise PreventUpdate
                 params_dict = particles[0].calculate_params(particles[1])
+                params_message = []
                 for param_name, param_value in params_dict.items():
                     params_message.append(f"{param_name}: {param_value:.2f}")
                     params_message.append(html.Br())
@@ -172,13 +177,26 @@ def main():
         elif ctx.triggered_id == "dropdown-tomo":
             # Necessary to prevent clicks from lingering between graphs
             clicked_point = None
-            tomo = Tomogram.from_dict(current_tomo)
-            fig = tomo.plot_all_lattices(
-                cone_size=cone_size, showing_removed_particles=show_removed
-            )
+        tomo = Tomogram.from_dict(current_tomo)
+        fig = tomo.plot_all_lattices(
+            cone_size=cone_size, showing_removed_particles=show_removed
+        )
 
+        if camera_data:
+            fig["layout"]["scene"]["camera"] = camera_data
         # print(fig)
         return fig, params_message, previous_point_data
+
+    @app.callback(
+        Output("store-camera", "data"),
+        Input("graph-picking", "relayoutData"),
+        State("store-camera", "data"),
+    )
+    def save_camera_position(relayout_data, previous_camera):
+        if relayout_data and CAMERA_KEY in relayout_data:
+            return relayout_data[CAMERA_KEY]
+        else:
+            return previous_camera
 
     @app.callback(
         Output("dropdown-filetype", "value"),
@@ -995,6 +1013,7 @@ def main():
                     dcc.Store(id="store-lattice-data"),
                     dcc.Store(id="store-current-tomo"),
                     dcc.Store(id="store-clicked-point"),
+                    dcc.Store(id="store-camera"),
                 ]
             ),
             html.Footer(
