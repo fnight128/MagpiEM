@@ -53,6 +53,11 @@ __CLEAN_YAML_NAME = "prev_clean_params.yml"
 
 CAMERA_KEY = "scene.camera"
 
+POSITION_KEYS = ["x", "y", "z"]
+ORIENTATION_KEYS = ["u", "v", "w"]
+
+TEMP_TRACE_NAME = "selected_particle_trace"
+
 
 def main():
     server = Flask(__name__)
@@ -80,6 +85,18 @@ def main():
         else:
             return filename, "out_" + filename
 
+    def particle_from_point_data(point_data: dict, idx=0) -> Particle:
+        return Particle.from_dict(
+            {
+                "particle_id": idx,
+                "cc_score": 1,
+                "position": [point_data[key] for key in POSITION_KEYS],
+                "orientation": [point_data[key] for key in ORIENTATION_KEYS],
+                "lattice": 1,
+            },
+            Tomogram(""),
+        )
+
     @app.callback(
         Output("graph-picking", "figure"),
         Output("div-graph-data", "children"),
@@ -94,14 +111,12 @@ def main():
         Input("button-set-cone-size", "n_clicks"),
         Input("switch-show-removed", "on"),
         Input("button-next-Tomogram", "disabled"),
-        State("store-lattice-data", "data"),
-        State("upload-data", "filename"),
         State("store-current-tomo", "data"),
         State("div-graph-data", "children"),
         prevent_initial_call=True,
     )
     def plot_tomo(
-        tomo_selection: str,
+        ___,
         clicked_point,
         fig,
         camera_data,
@@ -111,8 +126,6 @@ def main():
         _,
         show_removed: bool,
         __,
-        data_test: list,
-        filename: str,
         current_tomo: dict,
         params_message,
     ):
@@ -133,47 +146,46 @@ def main():
             if time() - __last_click < 0.5:
                 raise PreventUpdate
 
-            position_keys = ["x", "y", "z"]
-            orientation_keys = ["u", "v", "w"]
+            for i, trace in enumerate(fig["data"]):
+                if "name" in trace and trace["name"] == TEMP_TRACE_NAME:
+                    fig["data"].remove(fig["data"][i])
+                    break
+
             __last_click = time()
             if previous_point_data:
                 # Calculate and return relation between particles
                 current_point_data = clicked_point["points"][0]
-                particles = []
-                for idx, particle_data in enumerate(
+                selected_particles = []
+                for idx, point_data in enumerate(
                     [previous_point_data, current_point_data]
                 ):
-                    particles.append(
-                        Particle.from_dict(
-                            {
-                                "particle_id": idx,
-                                "cc_score": 1,
-                                "position": [
-                                    particle_data[key] for key in position_keys
-                                ],
-                                "orientation": [
-                                    particle_data[key] for key in orientation_keys
-                                ],
-                                "lattice": 1,
-                            },
-                            Tomogram(""),
-                        )
+                    selected_particles.append(
+                        particle_from_point_data(point_data, idx=idx)
                     )
-                if particles[0].distance_sq(particles[1]) < 0.001:
+                if selected_particles[0].distance_sq(selected_particles[1]) < 0.001:
                     # Picked the same particle twice
                     raise PreventUpdate
-                params_dict = particles[0].calculate_params(particles[1])
+                params_dict = selected_particles[0].calculate_params(
+                    selected_particles[1]
+                )
                 params_message = []
                 for param_name, param_value in params_dict.items():
                     params_message.append(f"{param_name}: {param_value:.2f}")
                     params_message.append(html.Br())
                 previous_point_data = {}
             else:
-                clicked_particle = clicked_point["points"][0]
-                particle_data_keys = position_keys + orientation_keys
+                point_data = clicked_point["points"][0]
+                particle_data_keys = POSITION_KEYS + ORIENTATION_KEYS
                 previous_point_data = {
-                    key: clicked_particle[key] for key in particle_data_keys
+                    key: point_data[key] for key in particle_data_keys
                 }
+                selected_particles = {particle_from_point_data(point_data)}
+            selected_particles_df = Tomogram.particles_to_df(selected_particles)
+            particles_scatter_trace = Tomogram.scatter3d_trace(
+                selected_particles_df, name=TEMP_TRACE_NAME
+            )
+            fig["data"].append(particles_scatter_trace)
+
         elif ctx.triggered_id == "dropdown-tomo":
             # Necessary to prevent clicks from lingering between graphs
             clicked_point = None

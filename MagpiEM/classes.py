@@ -933,7 +933,7 @@ class Tomogram:
 
     @staticmethod
     def scatter3d_trace(
-        df: pd.DataFrame, colour="#000000", opacity=1.0
+        df: pd.DataFrame, colour="#000000", opacity=1.0, **kwargs
     ) -> go.Scatter3d:
         """
         Produce 3d scatter plot of given dataframe of particles
@@ -946,11 +946,12 @@ class Tomogram:
             text=df["n"],
             marker=dict(size=6, color=colour, opacity=opacity),
             showlegend=False,
+            **kwargs,
         )
 
     @staticmethod
     def cone_trace(
-        df: pd.DataFrame, colour="#000000", opacity=1, cone_size=10.0
+        df: pd.DataFrame, colour="#000000", opacity=1, cone_size=10.0, **kwargs
     ) -> go.Cone:
         """
         Produce cone plot of given dataframe of particles
@@ -968,6 +969,7 @@ class Tomogram:
             colorscale=[[0, colour], [1, colour]],
             showscale=False,
             opacity=opacity,
+            **kwargs,
         )
 
     def particles_trace(
