@@ -177,10 +177,10 @@ def main():
         elif ctx.triggered_id == "dropdown-tomo":
             # Necessary to prevent clicks from lingering between graphs
             clicked_point = None
-        tomo = Tomogram.from_dict(current_tomo)
-        fig = tomo.plot_all_lattices(
-            cone_size=cone_size, showing_removed_particles=show_removed
-        )
+            tomo = Tomogram.from_dict(current_tomo)
+            fig = tomo.plot_all_lattices(
+                cone_size=cone_size, showing_removed_particles=show_removed
+            )
 
         if camera_data:
             fig["layout"]["scene"]["camera"] = camera_data
