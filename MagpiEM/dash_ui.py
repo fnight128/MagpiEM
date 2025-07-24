@@ -99,7 +99,7 @@ def main():
     def plot_tomo(
         tomo_selection: str,
         clicked_point,
-        previous_figure,
+        fig,
         previous_point_data,
         make_cones: bool,
         cone_size: float,
@@ -110,7 +110,6 @@ def main():
         filename: str,
         current_tomo: dict,
     ):
-        previous_data = previous_figure["data"]
         global __dash_tomograms
         global __last_click
 
@@ -122,8 +121,6 @@ def main():
         # must always return a graph object or can break dash
         if not current_tomo:
             return EMPTY_FIG, params_message, previous_point_data
-
-        tomo = Tomogram.from_dict(current_tomo)
 
         if ctx.triggered_id == "graph-picking":
             # strange error with cone plots makes completely random, erroneous clicks
@@ -172,13 +169,13 @@ def main():
                 previous_point_data = {
                     key: clicked_particle[key] for key in particle_data_keys
                 }
-        else:
+        elif ctx.triggered_id == "dropdown-tomo":
             # Necessary to prevent clicks from lingering between graphs
             clicked_point = None
-
-        fig = tomo.plot_all_lattices(
-            cone_size=cone_size, showing_removed_particles=show_removed
-        )
+            tomo = Tomogram.from_dict(current_tomo)
+            fig = tomo.plot_all_lattices(
+                cone_size=cone_size, showing_removed_particles=show_removed
+            )
 
         # print(fig)
         return fig, params_message, previous_point_data
