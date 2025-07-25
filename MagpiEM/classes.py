@@ -746,7 +746,7 @@ class Tomogram:
         """
         return Tomogram.particles_to_df(self.all_particles)
 
-    def autoclean(self) -> None:
+    def autoclean(self) -> dict:
         """
         Clean all particles in tomogram according to its
         assigned cleaning params
@@ -790,7 +790,7 @@ class Tomogram:
                     self.particles_fate["small_array"].add(particle)
         for lattice_key in bad_lattices:
             self.delete_lattice(lattice_key)
-        self.generate_lattice_dfs()
+        return self.write_progress_dict()
 
     def assign_cone_fix_df(self) -> None:
         """
@@ -914,6 +914,9 @@ class Tomogram:
         prog_dict
             Dict formatted according to Tomogram.write_progress_dict
         """
+        if not prog_dict:
+            return
+
         inverted_prog_dict = {}
         for array, particles in prog_dict.items():
             # skip dict which stores which arrays are selected
@@ -998,7 +1001,9 @@ class Tomogram:
         return self.particles_trace(self.all_particles_df(), **kwargs)
 
     def lattice_trace(self, lattice_id: int, **kwargs) -> "go.Cone | go.Scatter3d":
-        return self.particles_trace(self.lattice_df_dict[lattice_id], **kwargs)
+        return self.particles_trace(
+            self.lattice_df_dict[lattice_id], name=lattice_id, **kwargs
+        )
 
     def all_lattices_trace(self, showing_removed_particles=False, **kwargs):
         traces = []

@@ -106,27 +106,29 @@ def main():
         State("graph-picking", "figure"),
         State("store-camera", "data"),
         State("store-clicked-point", "data"),
+        State("store-lattice-data", "data"),
         Input("switch-cone-plot", "on"),
         State("inp-cone-size", "value"),
         Input("button-set-cone-size", "n_clicks"),
         Input("switch-show-removed", "on"),
         Input("button-next-Tomogram", "disabled"),
-        State("store-current-tomo", "data"),
+        State("upload-data", "filename"),
         State("div-graph-data", "children"),
         prevent_initial_call=True,
     )
     def plot_tomo(
-        ___,
+        selected_tomo_name,
         clicked_point,
         fig,
         camera_data,
         previous_point_data,
+        lattice_data,
         make_cones: bool,
         cone_size: float,
         _,
         show_removed: bool,
         __,
-        current_tomo: dict,
+        filename: str,
         params_message,
     ):
         global __dash_tomograms
@@ -136,7 +138,7 @@ def main():
             cone_size = -1
 
         # must always return a graph object or can break dash
-        if not current_tomo:
+        if not selected_tomo_name:
             return EMPTY_FIG, params_message, previous_point_data
 
         if ctx.triggered_id == "graph-picking":
@@ -190,8 +192,10 @@ def main():
             # Necessary to prevent clicks from lingering between graphs
             clicked_point = None
             camera_data = None
-            tomo = Tomogram.from_dict(current_tomo)
-            fig = tomo.plot_all_lattices(
+            current_tomo = read_single_tomogram(TEMP_FILE_DIR + filename, selected_tomo_name)
+            if lattice_data and selected_tomo_name in lattice_data:
+                current_tomo.apply_progress_dict(lattice_data[selected_tomo_name])
+            fig = current_tomo.plot_all_lattices(
                 cone_size=cone_size, showing_removed_particles=show_removed
             )
 
@@ -346,7 +350,6 @@ def main():
     @app.callback(
         Output("dropdown-tomo", "options"),
         Output("dropdown-tomo", "value"),
-        Output("store-current-tomo", "data"),
         State("dropdown-tomo", "value"),
         Input("dropdown-tomo", "disabled"),
         Input("button-next-Tomogram", "n_clicks"),
@@ -355,13 +358,14 @@ def main():
         State("upload-data", "filename"),
         prevent_initial_call=True,
     )
-    def update_dropdown(current_val, disabled, _, __, tomo_keys, filename):
+    def update_dropdown(current_val, disabled, _, __, lattice_data, filename):
 
         # unfortunately need to merge two callbacks here, dash does not allow multiple
         # callbacks with the same output so use ctx to distinguish between cases
+        tomo_keys = list(lattice_data.keys())
         print(tomo_keys)
         if not tomo_keys:
-            return [], "", {}
+            return [], ""
 
         if not current_val:
             current_val = tomo_keys[0]
@@ -381,12 +385,14 @@ def main():
             chosen_index = 0
 
         chosen_tomo = tomo_keys[chosen_index]
+        #
+        # current_tomo = read_single_tomogram(TEMP_FILE_DIR + filename, chosen_tomo)
+        #
+        # if lattice_data and chosen_tomo in lattice_data.keys():
+        #     print("applying")
+        #     current_tomo.apply_progress_dict(lattice_data[chosen_tomo])
 
-        current_tomo_dict = read_single_tomogram(
-            TEMP_FILE_DIR + filename, chosen_tomo
-        ).to_dict()
-
-        return tomo_keys, chosen_tomo, current_tomo_dict
+        return tomo_keys, chosen_tomo
 
     def read_uploaded_tomo(data_path, progress, num_images=-1):
         if ".mat" in data_path:
@@ -498,6 +504,7 @@ def main():
         tomo_names = read_tomo_names(data_file_path)
         if num_images != -1:
             tomo_names = tomo_names[:num_images]
+        tomo_names = {tomo_name: {} for tomo_name in tomo_names}
 
         return "Tomograms read", False, tomo_names
 
@@ -543,9 +550,7 @@ def main():
 
         tomo.reset_cleaning()
 
-        tomo.autoclean()
-
-        tomo.generate_lattice_dfs()
+        return tomo.autoclean()
 
     def save_dash_upload(filename, contents):
         print("Uploading file:", filename)
@@ -565,6 +570,7 @@ def main():
         Output("button-next-Tomogram", "disabled"),
         Output("collapse-clean", "is_open"),
         Output("collapse-save", "is_open"),
+        Output("store-lattice-data", "data"),
         State("inp-dist-goal", "value"),
         State("inp-dist-tol", "value"),
         State("inp-ori-goal", "value"),
@@ -595,7 +601,7 @@ def main():
         clicks2,
     ):
         if not clicks or clicks2:
-            return True, True, False
+            return True, True, False, {}
         # print(inp_file)
         # tomo = Tomogram(name, particles)
 
@@ -616,31 +622,27 @@ def main():
 
         global __dash_tomograms, __clean_yaml_name, __progress
 
+        lattice_data = {}
+
         __progress = 0.0
 
-        if ctx.triggered_id == "button-preview-clean":
-            print("Preview")
-            clean_tomo(list(__dash_tomograms.values())[0], clean_params)
-            return False, True, True
-        else:
-            print("Full")
-            clean_count = 0
-            clean_total_time = 0
-            total_tomos = len(__dash_tomograms.keys())
-            for tomo in __dash_tomograms.values():
-                t0 = time()
-                clean_tomo(tomo, clean_params)
-                clean_total_time += time() - t0
-                clean_count += 1
-                tomos_remaining = total_tomos - clean_count
-                clean_speed = clean_total_time / clean_count
-                secs_remaining = clean_speed * tomos_remaining
-                formatted_time_remaining = str(
-                    datetime.timedelta(seconds=secs_remaining)
-                ).split(".")[0]
-                __progress = clean_count / total_tomos
-                print("Time remaining:", formatted_time_remaining)
-                print()
+        clean_count = 0
+        clean_total_time = 0
+        total_tomos = len(__dash_tomograms.keys())
+        for tomo_name, tomo in __dash_tomograms.items():
+            t0 = time()
+            lattice_data[tomo_name] = clean_tomo(tomo, clean_params)
+            clean_total_time += time() - t0
+            clean_count += 1
+            tomos_remaining = total_tomos - clean_count
+            clean_speed = clean_total_time / clean_count
+            secs_remaining = clean_speed * tomos_remaining
+            formatted_time_remaining = str(
+                datetime.timedelta(seconds=secs_remaining)
+            ).split(".")[0]
+            __progress = clean_count / total_tomos
+            print("Time remaining:", formatted_time_remaining)
+            print()
 
         print("Saving cleaning parameters")
         cleaning_params_dict = {
@@ -655,9 +657,10 @@ def main():
             "min array size": array_size,
             "allow flips": allow_flips,
         }
+
         with open(TEMP_FILE_DIR + __CLEAN_YAML_NAME, "w") as yaml_file:
             yaml_file.write(yaml.safe_dump(cleaning_params_dict))
-        return False, False, True
+        return False, False, True, lattice_data
 
     size = "50px"
 
