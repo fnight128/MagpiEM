@@ -15,7 +15,12 @@
 extern "C" {
 #endif
 
-EXPORT float cmult(int int_param, float float_param);
+struct Particle {
+    float x, y, z;
+    float rx, ry, rz;
+};
+
+EXPORT void clean_particles(float* data, int num_points, int* results);
 
 #ifdef __cplusplus
 }
