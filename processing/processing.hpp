@@ -20,7 +20,7 @@ struct Particle {
     float rx, ry, rz;
 };
 
-EXPORT void clean_particles(float* data, int num_points, int* results);
+EXPORT void clean_particles(float* data, int num_points, float min_distance, float max_distance, int* results);
 
 #ifdef __cplusplus
 }
