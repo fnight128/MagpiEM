@@ -16,32 +16,48 @@
     #define EXPORT
 #endif
 
-// Maximum number of particles supported (can be increased as needed)
 #define MAX_PARTICLES 1000000
+
+struct CleanParams {
+    float min_distance;
+    float max_distance;
+    float min_orientation;
+    float max_orientation;
+    float min_curvature;
+    float max_curvature;
+    int min_lattice_size;
+    int min_neighbors;
+    
+    CleanParams(float min_dist, float max_dist,
+                float min_ori, float max_ori,
+                float min_curv, float max_curv,
+                int min_lattice_size = 10, int min_neigh = 3)
+        : min_distance(min_dist), max_distance(max_dist),
+          min_orientation(min_ori), max_orientation(max_ori),
+          min_curvature(min_curv), max_curvature(max_curv),
+          min_lattice_size(min_lattice_size), min_neighbors(min_neigh) {}
+};
 
 struct Particle {
     float x, y, z;
     float rx, ry, rz;
     std::vector<Particle*> neighbors;
     
-    // Constructor to initialize from raw float data
     Particle(float x, float y, float z, float rx, float ry, float rz) 
         : x(x), y(y), z(z), rx(rx), ry(ry), rz(rz) {
         neighbors.clear();
     }
 
-    // Default constructor
     Particle() : x(0), y(0), z(0), rx(0), ry(0), rz(0) {
         neighbors.clear();
     }
     
-    // Static method to construct particles from raw data
     static std::vector<Particle> from_raw_data(float* data, int num_particles) {
         std::vector<Particle> particles;
         particles.reserve(num_particles);
         
         for (int i = 0; i < num_particles; i++) {
-            int base = i * 6; // 6 floats per particle: x, y, z, rx, ry, rz
+            int base = i * 6;
             particles.emplace_back(
                 data[base],     // x
                 data[base + 1], // y
@@ -77,7 +93,7 @@ struct Particle {
     int get_neighbor_count() const {
         return static_cast<int>(neighbors.size());
     }
-    
+
     Particle* get_neighbor(int index) const {
         if (index >= 0 && index < static_cast<int>(neighbors.size())) {
             return neighbors[index];
@@ -85,7 +101,7 @@ struct Particle {
         throw std::out_of_range("Neighbor index " + std::to_string(index) + 
                                " is out of range [0, " + std::to_string(neighbors.size() - 1) + "]");
     }
-    
+
     void remove_neighbor(Particle* neighbor_to_remove, bool remove_partner = true) {
         auto it = std::find(neighbors.begin(), neighbors.end(), neighbor_to_remove);
         if (it != neighbors.end()) {
@@ -99,12 +115,10 @@ struct Particle {
     }
 };
 
-
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-EXPORT void clean_particles(float* data, int num_points, float min_distance, float max_distance, int* results);
+EXPORT void clean_particles(float* data, int num_points, CleanParams* params, int* results);
 #ifdef __cplusplus
 }
 #endif
