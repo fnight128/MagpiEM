@@ -119,6 +119,8 @@ struct Particle {
 extern "C" {
 #endif
 EXPORT void clean_particles(float* data, int num_points, CleanParams* params, int* results);
+EXPORT void find_neighbors(float* data, int num_points, float min_distance, float max_distance, int* results);
+EXPORT void filter_by_orientation(float* data, int num_points, float min_orientation, float max_orientation, int* results);
 #ifdef __cplusplus
 }
 #endif

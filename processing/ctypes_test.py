@@ -55,34 +55,6 @@ print(f"  Curvature range: {min_curv:.2f} - {max_curv:.2f}")
 print(f"  Min lattice size: {min_lattice_size}")
 print(f"  Min neighbors: {min_neighbors}")
 
-print("\nRunning Python neighbor calculation...")
-start_time = time.time()
-
-test_tomo = read_single_tomogram(test_data_file, test_tomo_name)
-test_tomo.set_clean_params(test_cleaner)
-test_tomo.find_particle_neighbours(test_cleaner.dist_range)
-neighbour_counts_python = [0] * len(test_tomo.all_particles)
-for particle in test_tomo.all_particles:
-    neighbour_counts_python[particle.particle_id] = len(particle.neighbours)
-
-python_time = time.time() - start_time
-print(f"Python calculation time: {python_time:.4f} seconds")
-
-# Set up function signature
-arg_types = [
-    ctypes.POINTER(ctypes.c_float),
-    ctypes.c_int,
-    ctypes.POINTER(CleanParams),
-    ctypes.POINTER(ctypes.c_int),
-]
-return_type = None
-
-c_lib.clean_particles.argtypes = arg_types
-c_lib.clean_particles.restype = return_type
-
-print("arg types", arg_types)
-print("return type", return_type)
-
 test_data = np.array(read_emc_mat(test_data_file)[test_tomo_name], dtype=float)
 test_data = test_data[:,[10,11,12,22,23,24]]
 
@@ -90,9 +62,37 @@ print(f"\n{'='*60}")
 print(f"Particles: {len(test_data)}, Range: {min_dist:.2f}-{max_dist:.2f} units")
 
 flat_data = [val for particle in test_data for val in particle]
-
 c_array = (ctypes.c_float * len(flat_data))(*flat_data)
 results_array = (ctypes.c_int * len(test_data))()
+
+# Set up function signatures
+c_lib.find_neighbors.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_int)]
+c_lib.find_neighbors.restype = None
+
+c_lib.filter_by_orientation.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_int)]
+c_lib.filter_by_orientation.restype = None
+
+c_lib.clean_particles.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.POINTER(CleanParams), ctypes.POINTER(ctypes.c_int)]
+c_lib.clean_particles.restype = None
+
+# Test 1: Distance-only neighbor finding
+print("\n" + "="*60)
+print("TEST 1: Distance-only neighbor finding")
+print("="*60)
+
+print("\nRunning C++ distance-only neighbor finding...")
+start_time = time.time()
+c_lib.find_neighbors(c_array, len(test_data), min_dist, max_dist, results_array)
+cpp_distance_time = time.time() - start_time
+print(f"C++ distance-only time: {cpp_distance_time:.4f} seconds")
+
+distance_counts_cpp = [results_array[i] for i in range(len(test_data))]
+print(f"First 10 distance-only counts: {distance_counts_cpp[:10]}")
+
+# Test 2: Full pipeline (distance + orientation)
+print("\n" + "="*60)
+print("TEST 2: Full pipeline (distance + orientation)")
+print("="*60)
 
 params = CleanParams(
     min_distance=min_dist,
@@ -105,31 +105,77 @@ params = CleanParams(
     min_neighbors=min_neighbors
 )
 
-print("\nRunning C++ neighbor calculation...")
+print("\nRunning C++ full pipeline...")
+start_time = time.time()
+c_lib.clean_particles(c_array, len(test_data), ctypes.byref(params), results_array)
+cpp_full_time = time.time() - start_time
+print(f"C++ full pipeline time: {cpp_full_time:.4f} seconds")
+
+full_counts_cpp = [results_array[i] for i in range(len(test_data))]
+print(f"First 10 full pipeline counts: {full_counts_cpp[:10]}")
+
+# Test 3: Python neighbour count
+print("\n" + "="*60)
+print("TEST 3: Python neighbour count")
+print("="*60)
+
+print("\nRunning Python neighbor calculation...")
 start_time = time.time()
 
-print(f"\nCalling clean_particles(data, {len(test_data)}, params, results)")
-c_lib.clean_particles(c_array, len(test_data), ctypes.byref(params), results_array)
+test_tomo = read_single_tomogram(test_data_file, test_tomo_name)
+test_tomo.set_clean_params(test_cleaner)
+test_tomo.find_particle_neighbours(test_cleaner.dist_range)
+neighbour_counts_initial_python = [0] * len(test_tomo.all_particles)
+for particle in test_tomo.all_particles:
+    neighbour_counts_initial_python[particle.particle_id] = len(particle.neighbours)
 
-cpp_time = time.time() - start_time
-print(f"C++ calculation time: {cpp_time:.4f} seconds")
+# each filtration step must be run in a separate loop, as particles remove neighbours from other particles during filtration
+neighbour_counts_orientation_python = [0] * len(test_tomo.all_particles)
+for particle in test_tomo.all_particles:
+    particle.filter_neighbour_orientation(test_cleaner.ori_range, None)
+    neighbour_counts_orientation_python[particle.particle_id] = len(particle.neighbours)
 
-neighbour_counts_cpp = [results_array[i] for i in range(len(test_data))]
+test_tomo.find_particle_neighbours(test_cleaner.dist_range)
+neighbour_counts_python = [0] * len(test_tomo.all_particles)
+for particle in test_tomo.all_particles:
+    neighbour_counts_python[particle.particle_id] = len(particle.neighbours)
 
-speedup = python_time / cpp_time if cpp_time > 0 else float('inf')
+
+python_time = time.time() - start_time
+print(f"Python calculation time: {python_time:.4f} seconds")
+print(f"First 10 Python initial counts: {neighbour_counts_initial_python[:10]}")
+print(f"First 10 Python orientation-filtered counts: {neighbour_counts_orientation_python[:10]}")
+
+# Performance comparison
+speedup_distance = python_time / cpp_distance_time if cpp_distance_time > 0 else float('inf')
+speedup_full = python_time / cpp_full_time if cpp_full_time > 0 else float('inf')
 print(f"\n{'='*60}")
 print(f"PERFORMANCE RESULTS:")
 print(f"Python time: {python_time:.4f} seconds")
-print(f"C++ time:    {cpp_time:.4f} seconds")
-print(f"Speedup:     {speedup:.2f}x faster")
+print(f"C++ distance-only time: {cpp_distance_time:.4f} seconds")
+print(f"C++ full pipeline time: {cpp_full_time:.4f} seconds")
+print(f"Speedup (distance-only): {speedup_distance:.2f}x faster")
+print(f"Speedup (full pipeline): {speedup_full:.2f}x faster")
 print(f"{'='*60}")
 
-# Check if there are any differences
-differences = [(i, p, c) for i, (p, c) in enumerate(zip(neighbour_counts_python, neighbour_counts_cpp)) if p != c]
-if differences:
-    print(f"\nFound {len(differences)} differences in neighbor counts:")
-    for i, p, c in differences[:10]:  # Show first 10 differences
+# Verify distance-only results match Python
+distance_differences = [(i, p, c) for i, (p, c) in enumerate(zip(neighbour_counts_initial_python, distance_counts_cpp)) if p != c]
+if distance_differences:
+    print(f"\nFound {len(distance_differences)} differences in distance-only neighbor counts:")
+    for i, p, c in distance_differences[:10]:
         print(f"  Particle {i}: Python={p}, C++={c}")
-    raise Exception("Neighbour count failed")
-    
+    raise Exception("Distance-only neighbour count failed")
+else:
+    print("\n✓ Distance-only neighbor counts match!")
+
+# Verify orientation filtering results match Python
+orientation_differences = [(i, p, c) for i, (p, c) in enumerate(zip(neighbour_counts_orientation_python, full_counts_cpp)) if p != c]
+if orientation_differences:
+    print(f"\nFound {len(orientation_differences)} differences in orientation-filtered neighbor counts:")
+    for i, p, c in orientation_differences[:10]:
+        print(f"  Particle {i}: Python={p}, C++={c}")
+    raise Exception("Orientation-filtered neighbour count failed")
+else:
+    print("\n✓ Orientation-filtered neighbor counts match!")
+
 print("All tests run successfully")
