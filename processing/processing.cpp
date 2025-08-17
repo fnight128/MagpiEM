@@ -1,3 +1,4 @@
+#define BUILDING_DLL
 #include "processing.hpp"
 
 #include <iostream>
@@ -9,16 +10,17 @@
 static std::vector<Particle> g_particles;
 static bool g_particles_initialized = false;
 
-EXPORT void find_neighbors(float* data, int num_particles, float min_distance, float max_distance, int* results) {
-    printf("Finding neighbors for %d particles (distance: %.2f - %.2f)\n", num_particles, min_distance, max_distance);
+EXPORT void find_neighbours(float* data, int num_particles, float min_distance_squared, float max_distance_squared, int* results) {
+    printf("Finding neighbours for %d particles (distance: %.2f - %.2f)\n", num_particles, min_distance_squared, max_distance_squared);
     
     g_particles = Particle::from_raw_data(data, num_particles);
     g_particles_initialized = true;
     
-    // Calculate neighbors for all particles based on distance only
+    // Calculate neighbours for all particles based on distance only
     for (int i = 0; i < num_particles; i++) {
         Particle& current = g_particles[i];
-        current.neighbors.clear();
+        current.neighbours.clear();
+        current.neighbours.reserve(num_particles / 10); // Reserve some space to avoid reallocations
         
         for (int j = 0; j < num_particles; j++) {
             if (i == j) continue;
@@ -26,18 +28,22 @@ EXPORT void find_neighbors(float* data, int num_particles, float min_distance, f
             Particle& other = g_particles[j];
             float distance_squared = current.calculate_distance_squared(other);
             
-            // Check distance criteria
-            if (distance_squared >= min_distance && distance_squared <= max_distance) {
-                current.neighbors.push_back(&other);
+            // Check distance criteria using squared distances
+            if (distance_squared >= min_distance_squared && distance_squared <= max_distance_squared) {
+                current.neighbours.push_back(&other);
             }
         }
         
-        results[i] = current.get_neighbor_count();
+        results[i] = current.get_neighbour_count();
     }
 }
 
-EXPORT void filter_by_orientation(float* data, int num_particles, float min_orientation, float max_orientation, int* results) {
-    printf("Filtering neighbors by orientation for %d particles (orientation: %.2f - %.2f)\n", num_particles, min_orientation, max_orientation);
+// Generic filter function using a predicate
+template<typename Predicate>
+void filter_neighbours_generic(float* data, int num_particles, const std::string& filter_name, 
+                              float min_value, float max_value, int* results, Predicate predicate) {
+    printf("Filtering neighbours by %s for %d particles (%s: %.2f - %.2f)\n", 
+           filter_name.c_str(), num_particles, filter_name.c_str(), min_value, max_value);
     
     // Reuse existing particles if already initialized, otherwise create new ones
     if (!g_particles_initialized) {
@@ -45,36 +51,41 @@ EXPORT void filter_by_orientation(float* data, int num_particles, float min_orie
         g_particles_initialized = true;
     }
     
-    // Normalize all orientation vectors
-    for (int i = 0; i < num_particles; i++) {
-        Particle::normalize_vector(g_particles[i].rx, g_particles[i].ry, g_particles[i].rz);
-    }
-    
-    // Filter existing neighbors by orientation
+    // Filter existing neighbours using the provided predicate
     for (int i = 0; i < num_particles; i++) {
         Particle& current = g_particles[i];
+        std::vector<Particle*> valid_neighbours;
+        valid_neighbours.reserve(current.neighbours.size());
         
-        auto it = current.neighbors.begin();
-        while (it != current.neighbors.end()) {
-            Particle* neighbor = *it;
+        for (Particle* neighbour : current.neighbours) {
+            float value = predicate(current, *neighbour);
             
-            // Calculate dot product of orientations (clamped between -1 and 1)
-            float dot_product = Particle::dot_product(
-                current.rx, current.ry, current.rz,
-                neighbor->rx, neighbor->ry, neighbor->rz
-            );
-            dot_product = std::max(-1.0f, std::min(1.0f, dot_product));
-            
-            // Check if orientation angle is within range
-            if (dot_product < min_orientation || dot_product > max_orientation) {
-                it = current.neighbors.erase(it);
-            } else {
-                ++it;
+            // Check if value is within range
+            if (value >= min_value && value <= max_value) {
+                valid_neighbours.push_back(neighbour);
             }
         }
         
-        results[i] = current.get_neighbor_count();
+        current.neighbours = std::move(valid_neighbours);
+        results[i] = current.get_neighbour_count();
     }
+}
+
+EXPORT void filter_by_orientation(float* data, int num_particles, float min_orientation, float max_orientation, int* results) {
+    auto orientation_predicate = [](const Particle& current, const Particle& neighbour) -> float {
+        float dot_product = Particle::dot_product(current.orientation, neighbour.orientation);
+        return std::max(-1.0f, std::min(1.0f, dot_product));
+    };
+    
+    filter_neighbours_generic(data, num_particles, "orientation", min_orientation, max_orientation, results, orientation_predicate);
+}
+
+EXPORT void filter_by_curvature(float* data, int num_particles, float min_curvature, float max_curvature, int* results) {
+    auto curvature_predicate = [](const Particle& current, const Particle& neighbour) -> float {
+        return current.curvature(neighbour);
+    };
+    
+    filter_neighbours_generic(data, num_particles, "curvature", min_curvature, max_curvature, results, curvature_predicate);
 }
 
 EXPORT void clean_particles(float* data, int num_particles, CleanParams* params, int* results) {
@@ -82,13 +93,16 @@ EXPORT void clean_particles(float* data, int num_particles, CleanParams* params,
     printf("  Distance: %.2f - %.2f\n", params->min_distance, params->max_distance);
     printf("  Orientation: %.2f - %.2f\n", params->min_orientation, params->max_orientation);
     printf("  Curvature: %.2f - %.2f\n", params->min_curvature, params->max_curvature);
-    printf("  Min lattice size: %d, Min neighbors: %d\n", params->min_lattice_size, params->min_neighbors);
+    printf("  Min lattice size: %d, Min neighbours: %d\n", params->min_lattice_size, params->min_neighbours);
     
-    // First find neighbors by distance
-    find_neighbors(data, num_particles, params->min_distance, params->max_distance, results);
+    // First find neighbours by distance
+    find_neighbours(data, num_particles, params->min_distance, params->max_distance, results);
     
     // Then filter by orientation
     filter_by_orientation(data, num_particles, params->min_orientation, params->max_orientation, results);
+    
+    // Finally filter by curvature
+    filter_by_curvature(data, num_particles, params->min_curvature, params->max_curvature, results);
 }
 
 // Function to reset the global state (useful for testing)

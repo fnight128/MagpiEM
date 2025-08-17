@@ -12,8 +12,10 @@ sys.path.insert(0, str(parent_dir))
 from magpiem.read_write import read_emc_mat, read_single_tomogram
 from magpiem.classes import Tomogram, Particle, Cleaner
 
-print(f"Imported Cleaner from: {Cleaner.__module__}")
-print(f"Cleaner methods: {[m for m in dir(Cleaner) if not m.startswith('_')]}")
+TEST_DATA_FILE = "test_data.mat"
+TEST_TOMO_NAME = "wt2nd_4004_2"
+# appropriate values for test tomogram
+TEST_CLEANER_VALUES = [2.0, 3, 10, 60.0, 40.0, 10.0, 20.0, 90.0, 20.0]
 
 # Define the CleanParams struct for ctypes
 class CleanParams(ctypes.Structure):
@@ -25,157 +27,247 @@ class CleanParams(ctypes.Structure):
         ("min_curvature", ctypes.c_float),
         ("max_curvature", ctypes.c_float),
         ("min_lattice_size", ctypes.c_int),
-        ("min_neighbors", ctypes.c_int)
+        ("min_neighbours", ctypes.c_int)
     ]
 
-libname = current_dir / "processing.dll"
+def setup_cpp_library() -> ctypes.CDLL:
+    """Load and configure the C++ library"""
+    libname = current_dir / "processing.dll"
+    print("loading library")
+    
+    assert libname.exists(), "File does not exist"
+    print("DLL exists")
+    c_lib = ctypes.CDLL(str(libname))
+    
+    # Set up function signatures
+    c_lib.find_neighbours.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_int)]
+    c_lib.find_neighbours.restype = None
+    
+    c_lib.filter_by_orientation.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_int)]
+    c_lib.filter_by_orientation.restype = None
+    
+    c_lib.filter_by_curvature.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_int)]
+    c_lib.filter_by_curvature.restype = None
+    
+    c_lib.clean_particles.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.POINTER(CleanParams), ctypes.POINTER(ctypes.c_int)]
+    c_lib.clean_particles.restype = None
+    
+    return c_lib
 
-print("loading library")
+def load_particle_data() -> np.ndarray:
+    """Load particle data from the test file"""
+    test_data = np.array(read_emc_mat(TEST_DATA_FILE)[TEST_TOMO_NAME], dtype=float)
+    test_data = test_data[:,[10,11,12,22,23,24]]  # Extract position and orientation columns
+    return test_data
 
-assert libname.exists(), "File does not exist"
-print("DLL exists")
-c_lib = ctypes.CDLL(str(libname))
+def load_test_data() -> tuple[np.ndarray, Cleaner, tuple[float, float, float, float, float, float, int, int]]:
+    """Load test data and create Cleaner object"""
+    test_cleaner = Cleaner.from_user_params(*TEST_CLEANER_VALUES)
+    
+    # Get parameters
+    min_dist, max_dist = test_cleaner.dist_range
+    min_ori, max_ori = test_cleaner.ori_range
+    min_curv, max_curv = test_cleaner.curv_range
+    min_lattice_size = test_cleaner.min_lattice_size
+    min_neighbours = test_cleaner.min_neighbours
 
-test_data_file = "test_data.mat"
-test_tomo_name = "wt2nd_4004_2"
-# Cleaning parameters for test dataset
-test_cleaner = Cleaner.from_user_params(2.0, 3, 10, 60.0, 40.0, 10.0, 20.0, 90.0, 20.0)
+    # Load particle data
+    test_data = load_particle_data()
+    
+    print(f"Testing with {len(test_data)} particles")
+    
+    return test_data, test_cleaner, (min_dist, max_dist, min_ori, max_ori, min_curv, max_curv, min_lattice_size, min_neighbours)
 
-# Extract all parameters from the cleaner object
-min_dist, max_dist = test_cleaner.dist_range
-min_ori, max_ori = test_cleaner.ori_range
-min_curv, max_curv = test_cleaner.curv_range
-min_lattice_size = test_cleaner.min_lattice_size
-min_neighbors = test_cleaner.min_neighbours
+def setup_test_tomogram(test_cleaner: Cleaner) -> Tomogram:
+    """Create and setup a test tomogram with the given cleaner parameters"""
+    test_tomo = read_single_tomogram(TEST_DATA_FILE, TEST_TOMO_NAME)
+    test_tomo.set_clean_params(test_cleaner)
+    test_tomo.find_particle_neighbours(test_cleaner.dist_range)
+    return test_tomo
 
-print(f"Cleaning Parameters:")
-print(f"  Distance range: {min_dist:.2f} - {max_dist:.2f}")
-print(f"  Orientation range: {min_ori:.2f} - {max_ori:.2f}")
-print(f"  Curvature range: {min_curv:.2f} - {max_curv:.2f}")
-print(f"  Min lattice size: {min_lattice_size}")
-print(f"  Min neighbors: {min_neighbors}")
+def test_cpp_distance_only(c_lib: ctypes.CDLL, test_data: np.ndarray, min_dist: float, max_dist: float, python_reference: list[int]) -> tuple[list[int], float]:
+    """Test C++ distance-only neighbour finding"""
+    print("TEST 1: Distance-only neighbour finding")
+    
+    flat_data = [val for particle in test_data for val in particle]
+    c_array = (ctypes.c_float * len(flat_data))(*flat_data)
+    results_array = (ctypes.c_int * len(test_data))()
+    
+    start_time = time.time()
+    c_lib.find_neighbours(c_array, len(test_data), min_dist, max_dist, results_array)
+    cpp_distance_time = time.time() - start_time
+    
+    distance_counts_cpp = [results_array[i] for i in range(len(test_data))]
+    
+    # Validate against Python reference
+    verify_counts(python_reference, distance_counts_cpp, "Distance-only filtering")
+    
+    return distance_counts_cpp, cpp_distance_time
 
-test_data = np.array(read_emc_mat(test_data_file)[test_tomo_name], dtype=float)
-test_data = test_data[:,[10,11,12,22,23,24]]
+def test_cpp_orientation_only(c_lib: ctypes.CDLL, test_data: np.ndarray, min_dist: float, max_dist: float, min_ori: float, max_ori: float, python_reference: list[int]) -> tuple[list[int], float]:
+    """Test C++ orientation filtering alone (after distance filtering)"""
+    print("TEST 2: Orientation filtering")
+    
+    flat_data = [val for particle in test_data for val in particle]
+    c_array = (ctypes.c_float * len(flat_data))(*flat_data)
+    results_array = (ctypes.c_int * len(test_data))()
+    
+    start_time = time.time()
+    
+    # First find neighbours by distance
+    c_lib.find_neighbours(c_array, len(test_data), min_dist, max_dist, results_array)
+    
+    # Then filter by orientation
+    c_lib.filter_by_orientation(c_array, len(test_data), min_ori, max_ori, results_array)
+    
+    cpp_orientation_time = time.time() - start_time
+    
+    orientation_counts_cpp = [results_array[i] for i in range(len(test_data))]
+    
+    # Validate against Python reference
+    verify_counts(python_reference, orientation_counts_cpp, "Orientation filtering")
+    
+    return orientation_counts_cpp, cpp_orientation_time
 
-print(f"\n{'='*60}")
-print(f"Particles: {len(test_data)}, Range: {min_dist:.2f}-{max_dist:.2f} units")
+def test_cpp_curvature_only(c_lib: ctypes.CDLL, test_data: np.ndarray, min_dist: float, max_dist: float, min_curv: float, max_curv: float, python_reference: list[int]) -> tuple[list[int], float]:
+    """Test C++ curvature filtering alone (after distance filtering)"""
+    print("TEST 3: Curvature filtering")
+    
+    flat_data = [val for particle in test_data for val in particle]
+    c_array = (ctypes.c_float * len(flat_data))(*flat_data)
+    results_array = (ctypes.c_int * len(test_data))()
+    
+    start_time = time.time()
+    
+    # First find neighbours by distance
+    c_lib.find_neighbours(c_array, len(test_data), min_dist, max_dist, results_array)
+    
+    # Then filter by curvature
+    c_lib.filter_by_curvature(c_array, len(test_data), min_curv, max_curv, results_array)
+    
+    cpp_curvature_time = time.time() - start_time
+    
+    curvature_counts_cpp = [results_array[i] for i in range(len(test_data))]
+    
+    # Validate against Python reference
+    verify_counts(python_reference, curvature_counts_cpp, "Curvature filtering")
+    
+    return curvature_counts_cpp, cpp_curvature_time
 
-flat_data = [val for particle in test_data for val in particle]
-c_array = (ctypes.c_float * len(flat_data))(*flat_data)
-results_array = (ctypes.c_int * len(test_data))()
+def test_cpp_full_pipeline(c_lib: ctypes.CDLL, test_data: np.ndarray, params: CleanParams, python_reference: list[int]) -> tuple[list[int], float]:
+    """Test C++ full pipeline (distance + orientation + curvature)"""
+    print("TEST 4: Full pipeline")
+    
+    flat_data = [val for particle in test_data for val in particle]
+    c_array = (ctypes.c_float * len(flat_data))(*flat_data)
+    results_array = (ctypes.c_int * len(test_data))()
+    
+    start_time = time.time()
+    c_lib.clean_particles(c_array, len(test_data), ctypes.byref(params), results_array)
+    cpp_full_time = time.time() - start_time
+    
+    full_counts_cpp = [results_array[i] for i in range(len(test_data))]
+    
+    # Validate against Python reference
+    verify_counts(python_reference, full_counts_cpp, "Full pipeline")
+    
+    return full_counts_cpp, cpp_full_time
 
-# Set up function signatures
-c_lib.find_neighbors.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_int)]
-c_lib.find_neighbors.restype = None
+def calculate_python_reference(test_data: np.ndarray, test_cleaner: Cleaner) -> tuple[dict[str, list[int]], float]:
+    """Calculate Python reference results for all filtering stages"""
+    print("Calculating Python reference results...")
+    
+    start_time = time.time()
 
-c_lib.filter_by_orientation.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_int)]
-c_lib.filter_by_orientation.restype = None
+    def empty_particle_list() -> list[int]:
+        """List of 0s to store particle data for comparison with c++"""
+        return [0] * len(test_tomo.all_particles)
+    
+    test_tomo = setup_test_tomogram(test_cleaner)
+    neighbour_counts_initial_python = empty_particle_list()
+    for particle in test_tomo.all_particles:
+        neighbour_counts_initial_python[particle.particle_id] = len(particle.neighbours)
+    
+    # each filtration step must be run in a separate loop, as particles remove neighbours from other particles during filtration
+    neighbour_counts_orientation_python = empty_particle_list()
+    for particle in test_tomo.all_particles:
+        particle.filter_neighbour_orientation(test_cleaner.ori_range, None)
+        neighbour_counts_orientation_python[particle.particle_id] = len(particle.neighbours)
 
-c_lib.clean_particles.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.POINTER(CleanParams), ctypes.POINTER(ctypes.c_int)]
-c_lib.clean_particles.restype = None
+    test_tomo = setup_test_tomogram(test_cleaner)
+    neighbour_counts_curvature_python = empty_particle_list()
+    for particle in test_tomo.all_particles:
+        particle.filter_curvature(test_cleaner.curv_range)
+        neighbour_counts_curvature_python[particle.particle_id] = len(particle.neighbours)
+    
+    # Test full pipeline (distance + orientation + curvature)
+    test_tomo = setup_test_tomogram(test_cleaner)
+    neighbour_counts_full_python = empty_particle_list()
+    for particle in test_tomo.all_particles:
+        particle.filter_neighbour_orientation(test_cleaner.ori_range, None)
+        particle.filter_curvature(test_cleaner.curv_range)
+        neighbour_counts_full_python[particle.particle_id] = len(particle.neighbours)
+    
+    python_time = time.time() - start_time
+    
+    return ({"initial": neighbour_counts_initial_python, "orientation": neighbour_counts_orientation_python, 
+            "curvature": neighbour_counts_curvature_python, "full": neighbour_counts_full_python}, python_time)
 
-# Test 1: Distance-only neighbor finding
-print("\n" + "="*60)
-print("TEST 1: Distance-only neighbor finding")
-print("="*60)
+def verify_counts(python_counts: list[int], cpp_counts: list[int], test_name: str) -> None:
+    """Verify that C++ results match Python reference"""
+    differences = [(i, p, c) for i, (p, c) in enumerate(zip(python_counts, cpp_counts)) if p != c]
+    if differences:
+        print(f"  ❌ {test_name}: {len(differences)} differences found")
+        for i, p, c in differences[:3]:
+            print(f"      Particle {i}: Python={p}, C++={c}")
+        raise Exception(f"{test_name} failed")
+    else:
+        print(f"  ✓ {test_name}")
 
-print("\nRunning C++ distance-only neighbor finding...")
-start_time = time.time()
-c_lib.find_neighbors(c_array, len(test_data), min_dist, max_dist, results_array)
-cpp_distance_time = time.time() - start_time
-print(f"C++ distance-only time: {cpp_distance_time:.4f} seconds")
+def compare_results(cpp_distance_time: float, cpp_orientation_time: float, cpp_curvature_time: float, cpp_full_time: float, python_time: float) -> None:
+    """Display performance metrics"""
+    speedup_distance = python_time / cpp_distance_time if cpp_distance_time > 0 else float('inf')
+    speedup_orientation = python_time / cpp_orientation_time if cpp_orientation_time > 0 else float('inf')
+    speedup_curvature = python_time / cpp_curvature_time if cpp_curvature_time > 0 else float('inf')
+    speedup_full = python_time / cpp_full_time if cpp_full_time > 0 else float('inf')
+    
+    print(f"\nPERFORMANCE RESULTS:")
+    print(f"Python: {python_time:.4f}s | C++ Distance: {cpp_distance_time:.4f}s ({speedup_distance:.1f}x) | Orientation: {cpp_orientation_time:.4f}s ({speedup_orientation:.1f}x) | Curvature: {cpp_curvature_time:.4f}s ({speedup_curvature:.1f}x) | Full: {cpp_full_time:.4f}s ({speedup_full:.1f}x)")
 
-distance_counts_cpp = [results_array[i] for i in range(len(test_data))]
-print(f"First 10 distance-only counts: {distance_counts_cpp[:10]}")
+def main() -> None:
+    """Main test function"""
+    print("Running C++ vs Python particle filtering tests...")
+    
+    # Setup
+    c_lib = setup_cpp_library()
+    test_data, test_cleaner, params_tuple = load_test_data()
+    min_dist, max_dist, min_ori, max_ori, min_curv, max_curv, min_lattice_size, min_neighbours = params_tuple
+    
+    # Create CleanParams struct
+    params = CleanParams(
+        min_distance=min_dist,
+        max_distance=max_dist,
+        min_orientation=min_ori,
+        max_orientation=max_ori,
+        min_curvature=min_curv,
+        max_curvature=max_curv,
+        min_lattice_size=min_lattice_size,
+        min_neighbours=min_neighbours
+    )
+    
+    # Calculate Python reference results first
+    python_reference, python_time = calculate_python_reference(test_data, test_cleaner)
+    
+    # Run C++ tests and validate against Python reference
+    distance_counts_cpp, cpp_distance_time = test_cpp_distance_only(c_lib, test_data, min_dist, max_dist, python_reference["initial"])
+    orientation_counts_cpp, cpp_orientation_time = test_cpp_orientation_only(c_lib, test_data, min_dist, max_dist, min_ori, max_ori, python_reference["orientation"])
+    curvature_counts_cpp, cpp_curvature_time = test_cpp_curvature_only(c_lib, test_data, min_dist, max_dist, min_curv, max_curv, python_reference["curvature"])
+    full_counts_cpp, cpp_full_time = test_cpp_full_pipeline(c_lib, test_data, params, python_reference["full"])
+    
+    # Display performance results
+    compare_results(cpp_distance_time, cpp_orientation_time, cpp_curvature_time, cpp_full_time, python_time)
+    
+    print("\n✓ All tests completed successfully!")
 
-# Test 2: Full pipeline (distance + orientation)
-print("\n" + "="*60)
-print("TEST 2: Full pipeline (distance + orientation)")
-print("="*60)
-
-params = CleanParams(
-    min_distance=min_dist,
-    max_distance=max_dist,
-    min_orientation=min_ori,
-    max_orientation=max_ori,
-    min_curvature=min_curv,
-    max_curvature=max_curv,
-    min_lattice_size=min_lattice_size,
-    min_neighbors=min_neighbors
-)
-
-print("\nRunning C++ full pipeline...")
-start_time = time.time()
-c_lib.clean_particles(c_array, len(test_data), ctypes.byref(params), results_array)
-cpp_full_time = time.time() - start_time
-print(f"C++ full pipeline time: {cpp_full_time:.4f} seconds")
-
-full_counts_cpp = [results_array[i] for i in range(len(test_data))]
-print(f"First 10 full pipeline counts: {full_counts_cpp[:10]}")
-
-# Test 3: Python neighbour count
-print("\n" + "="*60)
-print("TEST 3: Python neighbour count")
-print("="*60)
-
-print("\nRunning Python neighbor calculation...")
-start_time = time.time()
-
-test_tomo = read_single_tomogram(test_data_file, test_tomo_name)
-test_tomo.set_clean_params(test_cleaner)
-test_tomo.find_particle_neighbours(test_cleaner.dist_range)
-neighbour_counts_initial_python = [0] * len(test_tomo.all_particles)
-for particle in test_tomo.all_particles:
-    neighbour_counts_initial_python[particle.particle_id] = len(particle.neighbours)
-
-# each filtration step must be run in a separate loop, as particles remove neighbours from other particles during filtration
-neighbour_counts_orientation_python = [0] * len(test_tomo.all_particles)
-for particle in test_tomo.all_particles:
-    particle.filter_neighbour_orientation(test_cleaner.ori_range, None)
-    neighbour_counts_orientation_python[particle.particle_id] = len(particle.neighbours)
-
-test_tomo.find_particle_neighbours(test_cleaner.dist_range)
-neighbour_counts_python = [0] * len(test_tomo.all_particles)
-for particle in test_tomo.all_particles:
-    neighbour_counts_python[particle.particle_id] = len(particle.neighbours)
-
-
-python_time = time.time() - start_time
-print(f"Python calculation time: {python_time:.4f} seconds")
-print(f"First 10 Python initial counts: {neighbour_counts_initial_python[:10]}")
-print(f"First 10 Python orientation-filtered counts: {neighbour_counts_orientation_python[:10]}")
-
-# Performance comparison
-speedup_distance = python_time / cpp_distance_time if cpp_distance_time > 0 else float('inf')
-speedup_full = python_time / cpp_full_time if cpp_full_time > 0 else float('inf')
-print(f"\n{'='*60}")
-print(f"PERFORMANCE RESULTS:")
-print(f"Python time: {python_time:.4f} seconds")
-print(f"C++ distance-only time: {cpp_distance_time:.4f} seconds")
-print(f"C++ full pipeline time: {cpp_full_time:.4f} seconds")
-print(f"Speedup (distance-only): {speedup_distance:.2f}x faster")
-print(f"Speedup (full pipeline): {speedup_full:.2f}x faster")
-print(f"{'='*60}")
-
-# Verify distance-only results match Python
-distance_differences = [(i, p, c) for i, (p, c) in enumerate(zip(neighbour_counts_initial_python, distance_counts_cpp)) if p != c]
-if distance_differences:
-    print(f"\nFound {len(distance_differences)} differences in distance-only neighbor counts:")
-    for i, p, c in distance_differences[:10]:
-        print(f"  Particle {i}: Python={p}, C++={c}")
-    raise Exception("Distance-only neighbour count failed")
-else:
-    print("\n✓ Distance-only neighbor counts match!")
-
-# Verify orientation filtering results match Python
-orientation_differences = [(i, p, c) for i, (p, c) in enumerate(zip(neighbour_counts_orientation_python, full_counts_cpp)) if p != c]
-if orientation_differences:
-    print(f"\nFound {len(orientation_differences)} differences in orientation-filtered neighbor counts:")
-    for i, p, c in orientation_differences[:10]:
-        print(f"  Particle {i}: Python={p}, C++={c}")
-    raise Exception("Orientation-filtered neighbour count failed")
-else:
-    print("\n✓ Orientation-filtered neighbor counts match!")
-
-print("All tests run successfully")
+if __name__ == "__main__":
+    main()
