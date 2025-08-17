@@ -81,9 +81,12 @@ def load_test_data() -> tuple[np.ndarray, Cleaner, tuple[float, float, float, fl
     
     return test_data, test_cleaner, (min_dist, max_dist, min_ori, max_ori, min_curv, max_curv, min_lattice_size, min_neighbours)
 
+def create_test_tomogram() -> Tomogram:
+    return read_single_tomogram(TEST_DATA_FILE, TEST_TOMO_NAME)
+
 def setup_test_tomogram(test_cleaner: Cleaner) -> Tomogram:
     """Create and setup a test tomogram with the given cleaner parameters"""
-    test_tomo = read_single_tomogram(TEST_DATA_FILE, TEST_TOMO_NAME)
+    test_tomo = create_test_tomogram()
     test_tomo.set_clean_params(test_cleaner)
     test_tomo.find_particle_neighbours(test_cleaner.dist_range)
     return test_tomo
@@ -153,7 +156,7 @@ def test_cpp_full_pipeline(c_lib: ctypes.CDLL, test_data: np.ndarray, params: Cl
     counts_cpp = [results_array[i] for i in range(len(test_data))]
     
     # Use lattice-specific verification
-    verify_lattice_assignments(python_reference, counts_cpp, "Full pipeline")
+    verify_lattice_assignments(python_reference, counts_cpp, "Full pipeline", test_data)
     
     return counts_cpp, test_time
 
@@ -219,7 +222,7 @@ def verify_counts(python_counts: list[int], cpp_counts: list[int], test_name: st
     else:
         print(f"  ✓ {test_name}")
 
-def verify_lattice_assignments(python_lattices: list[int], cpp_lattices: list[int], test_name: str) -> None:
+def verify_lattice_assignments(python_lattices: list[int], cpp_lattices: list[int], test_name: str, test_data: np.ndarray = None) -> None:
     """Verify that C++ lattice assignments group particles the same way as Python"""
     # Create mapping from particle index to lattice ID for both implementations
     python_groups = {}
@@ -249,6 +252,12 @@ def verify_lattice_assignments(python_lattices: list[int], cpp_lattices: list[in
         print(f"  ❌ {test_name}: Lattice groupings differ")
         print(f"      Python: {len(python_group_sets)} lattices, {len(python_unassigned)} unassigned")
         print(f"      C++: {len(cpp_group_sets)} lattices, {len(cpp_unassigned)} unassigned")
+        
+        # Generate cone plots for debugging if test_data is provided
+        if test_data is not None:
+            print(f"      Generating cone plots for debugging...")
+            create_cone_plot_from_lattices(test_data, cpp_lattices, "C++ Lattice Assignments", "cpp_lattices.html")
+            create_cone_plot_from_lattices(test_data, python_lattices, "Python Lattice Assignments", "python_lattices.html")
         
         # Find differences with meaningful comparisons
         python_only = python_group_sets - cpp_group_sets
@@ -323,6 +332,22 @@ def compare_results(cpp_distance_time: float, cpp_orientation_time: float, cpp_c
     print(f"\nPERFORMANCE RESULTS:")
     print(f"Python: {python_time:.4f}s | C++ Distance: {cpp_distance_time:.4f}s ({speedup_distance:.1f}x) | Orientation: {cpp_orientation_time:.4f}s ({speedup_orientation:.1f}x) | Curvature: {cpp_curvature_time:.4f}s ({speedup_curvature:.1f}x) | Full: {cpp_full_time:.4f}s ({speedup_full:.1f}x)")
 
+def create_cone_plot_from_lattices(test_data: np.ndarray, lattice_assignments: list[int], title: str, filename: str) -> None:
+    """Create a cone plot from lattice assignments for debugging"""
+    from magpiem.classes import Tomogram, Particle
+    
+    # Create tomogram and particles
+    test_tomo = create_test_tomogram()
+    
+    for particle in test_tomo.all_particles:
+        particle.set_lattice(lattice_assignments[particle.particle_id])
+    test_tomo.generate_lattice_dfs()
+
+    # Generate cone plot
+    fig = test_tomo.plot_all_lattices(cone_size=10)
+    fig.write_html(filename)
+    print(f"Saved cone plot to: {filename}")
+
 def main() -> None:
     """Main test function"""
     print("Running C++ vs Python particle filtering tests...")
@@ -343,7 +368,7 @@ def main() -> None:
         min_lattice_size=min_lattice_size,
         min_neighbours=min_neighbours
     )
-    
+
     # Calculate Python reference results first
     python_reference, python_time = calculate_python_reference(test_data, test_cleaner)
     
