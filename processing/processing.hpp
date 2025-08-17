@@ -110,7 +110,7 @@ struct Particle {
             vec[2] *= inv_magnitude;
         }
         else {
-            
+            throw std::invalid_argument("Attempted to normalise a zero vector");
         }
     }
 
@@ -152,6 +152,7 @@ EXPORT void clean_particles(float* data, int num_points, CleanParams* params, in
 EXPORT void find_neighbours(float* data, int num_points, float min_distance, float max_distance, int* results);
 EXPORT void filter_by_orientation(float* data, int num_points, float min_orientation, float max_orientation, int* results);
 EXPORT void filter_by_curvature(float* data, int num_points, float min_curvature, float max_curvature, int* results);
+EXPORT void assign_lattices(float* data, int num_points, int min_neighbours, int min_lattice_size, int* results);
 #ifdef __cplusplus
 }
 #endif

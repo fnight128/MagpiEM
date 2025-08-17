@@ -49,6 +49,9 @@ def setup_cpp_library() -> ctypes.CDLL:
     c_lib.filter_by_curvature.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_int)]
     c_lib.filter_by_curvature.restype = None
     
+    c_lib.assign_lattices.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
+    c_lib.assign_lattices.restype = None
+    
     c_lib.clean_particles.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.POINTER(CleanParams), ctypes.POINTER(ctypes.c_int)]
     c_lib.clean_particles.restype = None
     
@@ -132,12 +135,29 @@ def test_cpp_curvature_only(c_lib: ctypes.CDLL, test_data: np.ndarray, min_dist:
                        curvature_test, min_dist, max_dist, min_curv, max_curv)
 
 def test_cpp_full_pipeline(c_lib: ctypes.CDLL, test_data: np.ndarray, params: CleanParams, python_reference: list[int]) -> tuple[list[int], float]:
-    """Test C++ full pipeline (distance + orientation + curvature)"""
+    """Test C++ full pipeline (distance + orientation + curvature + lattice assignment)"""
     def full_pipeline_test(c_lib, c_array, num_particles, results_array, params):
         c_lib.clean_particles(c_array, num_particles, ctypes.byref(params), results_array)
     
-    return run_cpp_test(c_lib, test_data, "4: Full pipeline", python_reference, 
-                       full_pipeline_test, params)
+    # Use custom validation for lattice assignments, as lattice IDs are arbitrarily assigned, and likely to differ between implementations
+    print("TEST 4: Full pipeline")
+    
+    flat_data = [val for particle in test_data for val in particle]
+    c_array = (ctypes.c_float * len(flat_data))(*flat_data)
+    results_array = (ctypes.c_int * len(test_data))()
+    
+    start_time = time.time()
+    full_pipeline_test(c_lib, c_array, len(test_data), results_array, params)
+    test_time = time.time() - start_time
+    
+    counts_cpp = [results_array[i] for i in range(len(test_data))]
+    
+    # Use lattice-specific verification
+    verify_lattice_assignments(python_reference, counts_cpp, "Full pipeline")
+    
+    return counts_cpp, test_time
+
+
 
 def calculate_python_reference(test_data: np.ndarray, test_cleaner: Cleaner) -> tuple[dict[str, list[int]], float]:
     """Calculate Python reference results for all filtering stages"""
@@ -174,10 +194,19 @@ def calculate_python_reference(test_data: np.ndarray, test_cleaner: Cleaner) -> 
         particle.filter_curvature(test_cleaner.curv_range)
         neighbour_counts_full_python[particle.particle_id] = len(particle.neighbours)
     
+    # Test lattice assignment
+    lattice_assignments_python = empty_particle_list()
+    test_tomo = setup_test_tomogram(test_cleaner)
+    test_tomo.autoclean()
+    
+    for particle in test_tomo.all_particles:
+        lattice_assignments_python[particle.particle_id] = particle.lattice
+    
     python_time = time.time() - start_time
     
     return ({"initial": neighbour_counts_initial_python, "orientation": neighbour_counts_orientation_python, 
-            "curvature": neighbour_counts_curvature_python, "full": neighbour_counts_full_python}, python_time)
+            "curvature": neighbour_counts_curvature_python, "full": neighbour_counts_full_python, 
+            "lattice": lattice_assignments_python}, python_time)
 
 def verify_counts(python_counts: list[int], cpp_counts: list[int], test_name: str) -> None:
     """Verify that C++ results match Python reference"""
@@ -189,6 +218,100 @@ def verify_counts(python_counts: list[int], cpp_counts: list[int], test_name: st
         raise Exception(f"{test_name} failed")
     else:
         print(f"  ✓ {test_name}")
+
+def verify_lattice_assignments(python_lattices: list[int], cpp_lattices: list[int], test_name: str) -> None:
+    """Verify that C++ lattice assignments group particles the same way as Python"""
+    # Create mapping from particle index to lattice ID for both implementations
+    python_groups = {}
+    cpp_groups = {}
+    
+    for i, lattice_id in enumerate(python_lattices):
+        if lattice_id not in python_groups:
+            python_groups[lattice_id] = set()
+        python_groups[lattice_id].add(i)
+    
+    for i, lattice_id in enumerate(cpp_lattices):
+        if lattice_id not in cpp_groups:
+            cpp_groups[lattice_id] = set()
+        cpp_groups[lattice_id].add(i)
+    
+    # Remove lattice 0 (unassigned particles) from comparison
+    python_unassigned = python_groups.pop(0, set())
+    cpp_unassigned = cpp_groups.pop(0, set())
+    
+    # Convert to sets of particle sets for comparison
+    python_group_sets = set(frozenset(group) for group in python_groups.values())
+    cpp_group_sets = set(frozenset(group) for group in cpp_groups.values())
+    
+    if python_group_sets == cpp_group_sets:
+        print(f"  ✓ {test_name}")
+    else:
+        print(f"  ❌ {test_name}: Lattice groupings differ")
+        print(f"      Python: {len(python_group_sets)} lattices, {len(python_unassigned)} unassigned")
+        print(f"      C++: {len(cpp_group_sets)} lattices, {len(cpp_unassigned)} unassigned")
+        
+        # Find differences with meaningful comparisons
+        python_only = python_group_sets - cpp_group_sets
+        cpp_only = cpp_group_sets - python_group_sets
+        
+        if python_only or cpp_only:
+            print(f"      Differences found:")
+            
+            # Show Python groups that don't exist in C++
+            if python_only:
+                print(f"      Python-only lattices ({len(python_only)}):")
+                for i, group in enumerate(list(python_only)[:3]):
+                    print(f"        Lattice {i+1}: {sorted(group)}")
+                    
+                    # Find closest C++ match for comparison
+                    best_match = None
+                    best_overlap = 0
+                    for cpp_group in cpp_group_sets:
+                        overlap = len(group & cpp_group)
+                        if overlap > best_overlap:
+                            best_overlap = overlap
+                            best_match = cpp_group
+                    
+                    if best_match:
+                        print(f"          Closest C++ match: {sorted(best_match)} (overlap: {best_overlap}/{len(group)})")
+                        # Show the actual differences
+                        python_only_particles = group - best_match
+                        cpp_only_particles = best_match - group
+                        if python_only_particles:
+                            print(f"          Python extra particles: {sorted(python_only_particles)}")
+                        if cpp_only_particles:
+                            print(f"          C++ extra particles: {sorted(cpp_only_particles)}")
+                    else:
+                        print(f"          No similar C++ group found")
+            
+            # Show C++ groups that don't exist in Python
+            if cpp_only:
+                print(f"      C++-only lattices ({len(cpp_only)}):")
+                for i, group in enumerate(list(cpp_only)[:3]):
+                    print(f"        Lattice {i+1}: {sorted(group)}")
+                    
+                    # Find closest Python match for comparison
+                    best_match = None
+                    best_overlap = 0
+                    for python_group in python_group_sets:
+                        overlap = len(group & python_group)
+                        if overlap > best_overlap:
+                            best_overlap = overlap
+                            best_match = python_group
+                    
+                    if best_match:
+                        print(f"          Closest Python match: {sorted(best_match)} (overlap: {best_overlap}/{len(group)})")
+                        # Show the actual differences
+                        cpp_only_particles = group - best_match
+                        python_only_particles = best_match - group
+                        if cpp_only_particles:
+                            print(f"          C++ extra particles: {sorted(cpp_only_particles)}")
+                        if python_only_particles:
+                            print(f"          Python extra particles: {sorted(python_only_particles)}")
+                    else:
+                        print(f"          No similar Python group found")
+        
+        raise Exception(f"{test_name} failed")
 
 def compare_results(cpp_distance_time: float, cpp_orientation_time: float, cpp_curvature_time: float, cpp_full_time: float, python_time: float) -> None:
     """Display performance metrics"""
@@ -228,7 +351,7 @@ def main() -> None:
     distance_counts_cpp, cpp_distance_time = test_cpp_distance_only(c_lib, test_data, min_dist, max_dist, python_reference["initial"])
     orientation_counts_cpp, cpp_orientation_time = test_cpp_orientation_only(c_lib, test_data, min_dist, max_dist, min_ori, max_ori, python_reference["orientation"])
     curvature_counts_cpp, cpp_curvature_time = test_cpp_curvature_only(c_lib, test_data, min_dist, max_dist, min_curv, max_curv, python_reference["curvature"])
-    full_counts_cpp, cpp_full_time = test_cpp_full_pipeline(c_lib, test_data, params, python_reference["full"])
+    full_counts_cpp, cpp_full_time = test_cpp_full_pipeline(c_lib, test_data, params, python_reference["lattice"])
     
     # Display performance results
     compare_results(cpp_distance_time, cpp_orientation_time, cpp_curvature_time, cpp_full_time, python_time)
