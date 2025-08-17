@@ -85,93 +85,59 @@ def setup_test_tomogram(test_cleaner: Cleaner) -> Tomogram:
     test_tomo.find_particle_neighbours(test_cleaner.dist_range)
     return test_tomo
 
-def test_cpp_distance_only(c_lib: ctypes.CDLL, test_data: np.ndarray, min_dist: float, max_dist: float, python_reference: list[int]) -> tuple[list[int], float]:
-    """Test C++ distance-only neighbour finding"""
-    print("TEST 1: Distance-only neighbour finding")
+def run_cpp_test(c_lib: ctypes.CDLL, test_data: np.ndarray, test_name: str, python_reference: list[int], 
+                test_func, *args) -> tuple[list[int], float]:
+    """Generic function to run C++ tests with common setup and validation"""
+    print(f"TEST {test_name}")
     
     flat_data = [val for particle in test_data for val in particle]
     c_array = (ctypes.c_float * len(flat_data))(*flat_data)
     results_array = (ctypes.c_int * len(test_data))()
     
     start_time = time.time()
-    c_lib.find_neighbours(c_array, len(test_data), min_dist, max_dist, results_array)
-    cpp_distance_time = time.time() - start_time
+    test_func(c_lib, c_array, len(test_data), results_array, *args)
+    test_time = time.time() - start_time
     
-    distance_counts_cpp = [results_array[i] for i in range(len(test_data))]
+    counts_cpp = [results_array[i] for i in range(len(test_data))]
     
     # Validate against Python reference
-    verify_counts(python_reference, distance_counts_cpp, "Distance-only filtering")
+    verify_counts(python_reference, counts_cpp, f"{test_name} filtering")
     
-    return distance_counts_cpp, cpp_distance_time
+    return counts_cpp, test_time
+
+def test_cpp_distance_only(c_lib: ctypes.CDLL, test_data: np.ndarray, min_dist: float, max_dist: float, python_reference: list[int]) -> tuple[list[int], float]:
+    """Test C++ distance-only neighbour finding"""
+    def distance_test(c_lib, c_array, num_particles, results_array, min_dist, max_dist):
+        c_lib.find_neighbours(c_array, num_particles, min_dist, max_dist, results_array)
+    
+    return run_cpp_test(c_lib, test_data, "1: Distance-only neighbour finding", python_reference, 
+                       distance_test, min_dist, max_dist)
 
 def test_cpp_orientation_only(c_lib: ctypes.CDLL, test_data: np.ndarray, min_dist: float, max_dist: float, min_ori: float, max_ori: float, python_reference: list[int]) -> tuple[list[int], float]:
     """Test C++ orientation filtering alone (after distance filtering)"""
-    print("TEST 2: Orientation filtering")
+    def orientation_test(c_lib, c_array, num_particles, results_array, min_dist, max_dist, min_ori, max_ori):
+        c_lib.find_neighbours(c_array, num_particles, min_dist, max_dist, results_array)
+        c_lib.filter_by_orientation(c_array, num_particles, min_ori, max_ori, results_array)
     
-    flat_data = [val for particle in test_data for val in particle]
-    c_array = (ctypes.c_float * len(flat_data))(*flat_data)
-    results_array = (ctypes.c_int * len(test_data))()
-    
-    start_time = time.time()
-    
-    # First find neighbours by distance
-    c_lib.find_neighbours(c_array, len(test_data), min_dist, max_dist, results_array)
-    
-    # Then filter by orientation
-    c_lib.filter_by_orientation(c_array, len(test_data), min_ori, max_ori, results_array)
-    
-    cpp_orientation_time = time.time() - start_time
-    
-    orientation_counts_cpp = [results_array[i] for i in range(len(test_data))]
-    
-    # Validate against Python reference
-    verify_counts(python_reference, orientation_counts_cpp, "Orientation filtering")
-    
-    return orientation_counts_cpp, cpp_orientation_time
+    return run_cpp_test(c_lib, test_data, "2: Orientation filtering", python_reference, 
+                       orientation_test, min_dist, max_dist, min_ori, max_ori)
 
 def test_cpp_curvature_only(c_lib: ctypes.CDLL, test_data: np.ndarray, min_dist: float, max_dist: float, min_curv: float, max_curv: float, python_reference: list[int]) -> tuple[list[int], float]:
     """Test C++ curvature filtering alone (after distance filtering)"""
-    print("TEST 3: Curvature filtering")
+    def curvature_test(c_lib, c_array, num_particles, results_array, min_dist, max_dist, min_curv, max_curv):
+        c_lib.find_neighbours(c_array, num_particles, min_dist, max_dist, results_array)
+        c_lib.filter_by_curvature(c_array, num_particles, min_curv, max_curv, results_array)
     
-    flat_data = [val for particle in test_data for val in particle]
-    c_array = (ctypes.c_float * len(flat_data))(*flat_data)
-    results_array = (ctypes.c_int * len(test_data))()
-    
-    start_time = time.time()
-    
-    # First find neighbours by distance
-    c_lib.find_neighbours(c_array, len(test_data), min_dist, max_dist, results_array)
-    
-    # Then filter by curvature
-    c_lib.filter_by_curvature(c_array, len(test_data), min_curv, max_curv, results_array)
-    
-    cpp_curvature_time = time.time() - start_time
-    
-    curvature_counts_cpp = [results_array[i] for i in range(len(test_data))]
-    
-    # Validate against Python reference
-    verify_counts(python_reference, curvature_counts_cpp, "Curvature filtering")
-    
-    return curvature_counts_cpp, cpp_curvature_time
+    return run_cpp_test(c_lib, test_data, "3: Curvature filtering", python_reference, 
+                       curvature_test, min_dist, max_dist, min_curv, max_curv)
 
 def test_cpp_full_pipeline(c_lib: ctypes.CDLL, test_data: np.ndarray, params: CleanParams, python_reference: list[int]) -> tuple[list[int], float]:
     """Test C++ full pipeline (distance + orientation + curvature)"""
-    print("TEST 4: Full pipeline")
+    def full_pipeline_test(c_lib, c_array, num_particles, results_array, params):
+        c_lib.clean_particles(c_array, num_particles, ctypes.byref(params), results_array)
     
-    flat_data = [val for particle in test_data for val in particle]
-    c_array = (ctypes.c_float * len(flat_data))(*flat_data)
-    results_array = (ctypes.c_int * len(test_data))()
-    
-    start_time = time.time()
-    c_lib.clean_particles(c_array, len(test_data), ctypes.byref(params), results_array)
-    cpp_full_time = time.time() - start_time
-    
-    full_counts_cpp = [results_array[i] for i in range(len(test_data))]
-    
-    # Validate against Python reference
-    verify_counts(python_reference, full_counts_cpp, "Full pipeline")
-    
-    return full_counts_cpp, cpp_full_time
+    return run_cpp_test(c_lib, test_data, "4: Full pipeline", python_reference, 
+                       full_pipeline_test, params)
 
 def calculate_python_reference(test_data: np.ndarray, test_cleaner: Cleaner) -> tuple[dict[str, list[int]], float]:
     """Calculate Python reference results for all filtering stages"""
