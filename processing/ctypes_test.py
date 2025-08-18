@@ -26,8 +26,8 @@ class CleanParams(ctypes.Structure):
         ("max_orientation", ctypes.c_float),
         ("min_curvature", ctypes.c_float),
         ("max_curvature", ctypes.c_float),
-        ("min_lattice_size", ctypes.c_int),
-        ("min_neighbours", ctypes.c_int)
+        ("min_lattice_size", ctypes.c_uint),
+        ("min_neighbours", ctypes.c_uint)
     ]
 
 def setup_cpp_library() -> ctypes.CDLL:
@@ -49,7 +49,7 @@ def setup_cpp_library() -> ctypes.CDLL:
     c_lib.filter_by_curvature.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_int)]
     c_lib.filter_by_curvature.restype = None
     
-    c_lib.assign_lattices.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
+    c_lib.assign_lattices.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_uint, ctypes.c_uint, ctypes.POINTER(ctypes.c_int)]
     c_lib.assign_lattices.restype = None
     
     c_lib.clean_particles.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.POINTER(CleanParams), ctypes.POINTER(ctypes.c_int)]

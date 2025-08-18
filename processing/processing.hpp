@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <cmath>
 #include <array>
+#include <immintrin.h> // For AVX/SSE intrinsics
 #ifdef _WIN32
     #ifdef BUILDING_DLL
         #define EXPORT __declspec(dllexport)
@@ -26,13 +27,13 @@ struct CleanParams {
     float max_orientation;
     float min_curvature;
     float max_curvature;
-    int min_lattice_size;
-    int min_neighbours;
+    unsigned int min_lattice_size;
+    unsigned int min_neighbours;
     
     CleanParams(float min_dist, float max_dist,
                 float min_ori, float max_ori,
                 float min_curv, float max_curv,
-                int min_lattice_size = 10, int min_neigh = 3)
+                unsigned int min_lattice_size = 10, unsigned int min_neigh = 3)
         : min_distance(min_dist), max_distance(max_dist),
           min_orientation(min_ori), max_orientation(max_ori),
           min_curvature(min_curv), max_curvature(max_curv),
@@ -42,7 +43,7 @@ struct CleanParams {
 struct Particle {
     float position[3];    // x, y, z
     float orientation[3]; // rx, ry, rz
-    int lattice;
+    unsigned int lattice;
     std::vector<Particle*> neighbours;
     
     Particle(float x, float y, float z, float rx, float ry, float rz) {
@@ -91,23 +92,51 @@ struct Particle {
     }
 
     float calculate_distance_squared(const Particle& p) const {
-        float dx = position[0] - p.position[0];
-        float dy = position[1] - p.position[1];
-        float dz = position[2] - p.position[2];
-        return dx*dx + dy*dy + dz*dz;
+        // Vectorised distance calculation using SSE
+        __m128 pos1 = _mm_loadu_ps(position);
+        __m128 pos2 = _mm_loadu_ps(p.position);
+        __m128 diff = _mm_sub_ps(pos1, pos2);
+        __m128 squared = _mm_mul_ps(diff, diff);
+        
+        // Extract individual components and sum manually to avoid 4th element issues
+        float dx2 = _mm_cvtss_f32(squared);
+        float dy2 = _mm_cvtss_f32(_mm_shuffle_ps(squared, squared, _MM_SHUFFLE(1, 1, 1, 1)));
+        float dz2 = _mm_cvtss_f32(_mm_shuffle_ps(squared, squared, _MM_SHUFFLE(2, 2, 2, 2)));
+        
+        return dx2 + dy2 + dz2;
     }
 
     static float dot_product(const float* vec1, const float* vec2) {
-        return vec1[0]*vec2[0] + vec1[1]*vec2[1] + vec1[2]*vec2[2];
+        // Vectorised dot product using SSE
+        __m128 v1 = _mm_loadu_ps(vec1);
+        __m128 v2 = _mm_loadu_ps(vec2);
+        __m128 product = _mm_mul_ps(v1, v2);
+        
+        // Extract individual components and sum manually
+        float x = _mm_cvtss_f32(product);
+        float y = _mm_cvtss_f32(_mm_shuffle_ps(product, product, _MM_SHUFFLE(1, 1, 1, 1)));
+        float z = _mm_cvtss_f32(_mm_shuffle_ps(product, product, _MM_SHUFFLE(2, 2, 2, 2)));
+        
+        return x + y + z;
     }
 
     static void normalize_vec3(float* vec) {
-        float magnitude = std::sqrt(vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2]);
-        if (magnitude > 0.0f) {
-            float inv_magnitude = 1.0f / magnitude;
-            vec[0] *= inv_magnitude;
-            vec[1] *= inv_magnitude;
-            vec[2] *= inv_magnitude;
+        // Vectorised normalisation using SSE
+        __m128 v = _mm_loadu_ps(vec);
+        __m128 squared = _mm_mul_ps(v, v);
+        
+        // Extract individual components and sum manually
+        float x2 = _mm_cvtss_f32(squared);
+        float y2 = _mm_cvtss_f32(_mm_shuffle_ps(squared, squared, _MM_SHUFFLE(1, 1, 1, 1)));
+        float z2 = _mm_cvtss_f32(_mm_shuffle_ps(squared, squared, _MM_SHUFFLE(2, 2, 2, 2)));
+        
+        float mag = std::sqrt(x2 + y2 + z2);
+        
+        if (mag > 0.0f) {
+            float inv_magnitude = 1.0f / mag;
+            __m128 inv_mag_vec = _mm_set1_ps(inv_magnitude);
+            __m128 normalized = _mm_mul_ps(v, inv_mag_vec);
+            _mm_storeu_ps(vec, normalized);
         }
         else {
             throw std::invalid_argument("Attempted to normalise a zero vector");
@@ -143,6 +172,8 @@ struct Particle {
             throw std::invalid_argument("Neighbour not found in particle");
         }
     }
+    
+
 };
 
 #ifdef __cplusplus
@@ -152,7 +183,7 @@ EXPORT void clean_particles(float* data, int num_points, CleanParams* params, in
 EXPORT void find_neighbours(float* data, int num_points, float min_distance, float max_distance, int* results);
 EXPORT void filter_by_orientation(float* data, int num_points, float min_orientation, float max_orientation, int* results);
 EXPORT void filter_by_curvature(float* data, int num_points, float min_curvature, float max_curvature, int* results);
-EXPORT void assign_lattices(float* data, int num_points, int min_neighbours, int min_lattice_size, int* results);
+EXPORT void assign_lattices(float* data, int num_points, unsigned int min_neighbours, unsigned int min_lattice_size, int* results);
 // Debug/testing utility: perform distance + orientation + curvature filtering and
 // return neighbour lists in CSR form. Offsets has length num_points + 1. If
 // neighbours_out is nullptr, only offsets are filled (offsets[num_points] will be total entries).
