@@ -153,6 +153,10 @@ EXPORT void find_neighbours(float* data, int num_points, float min_distance, flo
 EXPORT void filter_by_orientation(float* data, int num_points, float min_orientation, float max_orientation, int* results);
 EXPORT void filter_by_curvature(float* data, int num_points, float min_curvature, float max_curvature, int* results);
 EXPORT void assign_lattices(float* data, int num_points, int min_neighbours, int min_lattice_size, int* results);
+// Debug/testing utility: perform distance + orientation + curvature filtering and
+// return neighbour lists in CSR form. Offsets has length num_points + 1. If
+// neighbours_out is nullptr, only offsets are filled (offsets[num_points] will be total entries).
+EXPORT void get_cleaned_neighbours(float* data, int num_points, CleanParams* params, int* offsets, int* neighbours_out);
 #ifdef __cplusplus
 }
 #endif

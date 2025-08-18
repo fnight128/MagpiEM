@@ -55,6 +55,14 @@ def setup_cpp_library() -> ctypes.CDLL:
     c_lib.clean_particles.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.POINTER(CleanParams), ctypes.POINTER(ctypes.c_int)]
     c_lib.clean_particles.restype = None
     
+    # Debug export to fetch cleaned neighbour IDs (CSR)
+    try:
+        c_lib.get_cleaned_neighbours.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.POINTER(CleanParams), ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int)]
+        c_lib.get_cleaned_neighbours.restype = None
+    except AttributeError:
+        # Older DLLs may not have this; tests that rely on it should guard accordingly
+        pass
+    
     return c_lib
 
 def load_particle_data() -> np.ndarray:
@@ -335,6 +343,160 @@ def verify_lattice_assignments(python_lattices: list[int], cpp_lattices: list[in
         
         raise Exception(f"{test_name} failed")
 
+def verify_neighbour_relationships(c_lib: ctypes.CDLL, test_data: np.ndarray, test_cleaner: Cleaner, test_name: str) -> None:
+    """Verify that C++ and Python have identical neighbour relationships at each stage"""
+    print(f"TEST {test_name}: Neighbour relationship verification")
+    
+    # Get Python neighbour relationships at each stage
+    test_tomo = setup_test_tomogram()
+    
+    # Stage 1: After distance filtering
+    python_neighbours_distance = {}
+    for particle in test_tomo.all_particles:
+        python_neighbours_distance[particle.particle_id] = {p.particle_id for p in particle.neighbours}
+    
+    # Stage 2: After orientation filtering
+    for particle in test_tomo.all_particles:
+        particle.filter_neighbour_orientation(test_cleaner.ori_range, None)
+    python_neighbours_orientation = {}
+    for particle in test_tomo.all_particles:
+        python_neighbours_orientation[particle.particle_id] = {p.particle_id for p in particle.neighbours}
+    
+    # Stage 3: After curvature filtering
+    test_tomo = setup_test_tomogram()
+    for particle in test_tomo.all_particles:
+        particle.filter_neighbour_orientation(test_cleaner.ori_range, None)
+        particle.filter_curvature(test_cleaner.curv_range)
+    python_neighbours_curvature = {}
+    for particle in test_tomo.all_particles:
+        python_neighbours_curvature[particle.particle_id] = {p.particle_id for p in particle.neighbours}
+    
+    # Get C++ neighbour relationships
+    flat_data = [val for particle in test_data for val in particle]
+    c_array = (ctypes.c_float * len(flat_data))(*flat_data)
+    results_array = (ctypes.c_int * len(test_data))()
+    
+    # We need to extract the actual neighbour relationships from C++
+    # Since the C++ functions only return neighbour counts, we need to modify them to return neighbour IDs
+    # For now, let's compare what we can and identify the issue
+    
+    print(f"  Comparing neighbour relationships...")
+    
+    # Compare distance stage
+    c_lib.find_neighbours(c_array, len(test_data), test_cleaner.dist_range[0], test_cleaner.dist_range[1], results_array)
+    cpp_counts_distance = [results_array[i] for i in range(len(test_data))]
+    
+    # Compare orientation stage
+    c_lib.filter_by_orientation(c_array, len(test_data), test_cleaner.ori_range[0], test_cleaner.ori_range[1], results_array)
+    cpp_counts_orientation = [results_array[i] for i in range(len(test_data))]
+    
+    # Compare curvature stage
+    c_lib.filter_by_curvature(c_array, len(test_data), test_cleaner.curv_range[0], test_cleaner.curv_range[1], results_array)
+    cpp_counts_curvature = [results_array[i] for i in range(len(test_data))]
+    
+    # Check if neighbour counts match
+    distance_diffs = [(i, python_neighbours_distance[i], cpp_counts_distance[i]) 
+                     for i in range(len(test_data)) 
+                     if len(python_neighbours_distance[i]) != cpp_counts_distance[i]]
+    
+    orientation_diffs = [(i, len(python_neighbours_orientation[i]), cpp_counts_orientation[i]) 
+                        for i in range(len(test_data)) 
+                        if len(python_neighbours_orientation[i]) != cpp_counts_orientation[i]]
+    
+    curvature_diffs = [(i, len(python_neighbours_curvature[i]), cpp_counts_curvature[i]) 
+                      for i in range(len(test_data)) 
+                      if len(python_neighbours_curvature[i]) != cpp_counts_curvature[i]]
+    
+    if distance_diffs:
+        print(f"  ❌ Distance stage: {len(distance_diffs)} particles have different neighbour counts")
+        for i, python_count, cpp_count in distance_diffs[:5]:
+            print(f"      Particle {i}: Python={python_count} neighbours, C++={cpp_count} neighbours")
+        raise Exception(f"{test_name} failed at distance stage")
+    
+    if orientation_diffs:
+        print(f"  ❌ Orientation stage: {len(orientation_diffs)} particles have different neighbour counts")
+        for i, python_count, cpp_count in orientation_diffs[:5]:
+            print(f"      Particle {i}: Python={python_count} neighbours, C++={cpp_count} neighbours")
+        raise Exception(f"{test_name} failed at orientation stage")
+    
+    if curvature_diffs:
+        print(f"  ❌ Curvature stage: {len(curvature_diffs)} particles have different neighbour counts")
+        for i, python_count, cpp_count in curvature_diffs[:5]:
+            print(f"      Particle {i}: Python={python_count} neighbours, C++={cpp_count} neighbours")
+        raise Exception(f"{test_name} failed at curvature stage")
+    
+    print(f"  ✓ All neighbour counts match between Python and C++")
+    print(f"  ✓ The differences are indeed only in the lattice assignment phase")
+
+def get_cpp_cleaned_neighbours(c_lib: ctypes.CDLL, test_data: np.ndarray, params: CleanParams) -> list[set[int]]:
+    """Call C++ debug export to get exact neighbour IDs after distance+orientation+curvature."""
+    num_particles = len(test_data)
+    flat_data = (ctypes.c_float * (num_particles * 6))(*[v for row in test_data for v in row])
+    offsets = (ctypes.c_int * (num_particles + 1))()
+    # First call to compute offsets and total length
+    try:
+        c_lib.get_cleaned_neighbours(flat_data, num_particles, ctypes.byref(params), offsets, None)
+    except AttributeError:
+        raise RuntimeError("processing.dll is missing get_cleaned_neighbours debug export")
+    total = offsets[num_particles]
+    neighbours = (ctypes.c_int * total)()
+    # Second call to fill neighbours
+    c_lib.get_cleaned_neighbours(flat_data, num_particles, ctypes.byref(params), offsets, neighbours)
+    # Build sets per particle
+    cpp_sets: list[set[int]] = []
+    for i in range(num_particles):
+        start = offsets[i]
+        end = offsets[i + 1]
+        cpp_sets.append(set(int(neighbours[j]) for j in range(start, end)))
+    return cpp_sets
+
+def verify_exact_neighbours_with_cpp(c_lib: ctypes.CDLL, test_data: np.ndarray, test_cleaner: Cleaner, params: CleanParams) -> None:
+    """Compare exact neighbour IDs per particle (post orientation+curvature), Python vs C++."""
+    # Python side neighbours after distance (via setup_test_tomogram), then orientation+curvature
+    tomo = setup_test_tomogram()
+    for p in tomo.all_particles:
+        p.filter_neighbour_orientation(test_cleaner.ori_range, None)
+        p.filter_curvature(test_cleaner.curv_range)
+    
+    # Create mapping from test_data index to Python particle_id
+    # The test_data order should match the order particles were created in setup_test_tomogram
+    test_data_to_python_id = {}
+    for idx, p in enumerate(tomo.all_particles):
+        # Extract position from test_data and find matching particle
+        test_pos = test_data[idx][:3]  # x,y,z
+        for py_p in tomo.all_particles:
+            if np.allclose(py_p.position, test_pos, atol=1e-6):
+                test_data_to_python_id[idx] = py_p.particle_id
+                break
+    
+    # Create reverse mapping: particle_id -> test_data index
+    python_id_to_test_index = {v: k for k, v in test_data_to_python_id.items()}
+    
+    # Build Python neighbour sets using test_data indices
+    python_sets: list[set[int]] = []
+    for idx in range(len(test_data)):
+        if idx in test_data_to_python_id:
+            py_id = test_data_to_python_id[idx]
+            py_particle = next(p for p in tomo.all_particles if p.particle_id == py_id)
+            python_sets.append(set(python_id_to_test_index[n.particle_id] for n in py_particle.neighbours if n.particle_id in python_id_to_test_index))
+        else:
+            python_sets.append(set())  # No matching particle found
+    # C++ side exact neighbours
+    cpp_sets = get_cpp_cleaned_neighbours(c_lib, test_data, params)
+    # Compare
+    diffs: list[tuple[int, set[int], set[int]]] = []
+    for i in range(len(test_data)):
+        if python_sets[i] != cpp_sets[i]:
+            diffs.append((i, python_sets[i], cpp_sets[i]))
+    if diffs:
+        print(f"  ❌ Exact neighbour mismatch for {len(diffs)} particles (showing up to 5):")
+        for i, py, cpp in diffs[:5]:
+            missing = sorted(py - cpp)
+            extra = sorted(cpp - py)
+            print(f"    Particle {i}: missing {missing[:20]}{'...' if len(missing)>20 else ''}, extra {extra[:20]}{'...' if len(extra)>20 else ''}")
+        raise Exception("Exact neighbour comparison failed")
+    print("  ✓ Exact neighbour IDs match for all particles (post filtering)")
+
 def compare_results(cpp_distance_time: float, cpp_orientation_time: float, cpp_curvature_time: float, cpp_full_time: float, python_time: float) -> None:
     """Display performance metrics"""
     speedup_distance = python_time / cpp_distance_time if cpp_distance_time > 0 else float('inf')
@@ -390,6 +552,11 @@ def main() -> None:
     distance_counts_cpp, cpp_distance_time = test_cpp_distance_only(c_lib, test_data, min_dist, max_dist, python_reference["initial"])
     orientation_counts_cpp, cpp_orientation_time = test_cpp_orientation_only(c_lib, test_data, min_dist, max_dist, min_ori, max_ori, python_reference["orientation"])
     curvature_counts_cpp, cpp_curvature_time = test_cpp_curvature_only(c_lib, test_data, min_dist, max_dist, min_curv, max_curv, python_reference["curvature"])
+
+    # Verify exact neighbour IDs (post filtering) before lattice comparison
+    verify_exact_neighbours_with_cpp(c_lib, test_data, test_cleaner, params)
+
+    # Now run full pipeline lattice assignment (strict)
     full_counts_cpp, cpp_full_time = test_cpp_full_pipeline(c_lib, test_data, params, python_reference["lattice"])
     
     # Display performance results

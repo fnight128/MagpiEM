@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <string>
 #include <map>
+#include <cstring>
 
 static std::vector<Particle> g_particles;
 static bool g_particles_initialized = false;
@@ -203,4 +204,41 @@ EXPORT void clean_particles(float* data, int num_particles, CleanParams* params,
 void reset_particles() {
     g_particles.clear();
     g_particles_initialized = false;
+}
+
+// Debug/testing utility to extract neighbour IDs after applying distance, orientation, curvature
+// The function fills offsets (size: num_particles + 1) and neighbours_out (flattened IDs)
+// If neighbours_out is nullptr, only computes offsets and total length in offsets[num_particles]
+EXPORT void get_cleaned_neighbours(float* data, int num_particles, CleanParams* params, int* offsets, int* neighbours_out) {
+    // Reset and run pipeline up to curvature
+    g_particles.clear();
+    g_particles_initialized = false;
+
+    // Distance neighbours
+    find_neighbours(data, num_particles, params->min_distance, params->max_distance, offsets /*reuse temp buffer*/);
+    // Orientation filter
+    filter_by_orientation(data, num_particles, params->min_orientation, params->max_orientation, offsets);
+    // Curvature filter
+    filter_by_curvature(data, num_particles, params->min_curvature, params->max_curvature, offsets);
+
+    // Build CSR outputs from g_particles.neighbours
+    int running_total = 0;
+    for (int i = 0; i < num_particles; ++i) {
+        offsets[i] = running_total;
+        running_total += static_cast<int>(g_particles[i].neighbours.size());
+    }
+    offsets[num_particles] = running_total;
+
+    if (neighbours_out == nullptr) {
+        return;
+    }
+    // Fill flattened neighbour indices by particle index position in g_particles
+    int cursor = 0;
+    for (int i = 0; i < num_particles; ++i) {
+        for (Particle* neighbour : g_particles[i].neighbours) {
+            // neighbour pointer points into g_particles; compute index by pointer arithmetic
+            int neighbour_index = static_cast<int>(neighbour - &g_particles[0]);
+            neighbours_out[cursor++] = neighbour_index;
+        }
+    }
 }
