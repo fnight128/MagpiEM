@@ -81,12 +81,16 @@ def load_test_data() -> tuple[np.ndarray, Cleaner, tuple[float, float, float, fl
     
     return test_data, test_cleaner, (min_dist, max_dist, min_ori, max_ori, min_curv, max_curv, min_lattice_size, min_neighbours)
 
+def create_test_cleaner() -> Cleaner:
+    return Cleaner.from_user_params(*TEST_CLEANER_VALUES)
+
 def create_test_tomogram() -> Tomogram:
     return read_single_tomogram(TEST_DATA_FILE, TEST_TOMO_NAME)
 
-def setup_test_tomogram(test_cleaner: Cleaner) -> Tomogram:
+def setup_test_tomogram() -> Tomogram:
     """Create and setup a test tomogram with the given cleaner parameters"""
     test_tomo = create_test_tomogram()
+    test_cleaner = create_test_cleaner()
     test_tomo.set_clean_params(test_cleaner)
     test_tomo.find_particle_neighbours(test_cleaner.dist_range)
     return test_tomo
@@ -172,7 +176,7 @@ def calculate_python_reference(test_data: np.ndarray, test_cleaner: Cleaner) -> 
         """List of 0s to store particle data for comparison with c++"""
         return [0] * len(test_tomo.all_particles)
     
-    test_tomo = setup_test_tomogram(test_cleaner)
+    test_tomo = setup_test_tomogram()
     neighbour_counts_initial_python = empty_particle_list()
     for particle in test_tomo.all_particles:
         neighbour_counts_initial_python[particle.particle_id] = len(particle.neighbours)
@@ -183,14 +187,14 @@ def calculate_python_reference(test_data: np.ndarray, test_cleaner: Cleaner) -> 
         particle.filter_neighbour_orientation(test_cleaner.ori_range, None)
         neighbour_counts_orientation_python[particle.particle_id] = len(particle.neighbours)
 
-    test_tomo = setup_test_tomogram(test_cleaner)
+    test_tomo = setup_test_tomogram()
     neighbour_counts_curvature_python = empty_particle_list()
     for particle in test_tomo.all_particles:
         particle.filter_curvature(test_cleaner.curv_range)
         neighbour_counts_curvature_python[particle.particle_id] = len(particle.neighbours)
     
     # Test full pipeline (distance + orientation + curvature)
-    test_tomo = setup_test_tomogram(test_cleaner)
+    test_tomo = setup_test_tomogram()
     neighbour_counts_full_python = empty_particle_list()
     for particle in test_tomo.all_particles:
         particle.filter_neighbour_orientation(test_cleaner.ori_range, None)
@@ -199,7 +203,7 @@ def calculate_python_reference(test_data: np.ndarray, test_cleaner: Cleaner) -> 
     
     # Test lattice assignment
     lattice_assignments_python = empty_particle_list()
-    test_tomo = setup_test_tomogram(test_cleaner)
+    test_tomo = setup_test_tomogram()
     test_tomo.autoclean()
     
     for particle in test_tomo.all_particles:
@@ -256,8 +260,17 @@ def verify_lattice_assignments(python_lattices: list[int], cpp_lattices: list[in
         # Generate cone plots for debugging if test_data is provided
         if test_data is not None:
             print(f"      Generating cone plots for debugging...")
-            create_cone_plot_from_lattices(test_data, cpp_lattices, "C++ Lattice Assignments", "cpp_lattices.html")
-            create_cone_plot_from_lattices(test_data, python_lattices, "Python Lattice Assignments", "python_lattices.html")
+            cpp_fig = create_cone_plot_from_lattices(test_data, cpp_lattices, "C++ Lattice Assignments", "cpp_lattices.html")
+            python_fig = create_cone_plot_from_lattices(test_data, python_lattices, "Python Lattice Assignments", "python_lattices.html")
+            test_tomo = setup_test_tomogram()
+            test_tomo.autoclean()
+            test_tomo.generate_lattice_dfs()
+            for lattice in test_tomo.lattices:
+                if lattice == 0:
+                    continue
+                print(lattice)
+                cpp_fig.add_trace(test_tomo.lattice_trace(lattice, cone_size=-1, colour="#000000", opacity=1.0))
+            cpp_fig.write_html("combined_lattices.html")
         
         # Find differences with meaningful comparisons
         python_only = python_group_sets - cpp_group_sets
@@ -344,9 +357,10 @@ def create_cone_plot_from_lattices(test_data: np.ndarray, lattice_assignments: l
     test_tomo.generate_lattice_dfs()
 
     # Generate cone plot
-    fig = test_tomo.plot_all_lattices(cone_size=10)
+    fig = test_tomo.plot_all_lattices(cone_size=3)
     fig.write_html(filename)
     print(f"Saved cone plot to: {filename}")
+    return fig
 
 def main() -> None:
     """Main test function"""
