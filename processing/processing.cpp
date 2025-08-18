@@ -91,8 +91,6 @@ EXPORT void filter_by_curvature(float* data, int num_particles, float min_curvat
 }
 
 EXPORT void assign_lattices(float* data, int num_particles, int min_neighbours, int min_lattice_size, int* results) {
-    printf("Assigning lattices for %d particles (min neighbours: %d, min lattice size: %d)\n", num_particles, min_neighbours, min_lattice_size);
-    
     // Reuse existing particles if already initialized, otherwise create new ones
     if (!g_particles_initialized) {
         g_particles = Particle::from_raw_data(data, num_particles);
@@ -105,9 +103,8 @@ EXPORT void assign_lattices(float* data, int num_particles, int min_neighbours, 
     }
     
     int next_lattice_id = 1;
-    std::vector<std::vector<Particle*>> lattice_groups;
     
-    // Assign lattices
+    // Assign lattices using optimized BFS
     for (int i = 0; i < num_particles; i++) {
         Particle& current = g_particles[i];
         
@@ -119,64 +116,45 @@ EXPORT void assign_lattices(float* data, int num_particles, int min_neighbours, 
         // Start a new lattice with this particle
         current.lattice = next_lattice_id;
         
-        // Use breadth-first search to assign all connected particles to the same lattice
+        // Use optimized breadth-first search with pre-allocated queue
         std::vector<Particle*> queue;
-        std::vector<Particle*> lattice_members;
+        queue.reserve(num_particles); // Pre-allocate to avoid reallocations
         queue.push_back(&current);
-        lattice_members.push_back(&current);
         
-        for (size_t queue_idx = 0; queue_idx < queue.size(); queue_idx++) {
-            Particle* particle = queue[queue_idx];
+        size_t queue_idx = 0;
+        while (queue_idx < queue.size()) {
+            Particle* particle = queue[queue_idx++];
             
             // Add all unassigned neighbours with sufficient neighbours to the queue
             for (Particle* neighbour : particle->neighbours) {
                 if (neighbour->lattice == 0 && neighbour->get_neighbour_count() >= min_neighbours) {
                     neighbour->lattice = next_lattice_id;
                     queue.push_back(neighbour);
-                    lattice_members.push_back(neighbour);
                 }
             }
         }
         
-        // Store the lattice group for later size checking
-        lattice_groups.push_back(lattice_members);
         next_lattice_id++;
     }
     
-    // Filter out lattices that are too small
-    printf("Checking %zu lattices for minimum size %d\n", lattice_groups.size(), min_lattice_size);
-    for (size_t i = 0; i < lattice_groups.size(); i++) {
-        const auto& lattice_group = lattice_groups[i];
-        printf("  Lattice %zu: %zu particles", i + 1, lattice_group.size());
-        if (lattice_group.size() < min_lattice_size) {
-            printf(" -> REMOVED (too small)");
-            // Reassign all particles in this lattice to 0
-            for (Particle* particle : lattice_group) {
-                particle->lattice = 0;
-            }
-        } else {
-            printf(" -> KEPT");
+    // Filter out small lattices in a single pass
+    std::vector<int> lattice_sizes(next_lattice_id, 0);
+    for (const auto& particle : g_particles) {
+        if (particle.lattice > 0) {
+            lattice_sizes[particle.lattice]++;
         }
-        printf("\n");
+    }
+    
+    // Reassign particles in small lattices to 0
+    for (auto& particle : g_particles) {
+        if (particle.lattice > 0 && lattice_sizes[particle.lattice] < min_lattice_size) {
+            particle.lattice = 0;
+        }
     }
     
     // Copy lattice assignments to results array
     for (int i = 0; i < num_particles; i++) {
         results[i] = g_particles[i].lattice;
-    }
-    
-    // Print summary of final lattice assignments
-    std::map<int, int> lattice_counts;
-    for (int i = 0; i < num_particles; i++) {
-        lattice_counts[g_particles[i].lattice]++;
-    }
-    printf("Final lattice assignments:\n");
-    for (const auto& [lattice_id, count] : lattice_counts) {
-        if (lattice_id == 0) {
-            printf("  Unassigned (lattice 0): %d particles\n", count);
-        } else {
-            printf("  Lattice %d: %d particles\n", lattice_id, count);
-        }
     }
 }
 
@@ -211,8 +189,7 @@ void reset_particles() {
 // If neighbours_out is nullptr, only computes offsets and total length in offsets[num_particles]
 EXPORT void get_cleaned_neighbours(float* data, int num_particles, CleanParams* params, int* offsets, int* neighbours_out) {
     // Reset and run pipeline up to curvature
-    g_particles.clear();
-    g_particles_initialized = false;
+    reset_particles();
 
     // Distance neighbours
     find_neighbours(data, num_particles, params->min_distance, params->max_distance, offsets /*reuse temp buffer*/);
