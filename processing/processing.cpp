@@ -12,27 +12,35 @@
 static std::vector<Particle> g_particles;
 static bool g_particles_initialized = false;
 
+
+
 EXPORT void find_neighbours(float* data, int num_particles, float min_distance_squared, float max_distance_squared, int* results) {
     printf("Finding neighbours for %d particles (distance: %.2f - %.2f)\n", num_particles, min_distance_squared, max_distance_squared);
+    // Further optimisations e.g. region-based approach do not provide significant
     
     g_particles = Particle::from_raw_data(data, num_particles);
     g_particles_initialized = true;
     
+    // Clear all neighbour lists
+    for (auto& particle : g_particles) {
+        particle.neighbours.clear();
+        particle.neighbours.reserve(num_particles / 10); // Reserve some space to avoid reallocations
+    }
+    
     // Calculate neighbours for all particles based on distance only
+    // Only compare each pair once to avoid double calculations
     for (int i = 0; i < num_particles; i++) {
         Particle& current = g_particles[i];
-        current.neighbours.clear();
-        current.neighbours.reserve(num_particles / 10); // Reserve some space to avoid reallocations
         
-        for (int j = 0; j < num_particles; j++) {
-            if (i == j) continue;
-            
+        for (int j = i + 1; j < num_particles; j++) {
             Particle& other = g_particles[j];
             float distance_squared = current.calculate_distance_squared(other);
             
             // Check distance criteria using squared distances
             if (distance_squared >= min_distance_squared && distance_squared <= max_distance_squared) {
+                // Add bidirectional neighbours
                 current.neighbours.push_back(&other);
+                other.neighbours.push_back(&current);
             }
         }
         
@@ -104,7 +112,7 @@ EXPORT void assign_lattices(float* data, int num_particles, int min_neighbours, 
     
     int next_lattice_id = 1;
     
-    // Assign lattices using optimized BFS
+    // Assign lattices
     for (int i = 0; i < num_particles; i++) {
         Particle& current = g_particles[i];
         
@@ -118,7 +126,7 @@ EXPORT void assign_lattices(float* data, int num_particles, int min_neighbours, 
         
         // Use optimized breadth-first search with pre-allocated queue
         std::vector<Particle*> queue;
-        queue.reserve(num_particles); // Pre-allocate to avoid reallocations
+        queue.reserve(num_particles);
         queue.push_back(&current);
         
         size_t queue_idx = 0;
