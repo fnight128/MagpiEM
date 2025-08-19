@@ -211,6 +211,8 @@ def main():
         server=server,
         external_stylesheets=[dbc.themes.SOLAR],
         transforms=[MultiplexerTransform()],
+        title="MagpiEM",
+        update_title=None,  # Prevent "Updating..." title
     )
     load_figure_template("SOLAR")
 
@@ -514,20 +516,18 @@ def main():
         Output("collapse-graph-control", "is_open"),
         Output("collapse-save", "is_open"),
         Input("dropdown-tomo", "disabled"),
+        State("store-tomogram-data", "data"),
+        State("store-lattice-data", "data"),
         prevent_initial_callback=True,
     )
-    def open_cards(_):
+    def open_cards(_, tomogram_raw_data, lattice_data):
         upload_phase = True, False, False, False
         cleaning_phase = False, True, True, False
         saving_phase = False, False, True, True
-        global __dash_tomograms
-        raise NotImplementedError("open_cards function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data")
-        if not __dash_tomograms:
+        if not tomogram_raw_data:
             return upload_phase
-
-        random_tomo = next(iter(__dash_tomograms.values()))
-        if len(random_tomo.lattices.keys()) > 1:
-            return saving_phase
+        elif not lattice_data:
+            return cleaning_phase
         else:
             return cleaning_phase
 

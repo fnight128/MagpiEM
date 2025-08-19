@@ -1088,7 +1088,7 @@ class Tomogram:
         return tomo
 
 
-def simple_figure() -> go.Figure():
+def simple_figure() -> go.Figure:
     """
     Returns a simple empty figure with generally appropriate settings for particle display
     """

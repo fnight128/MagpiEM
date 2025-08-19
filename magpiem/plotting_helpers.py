@@ -104,8 +104,11 @@ def create_lattice_plot_from_raw_data(
             continue
             
         # Skip lattice 0 (removed particles) unless show_removed_particles is True
-        if lattice_id == 0 and not show_removed_particles:
+        if lattice_id == 0: # and not show_removed_particles:
+            print("skipping lattice 0")
             continue
+
+        print("plotting lattice", lattice_id)
             
         # Extract particles for this lattice
         lattice_particles = [tomogram_raw_data[j] for j in particle_ids]
