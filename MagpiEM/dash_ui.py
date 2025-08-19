@@ -205,7 +205,16 @@ def clean_tomo_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> dict:
     return lattice_assignments
 
 
-def main():
+def main(open_browser=True):
+    """
+    Main function to run the MagpiEM Dash application.
+    
+    Parameters
+    ----------
+    open_browser : bool, optional
+        Whether to automatically open the application in the default browser.
+        Default is True. Set to False for testing or headless operation.
+    """
     server = Flask(__name__)
     app = DashProxy(
         server=server,
@@ -1288,7 +1297,8 @@ def main():
         print(out_file)
         return dcc.send_file(out_file)
 
-    webbrowser.open("http://localhost:8050/")
+    if open_browser:
+        webbrowser.open("http://localhost:8050/")
     app.run_server(debug=True, use_reloader=False)
 
 
