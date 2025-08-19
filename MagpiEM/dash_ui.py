@@ -145,7 +145,10 @@ def convert_raw_data_to_cpp_format(tomogram_raw_data: list) -> tuple[np.ndarray,
     flat_data = []
     for particle in tomogram_raw_data:
         pos, orient = particle
-        flat_data.extend(pos + orient)
+        # Convert both to lists to ensure consistent behavior
+        pos_list = pos.tolist() if hasattr(pos, 'tolist') else list(pos)
+        orient_list = orient.tolist() if hasattr(orient, 'tolist') else list(orient)
+        flat_data.extend(pos_list + orient_list)
 
     return np.array(flat_data, dtype=np.float32), len(tomogram_raw_data)
 
@@ -203,6 +206,9 @@ def clean_tomo_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> dict:
         lattice_assignments[lattice_id].append(i)
 
     return lattice_assignments
+
+
+
 
 
 def main(open_browser=True):

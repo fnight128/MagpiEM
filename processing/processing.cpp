@@ -178,6 +178,9 @@ public:
         printf("  Curvature: %.2f - %.2f\n", params->min_curvature, params->max_curvature);
         printf("  Min lattice size: %d, Min neighbours: %d\n", params->min_lattice_size, params->min_neighbours);
         
+        // Reset state to ensure we process the new data
+        reset();
+        
         // First find neighbours by distance
         find_neighbours(data, num_particles, params->min_distance, params->max_distance, results);
         

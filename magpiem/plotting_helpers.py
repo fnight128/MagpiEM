@@ -99,7 +99,7 @@ def create_lattice_plot_from_raw_data(
     num_lattices = len(lattice_ids)
     lattice_colours = colour_range(num_lattices)
     
-    for i, (lattice_id, particle_ids) in enumerate(lattice_data.items()):
+    for lattice_id, particle_ids in lattice_data.items():
         # Convert lattice_id to int in case it was serialized as string by dcc.Store
         lattice_id = int(lattice_id)
         if len(particle_ids) == 0:
@@ -109,6 +109,7 @@ def create_lattice_plot_from_raw_data(
         if lattice_id == 0 and not show_removed_particles:
             continue
             
+
         # Extract particles for this lattice
         lattice_particles = [tomogram_raw_data[j] for j in particle_ids]
         
@@ -119,7 +120,9 @@ def create_lattice_plot_from_raw_data(
             opacity = 0.6
         else:
             # Other lattices use the generated colour range
-            colour = lattice_colours[i]
+            # Use lattice_id to determine color index, ensuring consistent colors
+            color_index = (lattice_id - 1) % len(lattice_colours)  # -1 because lattice 0 is handled separately
+            colour = lattice_colours[color_index]
             opacity = 0.8
             
         # Create trace for this lattice
