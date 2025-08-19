@@ -13,8 +13,8 @@ from magpiem.read_write import read_emc_mat, read_single_tomogram
 from magpiem.classes import Tomogram, Particle, Cleaner
 
 # Updated paths for test folder location
-TEST_DATA_FILE = current_dir / "test_data.mat"
-TEST_TOMO_NAME = "wt2nd_4004_2"
+TEST_DATA_FILE = current_dir / "WT_CA_2nd.mat"
+TEST_TOMO_NAME = "wt2nd_4004_6"
 # appropriate values for test tomogram
 TEST_CLEANER_VALUES = [2.0, 3, 10, 60.0, 40.0, 10.0, 20.0, 90.0, 20.0]
 
@@ -488,6 +488,11 @@ def verify_lattice_assignments(
     # Convert to sets of particle sets for comparison
     python_group_sets = set(frozenset(group) for group in python_groups.values())
     cpp_group_sets = set(frozenset(group) for group in cpp_groups.values())
+
+    print(f"      Generating cone plots for debugging...")
+    cpp_fig = create_cone_plot_from_lattices(
+        test_data, cpp_lattices, "C++ Lattice Assignments", "cpp_lattices.html"
+    )
 
     if python_group_sets == cpp_group_sets:
         print(f"  ✓ {test_name}")
