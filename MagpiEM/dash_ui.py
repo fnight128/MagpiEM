@@ -7,11 +7,13 @@ Created on Mon Nov  7 16:53:45 2022
 import colorsys
 import pandas as pd
 import plotly.graph_objects as go
+import numpy as np
 import os
 import base64
 import math
 import yaml
 from pathlib import Path
+import ctypes
 
 import webbrowser
 
@@ -32,10 +34,15 @@ from .classes import Particle, Tomogram, Cleaner, simple_figure
 from .read_write import (
     read_relion_star,
     read_multiple_tomograms,
+    read_multiple_tomograms_raw_data,
     write_relion_star,
     write_emc_mat,
     read_tomo_names,
     read_single_tomogram,
+)
+from .plotting_helpers import (
+    create_particle_plot_from_raw_data,
+    create_lattice_plot_from_raw_data,
 )
 
 WHITE = "#FFFFFF"
@@ -57,6 +64,145 @@ POSITION_KEYS = ["x", "y", "z"]
 ORIENTATION_KEYS = ["u", "v", "w"]
 
 TEMP_TRACE_NAME = "selected_particle_trace"
+
+
+# Define the CleanParams struct for ctypes
+class CleanParams(ctypes.Structure):
+    _fields_ = [
+        ("min_distance", ctypes.c_float),
+        ("max_distance", ctypes.c_float),
+        ("min_orientation", ctypes.c_float),
+        ("max_orientation", ctypes.c_float),
+        ("min_curvature", ctypes.c_float),
+        ("max_curvature", ctypes.c_float),
+        ("min_lattice_size", ctypes.c_uint),
+        ("min_neighbours", ctypes.c_uint),
+    ]
+
+
+def setup_cpp_library() -> ctypes.CDLL:
+    """Load and configure the C++ library"""
+    # Get the path to the processing directory relative to this file
+    current_file = Path(__file__)
+    project_root = current_file.parent.parent
+    libname = project_root / "processing" / "processing.dll"
+
+    print("Loading processing library from:", libname)
+    print("Current file:", current_file)
+    print("Project root:", project_root)
+
+    if not libname.exists():
+        # Try alternative paths
+        alt_paths = [
+            project_root / "processing.dll",
+            Path.cwd() / "processing" / "processing.dll",
+            Path.cwd() / "processing.dll",
+        ]
+
+        for alt_path in alt_paths:
+            if alt_path.exists():
+                libname = alt_path
+                print(f"Found DLL at alternative path: {libname}")
+                break
+        else:
+            raise FileNotFoundError(
+                f"Processing DLL not found. Tried:\n- {libname}\n"
+                + "\n".join(f"- {p}" for p in alt_paths)
+            )
+
+    c_lib = ctypes.CDLL(str(libname))
+
+    # Set up function signatures
+    c_lib.clean_particles.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.c_int,
+        ctypes.POINTER(CleanParams),
+        ctypes.POINTER(ctypes.c_int),
+    ]
+    c_lib.clean_particles.restype = None
+
+    return c_lib
+
+
+def convert_raw_data_to_cpp_format(tomogram_raw_data: list) -> tuple[np.ndarray, int]:
+    """
+    Convert raw tomogram data to the format expected by the C++ library.
+
+    Parameters
+    ----------
+    tomogram_raw_data : list
+        Raw particle data in format [[[x,y,z], [rx,ry,rz]], ...]
+
+    Returns
+    -------
+    tuple[np.ndarray, int]
+        Flattened data array and number of particles
+    """
+    if not tomogram_raw_data:
+        return np.array([]), 0
+
+    # Flatten the data: [[x,y,z], [rx,ry,rz]] -> [x,y,z,rx,ry,rz]
+    flat_data = []
+    for particle in tomogram_raw_data:
+        pos, orient = particle
+        flat_data.extend(pos + orient)
+
+    return np.array(flat_data, dtype=np.float32), len(tomogram_raw_data)
+
+
+def clean_tomo_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> dict:
+    """
+    Clean tomogram data using the C++ library.
+
+    Parameters
+    ----------
+    tomogram_raw_data : list
+        Raw particle data in format [[[x,y,z], [rx,ry,rz]], ...]
+    clean_params : Cleaner
+        Cleaning parameters
+
+    Returns
+    -------
+    dict
+        Dictionary with particle_id -> lattice_id mappings
+    """
+    # Convert data to C++ format
+    flat_data, num_particles = convert_raw_data_to_cpp_format(tomogram_raw_data)
+
+    if num_particles == 0:
+        return {}
+
+    # Create C++ parameters structure
+    cpp_params = CleanParams(
+        min_distance=clean_params.dist_range[0],
+        max_distance=clean_params.dist_range[1],
+        min_orientation=clean_params.ori_range[0],
+        max_orientation=clean_params.ori_range[1],
+        min_curvature=clean_params.curv_range[0],
+        max_curvature=clean_params.curv_range[1],
+        min_lattice_size=clean_params.min_lattice_size,
+        min_neighbours=clean_params.min_neighbours,
+    )
+
+    # Create C arrays
+    c_array = (ctypes.c_float * len(flat_data))(*flat_data)
+    results_array = (ctypes.c_int * num_particles)()
+
+    # Load and call C++ library
+    c_lib = setup_cpp_library()
+    c_lib.clean_particles(
+        c_array, num_particles, ctypes.byref(cpp_params), results_array
+    )
+
+    # Convert results back to dictionary format
+    lattice_assignments = {}
+    for i in range(num_particles):
+        lattice_id = int(results_array[i])
+        if lattice_id not in lattice_assignments:
+            lattice_assignments[lattice_id] = []
+        lattice_assignments[lattice_id].append(i)
+
+    return lattice_assignments
 
 
 def main():
@@ -107,6 +253,7 @@ def main():
         State("store-camera", "data"),
         State("store-clicked-point", "data"),
         State("store-lattice-data", "data"),
+        State("store-tomogram-data", "data"),
         Input("switch-cone-plot", "on"),
         State("inp-cone-size", "value"),
         Input("button-set-cone-size", "n_clicks"),
@@ -123,6 +270,7 @@ def main():
         camera_data,
         previous_point_data,
         lattice_data,
+        tomogram_raw_data,
         make_cones: bool,
         cone_size: float,
         _,
@@ -182,22 +330,55 @@ def main():
                     key: point_data[key] for key in particle_data_keys
                 }
                 selected_particles = {particle_from_point_data(point_data)}
-            selected_particles_df = Tomogram.particles_to_df(selected_particles)
-            particles_scatter_trace = Tomogram.scatter3d_trace(
-                selected_particles_df, name=TEMP_TRACE_NAME
-            )
+            # Create particle trace using raw data helper functions
+            if tomogram_raw_data and selected_tomo_name in tomogram_raw_data:
+                # For now, just create a simple trace for the clicked point
+                # This could be enhanced to show nearby particles
+                point_data = clicked_point["points"][0]
+                particles_scatter_trace = go.Scatter3d(
+                    x=[point_data["x"]],
+                    y=[point_data["y"]],
+                    z=[point_data["z"]],
+                    mode="markers",
+                    marker=dict(size=8, color="black", opacity=0.8),
+                    name=TEMP_TRACE_NAME,
+                    showlegend=True,
+                )
+            else:
+                # Fallback to empty trace
+                particles_scatter_trace = go.Scatter3d(
+                    x=[], y=[], z=[], mode="markers", name=TEMP_TRACE_NAME
+                )
             fig["data"].append(particles_scatter_trace)
 
         elif ctx.triggered_id == "dropdown-tomo":
             # Necessary to prevent clicks from lingering between graphs
             clicked_point = None
             camera_data = None
-            current_tomo = read_single_tomogram(TEMP_FILE_DIR + filename, selected_tomo_name)
-            if lattice_data and selected_tomo_name in lattice_data:
-                current_tomo.apply_progress_dict(lattice_data[selected_tomo_name])
-            fig = current_tomo.plot_all_lattices(
-                cone_size=cone_size, showing_removed_particles=show_removed
-            )
+            if tomogram_raw_data and selected_tomo_name in tomogram_raw_data:
+                current_tomo_raw_data = tomogram_raw_data[selected_tomo_name]
+
+                # Check if cleaning has been run for this tomogram
+                if lattice_data and selected_tomo_name in lattice_data:
+                    # lattice-based plot
+                    fig = create_lattice_plot_from_raw_data(
+                        current_tomo_raw_data,
+                        lattice_data[selected_tomo_name],
+                        cone_size=cone_size,
+                        show_removed_particles=show_removed,
+                    )
+                else:
+                    # No cleaning data, plot all particles in single colour
+                    fig = create_particle_plot_from_raw_data(
+                        current_tomo_raw_data,
+                        cone_size=cone_size,
+                        showing_removed_particles=show_removed,
+                        opacity=0.8,
+                        colour="white",
+                    )
+            else:
+                # Fallback to empty figure if no data available
+                fig = EMPTY_FIG
 
         if camera_data:
             fig["layout"]["scene"]["camera"] = camera_data
@@ -261,6 +442,7 @@ def main():
     )
     def select_convex(clicks, current_tomo, all_tomos, _):
         global __dash_tomograms
+        raise NotImplementedError("select_convex function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data")
         if all_tomos:
             for tomo in __dash_tomograms.values():
                 tomo.toggle_convex_arrays()
@@ -279,6 +461,7 @@ def main():
     def select_concave(clicks, current_tomo, all_tomos, _):
         # TODO make these a single callback
         global __dash_tomograms
+        raise NotImplementedError("select_concave function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data")
         if all_tomos:
             for tomo in __dash_tomograms.values():
                 tomo.toggle_concave_arrays()
@@ -304,6 +487,7 @@ def main():
         file_path = TEMP_FILE_DIR + filename + "_progress.yml"
 
         global __dash_tomograms
+        raise NotImplementedError("save_current_progress function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data")
         tomo_dict = {}
         for name, tomo in __dash_tomograms.items():
             tomo_dict[name] = tomo.write_progress_dict()
@@ -337,7 +521,7 @@ def main():
         cleaning_phase = False, True, True, False
         saving_phase = False, False, True, True
         global __dash_tomograms
-
+        raise NotImplementedError("open_cards function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data")
         if not __dash_tomograms:
             return upload_phase
 
@@ -355,15 +539,20 @@ def main():
         Input("button-next-Tomogram", "n_clicks"),
         Input("button-previous-Tomogram", "n_clicks"),
         State("store-lattice-data", "data"),
+        State("store-tomogram-data", "data"),
         State("upload-data", "filename"),
         prevent_initial_call=True,
     )
-    def update_dropdown(current_val, disabled, _, __, lattice_data, filename):
+    def update_dropdown(
+        current_val, disabled, _, __, lattice_data, tomogram_raw_data, filename
+    ):
 
         # unfortunately need to merge two callbacks here, dash does not allow multiple
         # callbacks with the same output so use ctx to distinguish between cases
-        tomo_keys = list(lattice_data.keys())
-        print(tomo_keys)
+
+        tomo_keys = list(tomogram_raw_data.keys())
+
+        print("Available tomograms:", tomo_keys)
         if not tomo_keys:
             return [], ""
 
@@ -385,12 +574,6 @@ def main():
             chosen_index = 0
 
         chosen_tomo = tomo_keys[chosen_index]
-        #
-        # current_tomo = read_single_tomogram(TEMP_FILE_DIR + filename, chosen_tomo)
-        #
-        # if lattice_data and chosen_tomo in lattice_data.keys():
-        #     print("applying")
-        #     current_tomo.apply_progress_dict(lattice_data[chosen_tomo])
 
         return tomo_keys, chosen_tomo
 
@@ -406,7 +589,7 @@ def main():
 
     def read_previous_progress(progress_file):
         global __dash_tomograms
-
+        raise NotImplementedError("read_previous_progress function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data")
         try:
             with open(progress_file, "r") as prev_yaml:
                 prev_yaml = yaml.safe_load(prev_yaml)
@@ -447,6 +630,7 @@ def main():
                 prev_msg,
             ]
 
+        raise NotImplementedError("read_previous_progress function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data")
         for tomo_name, tomo in __dash_tomograms.items():
             tomo.apply_progress_dict(prev_yaml[tomo_name])
 
@@ -454,6 +638,7 @@ def main():
         Output("label-read", "children"),
         Output("dropdown-tomo", "disabled"),
         Output("store-lattice-data", "data"),
+        Output("store-tomogram-data", "data"),
         Input("button-read", "n_clicks"),
         Input("upload-previous-session", "filename"),
         Input("upload-previous-session", "contents"),
@@ -467,15 +652,13 @@ def main():
         _, previous_filename, previous_contents, filename, contents, num_images
     ):
         if not filename:
-            return "Please choose a particle database", True
+            return "Please choose a particle database", True, {}, {}
 
         global __progress
         __progress = 0.0
 
         num_img_dict = {0: 1, 1: 5, 2: -1}
         num_images = num_img_dict[num_images]
-
-        global __dash_tomograms
 
         # ensure temp directory clear
         all_files = glob.glob(TEMP_FILE_DIR + "*")
@@ -489,24 +672,23 @@ def main():
 
         data_file_path = TEMP_FILE_DIR + filename
 
-        __dash_tomograms = read_uploaded_tomo(
-            data_file_path, __progress, num_images=num_images
+        # Read raw data for store
+        tomogram_raw_data = read_multiple_tomograms_raw_data(
+            data_file_path, num_images=num_images
         )
 
-        if not __dash_tomograms:
-            return "Data file Unreadable", True
+        if not tomogram_raw_data:
+            return "Data file Unreadable", True, {}, {}
 
         if ctx.triggered_id == "upload-previous-session":
             save_dash_upload(previous_filename, previous_contents)
             progress_path = TEMP_FILE_DIR + previous_filename
             read_previous_progress(progress_path)
 
-        tomo_names = read_tomo_names(data_file_path)
-        if num_images != -1:
-            tomo_names = tomo_names[:num_images]
-        tomo_names = {tomo_name: {} for tomo_name in tomo_names}
+        # Initialize lattice_data as empty dictionary - will be populated after cleaning
+        lattice_data = {}
 
-        return "Tomograms read", False, tomo_names
+        return "Tomograms read", False, lattice_data, tomogram_raw_data
 
     @app.callback(
         Input("upload-data", "filename"),
@@ -581,6 +763,7 @@ def main():
         State("inp-cc-thresh", "value"),
         State("inp-array-size", "value"),
         State("switch-allow-flips", "on"),
+        State("store-tomogram-data", "data"),
         Input("button-full-clean", "n_clicks"),
         Input("button-preview-clean", "n_clicks"),
         prevent_initial_call=True,
@@ -597,13 +780,16 @@ def main():
         cc_thresh: float,
         array_size: int,
         allow_flips: bool,
+        tomogram_raw_data: dict,
         clicks,
         clicks2,
     ):
         if not clicks or clicks2:
             return True, True, False, {}
-        # print(inp_file)
-        # tomo = Tomogram(name, particles)
+
+        if not tomogram_raw_data:
+            print("No tomogram data available for cleaning")
+            return True, True, False, {}
 
         clean_params = Cleaner.from_user_params(
             cc_thresh,
@@ -620,7 +806,7 @@ def main():
 
         print("Clean")
 
-        global __dash_tomograms, __clean_yaml_name, __progress
+        global __clean_yaml_name, __progress
 
         lattice_data = {}
 
@@ -628,10 +814,13 @@ def main():
 
         clean_count = 0
         clean_total_time = 0
-        total_tomos = len(__dash_tomograms.keys())
-        for tomo_name, tomo in __dash_tomograms.items():
+        total_tomos = len(tomogram_raw_data.keys())
+
+        for tomo_name, tomo_raw_data in tomogram_raw_data.items():
             t0 = time()
-            lattice_data[tomo_name] = clean_tomo(tomo, clean_params)
+            print(f"Cleaning tomogram: {tomo_name}")
+            lattice_data[tomo_name] = clean_tomo_with_cpp(tomo_raw_data, clean_params)
+            print(lattice_data[tomo_name])
             clean_total_time += time() - t0
             clean_count += 1
             tomos_remaining = total_tomos - clean_count
@@ -641,7 +830,7 @@ def main():
                 datetime.timedelta(seconds=secs_remaining)
             ).split(".")[0]
             __progress = clean_count / total_tomos
-            print("Time remaining:", formatted_time_remaining)
+            print(f"Time remaining: {formatted_time_remaining}")
             print()
 
         print("Saving cleaning parameters")
@@ -1027,7 +1216,7 @@ def main():
             html.Div(
                 [
                     dcc.Store(id="store-lattice-data"),
-                    dcc.Store(id="store-current-tomo"),
+                    dcc.Store(id="store-tomogram-data"),
                     dcc.Store(id="store-clicked-point"),
                     dcc.Store(id="store-camera"),
                 ]
@@ -1061,6 +1250,7 @@ def main():
     )
     def save_result(output_name, input_name, keep_selected, save_additional, _):
         global __dash_tomograms
+        raise NotImplementedError("save_result function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data")
         if not output_name:
             return None
         if output_name == input_name:
