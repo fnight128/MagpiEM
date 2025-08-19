@@ -263,7 +263,7 @@ def main(open_browser=True):
         State("graph-picking", "figure"),
         State("store-camera", "data"),
         State("store-clicked-point", "data"),
-        State("store-lattice-data", "data"),
+        Input("store-lattice-data", "data"), # "Input" to re-plot after cleaning
         State("store-tomogram-data", "data"),
         Input("switch-cone-plot", "on"),
         State("inp-cone-size", "value"),
@@ -362,7 +362,9 @@ def main(open_browser=True):
                 )
             fig["data"].append(particles_scatter_trace)
 
-        elif ctx.triggered_id == "dropdown-tomo":
+        elif ctx.triggered_id in ["dropdown-tomo", "store-lattice-data", "switch-cone-plot", "button-set-cone-size", "switch-show-removed"]:
+            # Handle all triggers that should update the plot
+
             # Necessary to prevent clicks from lingering between graphs
             clicked_point = None
             camera_data = None

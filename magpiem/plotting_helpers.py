@@ -100,15 +100,14 @@ def create_lattice_plot_from_raw_data(
     lattice_colours = colour_range(num_lattices)
     
     for i, (lattice_id, particle_ids) in enumerate(lattice_data.items()):
+        # Convert lattice_id to int in case it was serialized as string by dcc.Store
+        lattice_id = int(lattice_id)
         if len(particle_ids) == 0:
             continue
             
         # Skip lattice 0 (removed particles) unless show_removed_particles is True
-        if lattice_id == 0: # and not show_removed_particles:
-            print("skipping lattice 0")
+        if lattice_id == 0 and not show_removed_particles:
             continue
-
-        print("plotting lattice", lattice_id)
             
         # Extract particles for this lattice
         lattice_particles = [tomogram_raw_data[j] for j in particle_ids]
