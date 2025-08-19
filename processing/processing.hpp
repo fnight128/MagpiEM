@@ -91,6 +91,13 @@ struct Particle {
         return displacement;
     }
 
+    // Helper function to extract x, y, z components from SSE vector
+    static void extract_sse_components(const __m128& vec, float& x, float& y, float& z) {
+        x = _mm_cvtss_f32(vec);
+        y = _mm_cvtss_f32(_mm_shuffle_ps(vec, vec, _MM_SHUFFLE(1, 1, 1, 1)));
+        z = _mm_cvtss_f32(_mm_shuffle_ps(vec, vec, _MM_SHUFFLE(2, 2, 2, 2)));
+    }
+
     float calculate_distance_squared(const Particle& p) const {
         // Vectorised distance calculation using SSE
         __m128 pos1 = _mm_loadu_ps(position);
@@ -98,10 +105,9 @@ struct Particle {
         __m128 diff = _mm_sub_ps(pos1, pos2);
         __m128 squared = _mm_mul_ps(diff, diff);
         
-        // Extract individual components and sum manually to avoid 4th element issues
-        float dx2 = _mm_cvtss_f32(squared);
-        float dy2 = _mm_cvtss_f32(_mm_shuffle_ps(squared, squared, _MM_SHUFFLE(1, 1, 1, 1)));
-        float dz2 = _mm_cvtss_f32(_mm_shuffle_ps(squared, squared, _MM_SHUFFLE(2, 2, 2, 2)));
+        // Extract individual components using helper
+        float dx2, dy2, dz2;
+        extract_sse_components(squared, dx2, dy2, dz2);
         
         return dx2 + dy2 + dz2;
     }
@@ -112,10 +118,9 @@ struct Particle {
         __m128 v2 = _mm_loadu_ps(vec2);
         __m128 product = _mm_mul_ps(v1, v2);
         
-        // Extract individual components and sum manually
-        float x = _mm_cvtss_f32(product);
-        float y = _mm_cvtss_f32(_mm_shuffle_ps(product, product, _MM_SHUFFLE(1, 1, 1, 1)));
-        float z = _mm_cvtss_f32(_mm_shuffle_ps(product, product, _MM_SHUFFLE(2, 2, 2, 2)));
+        // Extract individual components using helper
+        float x, y, z;
+        extract_sse_components(product, x, y, z);
         
         return x + y + z;
     }
@@ -125,10 +130,9 @@ struct Particle {
         __m128 v = _mm_loadu_ps(vec);
         __m128 squared = _mm_mul_ps(v, v);
         
-        // Extract individual components and sum manually
-        float x2 = _mm_cvtss_f32(squared);
-        float y2 = _mm_cvtss_f32(_mm_shuffle_ps(squared, squared, _MM_SHUFFLE(1, 1, 1, 1)));
-        float z2 = _mm_cvtss_f32(_mm_shuffle_ps(squared, squared, _MM_SHUFFLE(2, 2, 2, 2)));
+        // Extract individual components using helper
+        float x2, y2, z2;
+        extract_sse_components(squared, x2, y2, z2);
         
         float mag = std::sqrt(x2 + y2 + z2);
         

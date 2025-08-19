@@ -123,6 +123,24 @@ def run_cpp_test(c_lib: ctypes.CDLL, test_data: np.ndarray, test_name: str, pyth
     
     return counts_cpp, test_time
 
+def create_test_function(cpp_func_name: str, setup_steps: list[str] = None) -> callable:
+    """Factory function to create test functions with common patterns"""
+    def test_func(c_lib, c_array, num_particles, results_array, *args):
+        # Apply setup steps if provided
+        if setup_steps:
+            for step in setup_steps:
+                if step == "find_neighbours":
+                    c_lib.find_neighbours(c_array, num_particles, args[0], args[1], results_array)
+                elif step == "filter_by_orientation":
+                    c_lib.filter_by_orientation(c_array, num_particles, args[2], args[3], results_array)
+                elif step == "filter_by_curvature":
+                    c_lib.filter_by_curvature(c_array, num_particles, args[2], args[3], results_array)
+        else:
+            # Direct function call
+            getattr(c_lib, cpp_func_name)(c_array, num_particles, *args, results_array)
+    
+    return test_func
+
 def test_cpp_distance_only(c_lib: ctypes.CDLL, test_data: np.ndarray, min_dist: float, max_dist: float, python_reference: list[int]) -> tuple[list[int], float]:
     """Test C++ distance-only neighbour finding"""
     def distance_test(c_lib, c_array, num_particles, results_array, min_dist, max_dist):
@@ -184,36 +202,47 @@ def calculate_python_reference(test_data: np.ndarray, test_cleaner: Cleaner) -> 
         """List of 0s to store particle data for comparison with c++"""
         return [0] * len(test_tomo.all_particles)
     
-    test_tomo = setup_test_tomogram()
-    neighbour_counts_initial_python = empty_particle_list()
-    for particle in test_tomo.all_particles:
-        neighbour_counts_initial_python[particle.particle_id] = len(particle.neighbours)
+    def get_particle_counts(test_tomo: Tomogram) -> list[int]:
+        """Helper to get neighbour counts for all particles"""
+        counts = empty_particle_list()
+        for particle in test_tomo.all_particles:
+            counts[particle.particle_id] = len(particle.neighbours)
+        return counts
     
-    # each filtration step must be run in a separate loop, as particles remove neighbours from other particles during filtration
-    neighbour_counts_orientation_python = empty_particle_list()
-    for particle in test_tomo.all_particles:
-        particle.filter_neighbour_orientation(test_cleaner.ori_range, None)
-        neighbour_counts_orientation_python[particle.particle_id] = len(particle.neighbours)
+    def run_filtering_test(filter_func, *args) -> list[int]:
+        """Helper to run a filtering test and return counts"""
+        test_tomo = setup_test_tomogram()
+        for particle in test_tomo.all_particles:
+            filter_func(particle, *args)
+        return get_particle_counts(test_tomo)
+    
+    # Initial neighbour counts (after distance filtering)
+    test_tomo = setup_test_tomogram()
+    neighbour_counts_initial_python = get_particle_counts(test_tomo)
+    
+    # Orientation filtering
+    neighbour_counts_orientation_python = run_filtering_test(
+        lambda p, ori_range: p.filter_neighbour_orientation(ori_range, None),
+        test_cleaner.ori_range
+    )
 
-    test_tomo = setup_test_tomogram()
-    neighbour_counts_curvature_python = empty_particle_list()
-    for particle in test_tomo.all_particles:
-        particle.filter_curvature(test_cleaner.curv_range)
-        neighbour_counts_curvature_python[particle.particle_id] = len(particle.neighbours)
+    # Curvature filtering
+    neighbour_counts_curvature_python = run_filtering_test(
+        lambda p, curv_range: p.filter_curvature(curv_range),
+        test_cleaner.curv_range
+    )
     
-    # Test full pipeline (distance + orientation + curvature)
-    test_tomo = setup_test_tomogram()
-    neighbour_counts_full_python = empty_particle_list()
-    for particle in test_tomo.all_particles:
-        particle.filter_neighbour_orientation(test_cleaner.ori_range, None)
-        particle.filter_curvature(test_cleaner.curv_range)
-        neighbour_counts_full_python[particle.particle_id] = len(particle.neighbours)
+    # Full pipeline (distance + orientation + curvature)
+    neighbour_counts_full_python = run_filtering_test(
+        lambda p, ori_range, curv_range: (p.filter_neighbour_orientation(ori_range, None), p.filter_curvature(curv_range)),
+        test_cleaner.ori_range, test_cleaner.curv_range
+    )
     
-    # Test lattice assignment
-    lattice_assignments_python = empty_particle_list()
+    # Lattice assignment
     test_tomo = setup_test_tomogram()
     test_tomo.autoclean()
-    
+    lattice_assignments_python = get_particle_counts(test_tomo)
+    # Override with actual lattice assignments
     for particle in test_tomo.all_particles:
         lattice_assignments_python[particle.particle_id] = particle.lattice
     
