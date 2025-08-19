@@ -783,7 +783,10 @@ class Tomogram:
         # Necessary for reproducible lattice assignment and comparison with C++
         sorted_particles = sorted(self.all_particles, key=lambda p: p.particle_id)
         for particle in sorted_particles:
-            if particle.lattice or len(particle.neighbours) < self.cleaning_params.min_neighbours:
+            if (
+                particle.lattice
+                or len(particle.neighbours) < self.cleaning_params.min_neighbours
+            ):
                 continue
             particle.choose_new_lattice(len(self.lattices))
 
