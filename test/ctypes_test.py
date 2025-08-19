@@ -5,14 +5,15 @@ import time
 import sys
 
 # Add the parent directory to the path to ensure we use the local magpiem module
-current_dir = pathlib.Path().absolute()
+current_dir = pathlib.Path(__file__).parent.absolute()
 parent_dir = current_dir.parent
 sys.path.insert(0, str(parent_dir))
 
 from magpiem.read_write import read_emc_mat, read_single_tomogram
 from magpiem.classes import Tomogram, Particle, Cleaner
 
-TEST_DATA_FILE = "test_data.mat"
+# Updated paths for test folder location
+TEST_DATA_FILE = current_dir / "test_data.mat"
 TEST_TOMO_NAME = "wt2nd_4004_2"
 # appropriate values for test tomogram
 TEST_CLEANER_VALUES = [2.0, 3, 10, 60.0, 40.0, 10.0, 20.0, 90.0, 20.0]
@@ -34,11 +35,30 @@ class CleanParams(ctypes.Structure):
 
 def setup_cpp_library() -> ctypes.CDLL:
     """Load and configure the C++ library"""
-    libname = current_dir / "processing.dll"
-    print("loading library")
+    # Look for processing.dll in the processing directory relative to project root
+    project_root = parent_dir
+    libname = project_root / "processing" / "processing.dll"
+    print("Loading library from:", libname)
 
-    assert libname.exists(), "File does not exist"
-    print("DLL exists")
+    if not libname.exists():
+        # Try alternative paths
+        alt_paths = [
+            project_root / "processing.dll",
+            current_dir / "processing.dll",
+            current_dir.parent / "processing.dll",
+        ]
+        
+        for alt_path in alt_paths:
+            if alt_path.exists():
+                libname = alt_path
+                print(f"Found DLL at alternative path: {libname}")
+                break
+        else:
+            raise FileNotFoundError(
+                f"Processing DLL not found. Tried:\n- {libname}\n"
+                + "\n".join(f"- {p}" for p in alt_paths)
+            )
+
     c_lib = ctypes.CDLL(str(libname))
 
     # Set up function signatures
@@ -105,7 +125,7 @@ def setup_cpp_library() -> ctypes.CDLL:
 
 def load_particle_data() -> np.ndarray:
     """Load particle data from the test file"""
-    test_data = np.array(read_emc_mat(TEST_DATA_FILE)[TEST_TOMO_NAME], dtype=float)
+    test_data = np.array(read_emc_mat(str(TEST_DATA_FILE))[TEST_TOMO_NAME], dtype=float)
     test_data = test_data[
         :, [10, 11, 12, 22, 23, 24]
     ]  # Extract position and orientation columns
@@ -153,7 +173,7 @@ def create_test_cleaner() -> Cleaner:
 
 
 def create_test_tomogram() -> Tomogram:
-    return read_single_tomogram(TEST_DATA_FILE, TEST_TOMO_NAME)
+    return read_single_tomogram(str(TEST_DATA_FILE), TEST_TOMO_NAME)
 
 
 def setup_test_tomogram() -> Tomogram:
