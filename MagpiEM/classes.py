@@ -323,6 +323,8 @@ class Particle:
 
     def choose_new_lattice(self, lattice) -> None:
         """Recursively assign particle and all neighbours to lattice"""
+        if len(self.neighbours) < self.tomo.cleaning_params.min_neighbours:
+            return
         self.set_lattice(lattice)
         for neighbour in self.neighbours:
             if not neighbour.lattice:
@@ -777,8 +779,11 @@ class Tomogram:
             if len(particle.neighbours) < self.cleaning_params.min_neighbours:
                 self.particles_fate["wrong_disp"].add(particle)
                 continue
-        for particle in self.all_particles:
-            if particle.lattice:
+        # Process particles in order of ID for deterministic lattice assignment
+        # Necessary for reproducible lattice assignment and comparison with C++
+        sorted_particles = sorted(self.all_particles, key=lambda p: p.particle_id)
+        for particle in sorted_particles:
+            if particle.lattice or len(particle.neighbours) < self.cleaning_params.min_neighbours:
                 continue
             particle.choose_new_lattice(len(self.lattices))
 
