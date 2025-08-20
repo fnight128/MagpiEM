@@ -521,46 +521,7 @@ def main(open_browser=True):
         # dummy function to trigger graph updating
         return 1
 
-    @app.callback(
-        Output("button-set-cone-size", "n_clicks"),
-        State("button-set-cone-size", "n_clicks"),
-        State("dropdown-tomo", "value"),
-        State("switch-toggle-conv-all", "on"),
-        Input("button-toggle-convex", "n_clicks"),
-        prevent_initial_call=True,
-    )
-    def select_convex(clicks, current_tomo, all_tomos, _):
-        global __dash_tomograms
-        raise NotImplementedError(
-            "select_convex function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data"
-        )
-        if all_tomos:
-            for tomo in __dash_tomograms.values():
-                tomo.toggle_convex_arrays()
-        else:
-            __dash_tomograms[current_tomo].toggle_convex_arrays()
-        return int(clicks or 0) + 1
 
-    @app.callback(
-        Output("button-set-cone-size", "n_clicks"),
-        State("button-set-cone-size", "n_clicks"),
-        State("dropdown-tomo", "value"),
-        State("switch-toggle-conv-all", "on"),
-        Input("button-toggle-concave", "n_clicks"),
-        prevent_initial_call=True,
-    )
-    def select_concave(clicks, current_tomo, all_tomos, _):
-        # TODO make these a single callback
-        global __dash_tomograms
-        raise NotImplementedError(
-            "select_concave function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data"
-        )
-        if all_tomos:
-            for tomo in __dash_tomograms.values():
-                tomo.toggle_concave_arrays()
-        else:
-            __dash_tomograms[current_tomo].toggle_concave_arrays()
-        return int(clicks or 0) + 1
 
     @app.callback(
         Output("download-file", "data"),
@@ -1194,23 +1155,6 @@ def main(open_browser=True):
                     ),
                     html.Td(dbc.Button("Set", id="button-set-cone-size")),
                 ]
-            ),
-            html.Tr(
-                [
-                    html.Td(
-                        dbc.Button("Toggle Convex", id="button-toggle-convex"),
-                    ),
-                    html.Td(
-                        dbc.Button("Toggle Concave", id="button-toggle-concave"),
-                    ),
-                    html.Td(
-                        [
-                            daq.BooleanSwitch(id="switch-toggle-conv-all", on=False),
-                            html.Div("All tomos", style={"margin": "auto"}),
-                        ],
-                        style={"text-align": "center"},
-                    ),
-                ],
             ),
             html.Tr(
                 [
