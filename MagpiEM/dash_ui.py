@@ -1383,32 +1383,41 @@ def main(open_browser=True):
         State("upload-data", "filename"),
         State("switch-keep-particles", "on"),
         State("checklist-save-additional", "value"),
+        State("store-selected-lattices", "data"),
+        State("store-lattice-data", "data"),
         Input("button-save", "n_clicks"),
         prevent_initial_call=True,
         long_callback=True,
     )
-    def save_result(output_name, input_name, keep_selected, save_additional, _):
-        global __dash_tomograms
-        raise NotImplementedError(
-            "save_result function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data"
-        )
+    def save_result(output_name, input_name, keep_selected, save_additional, selected_lattices, lattice_data, _):
         if not output_name:
             return None
         if output_name == input_name:
             print("Output and input file cannot be identical")
             return None
 
-        saving_ids = {
-            tomo_name: tomo.selected_particle_ids(keep_selected)
-            for tomo_name, tomo in __dash_tomograms.items()
-        }
+        if not lattice_data:
+            print("No lattice data available for saving")
+            return None
+        saving_ids = {}
+        for tomo_name, tomo_lattice_data in lattice_data.items():
+            if not tomo_lattice_data:
+                continue
 
-        #  temporarily disabled until em file saving is fixed
-        #
-        # if ".em (Place Object)" in save_additional:
-        #     write_emfile(tomograms, "out", keep_selected)
-        #     zip_files(output_name, "em")
-        #     dcc.send_file(TEMP_FILE_DIR + output_name)
+            tomo_selected_lattices = selected_lattices.get(tomo_name, []) if selected_lattices else []
+
+            particle_ids = []
+            for lattice_id, particle_indices in tomo_lattice_data.items():
+                # Convert lattice_id to int for comparison
+                lattice_id_int = int(lattice_id) if isinstance(lattice_id, str) else lattice_id
+
+                lattice_is_selected = lattice_id_int in tomo_selected_lattices
+                should_include = lattice_is_selected if keep_selected else not lattice_is_selected
+                
+                if should_include:
+                    particle_ids.extend(particle_indices)
+            
+            saving_ids[tomo_name] = particle_ids
 
         if ".mat" in input_name:
             write_emc_mat(
@@ -1422,9 +1431,7 @@ def main(open_browser=True):
                 TEMP_FILE_DIR + output_name,
                 TEMP_FILE_DIR + input_name,
             )
-        # files = glob.glob(TEMP_FILE_DIR + "*")
-        # print(files)
-        # print(download(output_name))
+        
         out_file = TEMP_FILE_DIR + output_name
         print(out_file)
         return dcc.send_file(out_file)
