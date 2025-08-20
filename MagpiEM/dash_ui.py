@@ -53,7 +53,6 @@ BLACK = "#000000"
 __dash_tomograms = dict()
 EMPTY_FIG = simple_figure()
 
-__last_click = 0.0
 __progress = 0.0
 
 TEMP_FILE_DIR = "static/"
@@ -397,26 +396,26 @@ def main(open_browser=True):
         Output("store-clicked-point", "data"),
         Output("div-graph-data", "children"),
         Output("interval-clear-points", "disabled"),
+        Output("store-last-click", "data"),
         Input("graph-picking", "clickData"),
         State("store-clicked-point", "data"),
         State("store-tomogram-data", "data"),
         State("dropdown-tomo", "value"),
+        State("store-last-click", "data"),
         prevent_initial_call=True,
     )
     def handle_point_selection(
-        click_data, previous_point_data, tomogram_raw_data, selected_tomo_name
+        click_data, previous_point_data, tomogram_raw_data, selected_tomo_name, last_click_time
     ):
         """Handle point selection logic for geometric measurements."""
         if not click_data or not selected_tomo_name:
-            return previous_point_data, "", True
+            return previous_point_data, "", True, last_click_time
 
-        global __last_click
+        current_time = time()
 
         # Cooldown to prevent erroneous clicks
-        if time() - __last_click < 0.5:
+        if current_time - last_click_time < 0.5:
             raise PreventUpdate
-
-        __last_click = time()
 
         if previous_point_data:
             # Calculate and return relation between particles
@@ -453,13 +452,13 @@ def main(open_browser=True):
                 },
                 "clear_after_plot": True,
             }
-            return both_points, params_message, False  # Enable interval to clear points
+            return both_points, params_message, False, current_time  # Enable interval to clear points
         else:
             # Store the first point data for later comparison
             point_data = click_data["points"][0]
             particle_data_keys = POSITION_KEYS + ORIENTATION_KEYS
             first_point_data = {key: point_data[key] for key in particle_data_keys}
-            return {"first_point": first_point_data}, "", True
+            return {"first_point": first_point_data}, "", True, current_time
 
     @app.callback(
         Output("store-camera", "data"),
@@ -1358,6 +1357,7 @@ def main(open_browser=True):
                     dcc.Store(id="store-selected-lattices"),
                     dcc.Store(id="store-clicked-point"),
                     dcc.Store(id="store-camera"),
+                    dcc.Store(id="store-last-click", data=0.0),
                 ]
             ),
             html.Footer(
