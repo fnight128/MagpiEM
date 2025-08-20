@@ -43,6 +43,7 @@ from .read_write import (
 from .plotting_helpers import (
     create_particle_plot_from_raw_data,
     create_lattice_plot_from_raw_data,
+    create_scatter_trace,
 )
 
 WHITE = "#FFFFFF"
@@ -56,7 +57,7 @@ __last_click = 0.0
 __progress = 0.0
 
 TEMP_FILE_DIR = "static/"
-__CLEAN_YAML_NAME = "prev_clean_params.yml"
+CLEAN_YAML_NAME = "prev_clean_params.yml"
 
 CAMERA_KEY = "scene.camera"
 
@@ -146,8 +147,8 @@ def convert_raw_data_to_cpp_format(tomogram_raw_data: list) -> tuple[np.ndarray,
     for particle in tomogram_raw_data:
         pos, orient = particle
         # Convert both to lists to ensure consistent behavior
-        pos_list = pos.tolist() if hasattr(pos, 'tolist') else list(pos)
-        orient_list = orient.tolist() if hasattr(orient, 'tolist') else list(orient)
+        pos_list = list(pos)
+        orient_list = list(orient)
         flat_data.extend(pos_list + orient_list)
 
     return np.array(flat_data, dtype=np.float32), len(tomogram_raw_data)
@@ -208,13 +209,10 @@ def clean_tomo_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> dict:
     return lattice_assignments
 
 
-
-
-
 def main(open_browser=True):
     """
     Main function to run the MagpiEM Dash application.
-    
+
     Parameters
     ----------
     open_browser : bool, optional
@@ -261,148 +259,207 @@ def main(open_browser=True):
         )
 
     @app.callback(
+        # Use inputs to re-plot when changes are made to data, rather than
+        # keeping all data changes in this function.
         Output("graph-picking", "figure"),
-        Output("div-graph-data", "children"),
-        Output("store-clicked-point", "data"),
         Input("dropdown-tomo", "value"),
-        Input("graph-picking", "clickData"),
-        State("graph-picking", "figure"),
-        State("store-camera", "data"),
-        State("store-clicked-point", "data"),
-        Input("store-lattice-data", "data"), # "Input" to re-plot after cleaning
+        Input("store-lattice-data", "data"),
         State("store-tomogram-data", "data"),
+        Input(
+            "store-selected-lattices", "data"
+        ),
         Input("switch-cone-plot", "on"),
         State("inp-cone-size", "value"),
         Input("button-set-cone-size", "n_clicks"),
         Input("switch-show-removed", "on"),
-        Input("button-next-Tomogram", "disabled"),
-        State("upload-data", "filename"),
-        State("div-graph-data", "children"),
+        State("store-clicked-point", "data"),
+        State("store-camera", "data"),
         prevent_initial_call=True,
     )
     def plot_tomo(
         selected_tomo_name,
-        clicked_point,
-        fig,
-        camera_data,
-        previous_point_data,
         lattice_data,
         tomogram_raw_data,
+        selected_lattices,
         make_cones: bool,
         cone_size: float,
         _,
         show_removed: bool,
-        __,
-        filename: str,
-        params_message,
+        clicked_point_data,
+        camera_data,
     ):
-        global __dash_tomograms
-        global __last_click
-
         if not make_cones:
             cone_size = -1
 
         # must always return a graph object or can break dash
         if not selected_tomo_name:
-            return EMPTY_FIG, params_message, previous_point_data
+            return EMPTY_FIG
 
-        if ctx.triggered_id == "graph-picking":
-            # strange error with cone plots makes completely random, erroneous clicks
-            # happen right after clicking on cone plot - adding a cooldown
-            # prevents this
-            if time() - __last_click < 0.5:
-                raise PreventUpdate
+        # Create the main plot
+        if tomogram_raw_data and selected_tomo_name in tomogram_raw_data:
+            current_tomo_raw_data = tomogram_raw_data[selected_tomo_name]
 
-            for i, trace in enumerate(fig["data"]):
-                if "name" in trace and trace["name"] == TEMP_TRACE_NAME:
-                    fig["data"].remove(fig["data"][i])
-                    break
-
-            __last_click = time()
-            if previous_point_data:
-                # Calculate and return relation between particles
-                current_point_data = clicked_point["points"][0]
-                selected_particles = []
-                for idx, point_data in enumerate(
-                    [previous_point_data, current_point_data]
-                ):
-                    selected_particles.append(
-                        particle_from_point_data(point_data, idx=idx)
-                    )
-                if selected_particles[0].distance_sq(selected_particles[1]) < 0.001:
-                    # Picked the same particle twice
-                    raise PreventUpdate
-                params_dict = selected_particles[0].calculate_params(
-                    selected_particles[1]
+            # Check if cleaning has been run for this tomogram
+            if lattice_data and selected_tomo_name in lattice_data:
+                # Get selected lattices for this tomogram
+                tomo_selected_lattices = (
+                    selected_lattices.get(selected_tomo_name, [])
+                    if selected_lattices
+                    else []
                 )
-                params_message = []
-                for param_name, param_value in params_dict.items():
-                    params_message.append(f"{param_name}: {param_value:.2f}")
-                    params_message.append(html.Br())
-                previous_point_data = {}
-            else:
-                point_data = clicked_point["points"][0]
-                particle_data_keys = POSITION_KEYS + ORIENTATION_KEYS
-                previous_point_data = {
-                    key: point_data[key] for key in particle_data_keys
-                }
-                selected_particles = {particle_from_point_data(point_data)}
-            # Create particle trace using raw data helper functions
-            if tomogram_raw_data and selected_tomo_name in tomogram_raw_data:
-                # For now, just create a simple trace for the clicked point
-                # This could be enhanced to show nearby particles
-                point_data = clicked_point["points"][0]
-                particles_scatter_trace = go.Scatter3d(
-                    x=[point_data["x"]],
-                    y=[point_data["y"]],
-                    z=[point_data["z"]],
-                    mode="markers",
-                    marker=dict(size=8, color="black", opacity=0.8),
-                    name=TEMP_TRACE_NAME,
-                    showlegend=True,
+
+                # lattice-based plot
+                fig = create_lattice_plot_from_raw_data(
+                    current_tomo_raw_data,
+                    lattice_data[selected_tomo_name],
+                    cone_size=cone_size,
+                    show_removed_particles=show_removed,
+                    selected_lattices=tomo_selected_lattices,
                 )
             else:
-                # Fallback to empty trace
-                particles_scatter_trace = go.Scatter3d(
-                    x=[], y=[], z=[], mode="markers", name=TEMP_TRACE_NAME
+                # No cleaning data, plot all particles in single colour
+                fig = create_particle_plot_from_raw_data(
+                    current_tomo_raw_data,
+                    cone_size=cone_size,
+                    showing_removed_particles=show_removed,
+                    opacity=0.8,
+                    colour="white",
                 )
-            fig["data"].append(particles_scatter_trace)
+        else:
+            # Fallback to empty figure if no data available
+            fig = EMPTY_FIG
 
-        elif ctx.triggered_id in ["dropdown-tomo", "store-lattice-data", "switch-cone-plot", "button-set-cone-size", "switch-show-removed"]:
-            # Handle all triggers that should update the plot
+        # Add selected points if they exist
+        if clicked_point_data:
+            selected_points = []
 
-            # Necessary to prevent clicks from lingering between graphs
-            clicked_point = None
-            camera_data = None
-            if tomogram_raw_data and selected_tomo_name in tomogram_raw_data:
-                current_tomo_raw_data = tomogram_raw_data[selected_tomo_name]
-
-                # Check if cleaning has been run for this tomogram
-                if lattice_data and selected_tomo_name in lattice_data:
-                    # lattice-based plot
-                    fig = create_lattice_plot_from_raw_data(
-                        current_tomo_raw_data,
-                        lattice_data[selected_tomo_name],
-                        cone_size=cone_size,
-                        show_removed_particles=show_removed,
+            # Extract point coordinates
+            for point_key in ["first_point", "second_point"]:
+                if point_key in clicked_point_data:
+                    point_data = clicked_point_data[point_key]
+                    selected_points.append(
+                        [point_data["x"], point_data["y"], point_data["z"]]
                     )
-                else:
-                    # No cleaning data, plot all particles in single colour
-                    fig = create_particle_plot_from_raw_data(
-                        current_tomo_raw_data,
-                        cone_size=cone_size,
-                        showing_removed_particles=show_removed,
-                        opacity=0.8,
-                        colour="white",
-                    )
-            else:
-                # Fallback to empty figure if no data available
-                fig = EMPTY_FIG
 
+            if selected_points:
+                positions = np.array(selected_points)
+                particles_scatter_trace = create_scatter_trace(
+                    positions, colour="black", opacity=0.8
+                )
+                particles_scatter_trace.name = TEMP_TRACE_NAME
+                particles_scatter_trace.marker.size = (
+                    8  # Override default size for selected points
+                )
+                fig.add_trace(particles_scatter_trace)
+
+        # Restore camera position if available
         if camera_data:
             fig["layout"]["scene"]["camera"] = camera_data
-        # print(fig)
-        return fig, params_message, previous_point_data
+
+        return fig
+
+    @app.callback(
+        Output("store-selected-lattices", "data"),
+        Input("graph-picking", "clickData"),
+        State("store-selected-lattices", "data"),
+        State("store-lattice-data", "data"),
+        State("dropdown-tomo", "value"),
+        prevent_initial_call=True,
+    )
+    def handle_lattice_selection(
+        click_data, selected_lattices, lattice_data, selected_tomo_name
+    ):
+        """Handle lattice selection when user clicks on plot points."""
+        if not click_data or not lattice_data or not selected_tomo_name:
+            return selected_lattices or {}
+
+        if selected_tomo_name not in lattice_data:
+            return selected_lattices or {}
+
+        # Initialize selected_lattices if it doesn't exist
+        if not selected_lattices:
+            selected_lattices = {}
+        if selected_tomo_name not in selected_lattices:
+            selected_lattices[selected_tomo_name] = []
+
+        # Get the clicked point data
+        lattice_id = int(click_data["points"][0]["text"])
+
+        # Toggle the selection for this lattice
+        if lattice_id in selected_lattices[selected_tomo_name]:
+            selected_lattices[selected_tomo_name].remove(lattice_id)
+        else:
+            selected_lattices[selected_tomo_name].append(lattice_id)
+
+        return selected_lattices
+
+    @app.callback(
+        Output("store-clicked-point", "data"),
+        Output("div-graph-data", "children"),
+        Output("interval-clear-points", "disabled"),
+        Input("graph-picking", "clickData"),
+        State("store-clicked-point", "data"),
+        State("store-tomogram-data", "data"),
+        State("dropdown-tomo", "value"),
+        prevent_initial_call=True,
+    )
+    def handle_point_selection(
+        click_data, previous_point_data, tomogram_raw_data, selected_tomo_name
+    ):
+        """Handle point selection logic for geometric measurements."""
+        if not click_data or not selected_tomo_name:
+            return previous_point_data, "", True
+
+        global __last_click
+
+        # Cooldown to prevent erroneous clicks
+        if time() - __last_click < 0.5:
+            raise PreventUpdate
+
+        __last_click = time()
+
+        if previous_point_data:
+            # Calculate and return relation between particles
+            current_point_data = click_data["points"][0]
+            selected_particles = []
+
+            # Extract the first point data from the stored structure
+            first_point_data = previous_point_data["first_point"]
+
+            for idx, point_data in enumerate([first_point_data, current_point_data]):
+                selected_particles.append(particle_from_point_data(point_data, idx=idx))
+
+            if selected_particles[0].distance_sq(selected_particles[1]) < 0.001:
+                # Picked the same particle twice
+                raise PreventUpdate
+
+            params_dict = selected_particles[0].calculate_params(selected_particles[1])
+            params_message = []
+            for param_name, param_value in params_dict.items():
+                params_message.append(f"{param_name}: {param_value:.2f}")
+                params_message.append(html.Br())
+
+            # Store both points temporarily so they can be plotted
+            # The plot_tomo callback will show both points, then we'll clear them
+            both_points = {
+                "first_point": first_point_data,
+                "second_point": {
+                    "x": current_point_data["x"],
+                    "y": current_point_data["y"],
+                    "z": current_point_data["z"],
+                    "u": current_point_data["u"],
+                    "v": current_point_data["v"],
+                    "w": current_point_data["w"],
+                },
+                "clear_after_plot": True,
+            }
+            return both_points, params_message, False  # Enable interval to clear points
+        else:
+            # Store the first point data for later comparison
+            point_data = click_data["points"][0]
+            particle_data_keys = POSITION_KEYS + ORIENTATION_KEYS
+            first_point_data = {key: point_data[key] for key in particle_data_keys}
+            return {"first_point": first_point_data}, "", True
 
     @app.callback(
         Output("store-camera", "data"),
@@ -414,6 +471,20 @@ def main(open_browser=True):
             return relayout_data[CAMERA_KEY]
         else:
             return previous_camera
+
+    @app.callback(
+        Output("store-clicked-point", "data"),
+        Output("interval-clear-points", "disabled"),
+        Input("interval-clear-points", "n_intervals"),
+        State("store-clicked-point", "data"),
+        prevent_initial_call=True,
+    )
+    def clear_two_point_selection(n_intervals, clicked_point_data):
+        """Clear two-point selection after a brief delay to allow plotting."""
+        if clicked_point_data and "clear_after_plot" in clicked_point_data:
+            # Clear the two-point selection after it's been plotted
+            return {}, True  # Disable the interval
+        return clicked_point_data, True  # Keep interval disabled
 
     @app.callback(
         Output("dropdown-filetype", "value"),
@@ -461,7 +532,9 @@ def main(open_browser=True):
     )
     def select_convex(clicks, current_tomo, all_tomos, _):
         global __dash_tomograms
-        raise NotImplementedError("select_convex function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data")
+        raise NotImplementedError(
+            "select_convex function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data"
+        )
         if all_tomos:
             for tomo in __dash_tomograms.values():
                 tomo.toggle_convex_arrays()
@@ -480,7 +553,9 @@ def main(open_browser=True):
     def select_concave(clicks, current_tomo, all_tomos, _):
         # TODO make these a single callback
         global __dash_tomograms
-        raise NotImplementedError("select_concave function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data")
+        raise NotImplementedError(
+            "select_concave function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data"
+        )
         if all_tomos:
             for tomo in __dash_tomograms.values():
                 tomo.toggle_concave_arrays()
@@ -506,7 +581,9 @@ def main(open_browser=True):
         file_path = TEMP_FILE_DIR + filename + "_progress.yml"
 
         global __dash_tomograms
-        raise NotImplementedError("save_current_progress function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data")
+        raise NotImplementedError(
+            "save_current_progress function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data"
+        )
         tomo_dict = {}
         for name, tomo in __dash_tomograms.items():
             tomo_dict[name] = tomo.write_progress_dict()
@@ -606,7 +683,9 @@ def main(open_browser=True):
 
     def read_previous_progress(progress_file):
         global __dash_tomograms
-        raise NotImplementedError("read_previous_progress function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data")
+        raise NotImplementedError(
+            "read_previous_progress function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data"
+        )
         try:
             with open(progress_file, "r") as prev_yaml:
                 prev_yaml = yaml.safe_load(prev_yaml)
@@ -647,7 +726,9 @@ def main(open_browser=True):
                 prev_msg,
             ]
 
-        raise NotImplementedError("read_previous_progress function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data")
+        raise NotImplementedError(
+            "read_previous_progress function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data"
+        )
         for tomo_name, tomo in __dash_tomograms.items():
             tomo.apply_progress_dict(prev_yaml[tomo_name])
 
@@ -656,6 +737,7 @@ def main(open_browser=True):
         Output("dropdown-tomo", "disabled"),
         Output("store-lattice-data", "data"),
         Output("store-tomogram-data", "data"),
+        Output("store-selected-lattices", "data"),
         Input("button-read", "n_clicks"),
         Input("upload-previous-session", "filename"),
         Input("upload-previous-session", "contents"),
@@ -677,9 +759,10 @@ def main(open_browser=True):
         num_img_dict = {0: 1, 1: 5, 2: -1}
         num_images = num_img_dict[num_images]
 
-        # ensure temp directory clear
+        # ensure temp directory clear (but preserve parameter files)
         all_files = glob.glob(TEMP_FILE_DIR + "*")
-        all_files = [file for file in all_files if __CLEAN_YAML_NAME not in file]
+        # Keep parameter files but remove other temp files
+        all_files = [file for file in all_files if not file.endswith("_clean_params.yml")]
         if all_files:
             print("Pre-existing temp files found, removing:", all_files)
             for f in all_files:
@@ -704,8 +787,16 @@ def main(open_browser=True):
 
         # Initialize lattice_data as empty dictionary - will be populated after cleaning
         lattice_data = {}
+        # Initialize selected_lattices as empty dictionary - will be populated when user selects lattices
+        selected_lattices = {}
 
-        return "Tomograms read", False, lattice_data, tomogram_raw_data
+        return (
+            "Tomograms read",
+            False,
+            lattice_data,
+            tomogram_raw_data,
+            selected_lattices,
+        )
 
     @app.callback(
         Input("upload-data", "filename"),
@@ -721,8 +812,15 @@ def main(open_browser=True):
         Output("switch-allow-flips", "on"),
         prevent_initial_call=True,
     )
-    def read_previous_clean_params(is_open):
-        global TEMP_FILE_DIR, __CLEAN_YAML_NAME
+    def read_previous_clean_params(filename):
+        if not filename:
+            raise PreventUpdate
+            
+        global TEMP_FILE_DIR
+        # Create filename-specific YAML name
+        base_name = Path(filename).stem
+        clean_yaml_name = f"{base_name}_clean_params.yml"
+        
         clean_keys = [
             "distance",
             "distance tolerance",
@@ -736,12 +834,12 @@ def main(open_browser=True):
             "allow flips",
         ]
         try:
-            with open(TEMP_FILE_DIR + __CLEAN_YAML_NAME, "r") as prev_yaml:
+            with open(TEMP_FILE_DIR + clean_yaml_name, "r") as prev_yaml:
                 prev_yaml = yaml.safe_load(prev_yaml)
                 prev_vals = [prev_yaml[key] for key in clean_keys]
                 return prev_vals
         except FileNotFoundError or yaml.YAMLError or KeyError:
-            print("Couldn't find or read a previous cleaning file.")
+            print(f"Couldn't find or read a previous cleaning file for {filename}.")
             raise PreventUpdate
 
     def clean_tomo(tomo, clean_params):
@@ -781,6 +879,7 @@ def main(open_browser=True):
         State("inp-array-size", "value"),
         State("switch-allow-flips", "on"),
         State("store-tomogram-data", "data"),
+        State("upload-data", "filename"),
         Input("button-full-clean", "n_clicks"),
         Input("button-preview-clean", "n_clicks"),
         prevent_initial_call=True,
@@ -798,6 +897,7 @@ def main(open_browser=True):
         array_size: int,
         allow_flips: bool,
         tomogram_raw_data: dict,
+        filename: str,
         clicks,
         clicks2,
     ):
@@ -864,7 +964,14 @@ def main(open_browser=True):
             "allow flips": allow_flips,
         }
 
-        with open(TEMP_FILE_DIR + __CLEAN_YAML_NAME, "w") as yaml_file:
+        # Create filename-specific YAML name
+        if filename:
+            base_name = Path(filename).stem
+            clean_yaml_name = f"{base_name}_clean_params.yml"
+        else:
+            clean_yaml_name = "unknown_file_clean_params.yml"
+
+        with open(TEMP_FILE_DIR + clean_yaml_name, "w") as yaml_file:
             yaml_file.write(yaml.safe_dump(cleaning_params_dict))
         return False, False, True, lattice_data
 
@@ -1216,7 +1323,18 @@ def main(open_browser=True):
                     )
                 )
             ),
-            dbc.Row(html.Div(id="div-graph-data")),
+            dbc.Row(
+                html.Div(
+                    id="div-graph-data",
+                    style={
+                        "minHeight": "80px",
+                        "height": "80px",
+                        "overflow": "auto",
+                        "padding": "12px",
+                        "margin": "8px 0"
+                    }
+                )
+            ),
             dbc.Row(
                 [
                     dbc.Progress(
@@ -1227,6 +1345,9 @@ def main(open_browser=True):
                         style={"height": "30px"},
                     ),
                     dcc.Interval(id="interval-processing", interval=100),
+                    dcc.Interval(
+                        id="interval-clear-points", interval=200, disabled=True
+                    ),
                 ]
             ),
             dbc.Row([graph]),
@@ -1234,6 +1355,7 @@ def main(open_browser=True):
                 [
                     dcc.Store(id="store-lattice-data"),
                     dcc.Store(id="store-tomogram-data"),
+                    dcc.Store(id="store-selected-lattices"),
                     dcc.Store(id="store-clicked-point"),
                     dcc.Store(id="store-camera"),
                 ]
@@ -1267,7 +1389,9 @@ def main(open_browser=True):
     )
     def save_result(output_name, input_name, keep_selected, save_additional, _):
         global __dash_tomograms
-        raise NotImplementedError("save_result function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data")
+        raise NotImplementedError(
+            "save_result function still uses __dash_tomograms and needs to be refactored to use store-tomogram-data"
+        )
         if not output_name:
             return None
         if output_name == input_name:

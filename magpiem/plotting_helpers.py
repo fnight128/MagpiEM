@@ -67,10 +67,11 @@ def create_lattice_plot_from_raw_data(
     lattice_data: Dict[int, List[int]],
     cone_size: float = 1.0,
     show_removed_particles: bool = False,
+    selected_lattices: Optional[set] = {},
 ) -> go.Figure:
     """
     Create a particle plot with separate traces for each lattice.
-    
+
     Parameters
     ----------
     tomogram_raw_data : List[List[List[float]]]
@@ -82,7 +83,10 @@ def create_lattice_plot_from_raw_data(
         Defaults to 1.0.
     show_removed_particles : bool, optional
         Whether to show removed particles (lattice 0). Defaults to False.
-        
+    selected_lattices : Optional[set], optional
+        Set of lattice IDs that are selected. Selected lattices will be plotted in white.
+        Defaults to None.
+
     Returns
     -------
     go.Figure
@@ -90,64 +94,85 @@ def create_lattice_plot_from_raw_data(
     """
     if not tomogram_raw_data or not lattice_data:
         return simple_figure()
-    
+
     # Create base figure
     fig = simple_figure()
-    
+
     # Get the number of lattices and generate colours
     lattice_ids = list(lattice_data.keys())
     num_lattices = len(lattice_ids)
     lattice_colours = colour_range(num_lattices)
-    
+
     for lattice_id, particle_ids in lattice_data.items():
         # Convert lattice_id to int in case it was serialized as string by dcc.Store
         lattice_id = int(lattice_id)
         if len(particle_ids) == 0:
             continue
-            
+
         # Skip lattice 0 (removed particles) unless show_removed_particles is True
         if lattice_id == 0 and not show_removed_particles:
             continue
-            
 
         # Extract particles for this lattice
         lattice_particles = [tomogram_raw_data[j] for j in particle_ids]
-        
+
         # Choose colour and opacity for this lattice
         if lattice_id == 0:
             # Lattice 0 (removed particles) should be black with opacity 0.6
             colour = "black"
             opacity = 0.6
         else:
-            # Other lattices use the generated colour range
-            # Use lattice_id to determine color index, ensuring consistent colors
-            color_index = (lattice_id - 1) % len(lattice_colours)  # -1 because lattice 0 is handled separately
-            colour = lattice_colours[color_index]
-            opacity = 0.8
-            
+            # Check if this lattice is selected
+            if selected_lattices and lattice_id in selected_lattices:
+                # Selected lattices are plotted in white
+                colour = "white"
+                opacity = 0.9
+            else:
+                # Other lattices use the generated colour range
+                # Use lattice_id to determine color index, ensuring consistent colors
+                color_index = (lattice_id - 1) % len(
+                    lattice_colours
+                )  # -1 because lattice 0 is handled separately
+                colour = lattice_colours[color_index]
+                opacity = 0.8
+
         # Create trace for this lattice
         if cone_size > 0:
             # Create cone trace for this lattice
             positions = np.array([p[0] for p in lattice_particles])
             orientations = np.array([p[1] for p in lattice_particles])
-            
+
             cone_trace = create_cone_traces(
-                positions, orientations, cone_size, colour, opacity
+                positions, orientations, cone_size, colour, opacity, lattice_id
             )
             cone_trace.name = f"Lattice {lattice_id}"
             fig.add_trace(cone_trace)
         else:
             # Create scatter trace for this lattice
             positions = np.array([p[0] for p in lattice_particles])
-            scatter_trace = create_scatter_trace(positions, colour, opacity)
+
+            # Create customdata with lattice ID for each particle
+            customdata = [lattice_id] * len(positions)
+
+            scatter_trace = create_scatter_trace(positions, colour, opacity, lattice_id)
             scatter_trace.name = f"Lattice {lattice_id}"
             fig.add_trace(scatter_trace)
-    
+
     return fig
 
 
+def generate_constant_labels(num_particles: int, label: str) -> List:
+    """
+    Generate a list of constant labels for a given number of particles.
+    """
+    return [label] * num_particles
+
+
 def create_scatter_trace(
-    positions: np.ndarray, colour: str = "blue", opacity: float = 0.8
+    positions: np.ndarray,
+    colour: str = "blue",
+    opacity: float = 0.8,
+    lattice_id: int = 0,
 ) -> go.Scatter3d:
     """
     Create scatter trace for particle positions.
@@ -160,6 +185,8 @@ def create_scatter_trace(
         Colour for scatter points. Defaults to "blue".
     opacity : float, optional
         Opacity for scatter points (0.0 to 1.0). Defaults to 0.8.
+    lattice_id : int, optional
+        Lattice ID to use for text labels. Defaults to 0.
 
     Returns
     -------
@@ -174,6 +201,7 @@ def create_scatter_trace(
         marker=dict(size=3, color=colour, opacity=opacity),
         name="Particles",
         showlegend=True,
+        text=generate_constant_labels(len(positions), lattice_id),
     )
 
 
@@ -232,6 +260,7 @@ def create_cone_traces(
     cone_size: float,
     colour: str = "red",
     opacity: float = 1.0,
+    lattice_id: int = 0,
 ) -> go.Cone:
     """
     Create cone traces for particle orientations using Plotly's built-in Cone trace.
@@ -252,6 +281,8 @@ def create_cone_traces(
         Colour for cones. Defaults to "red".
     opacity : float, optional
         Opacity for cones (0.0 to 1.0). Defaults to 1.0.
+    customdata : Optional[List], optional
+        Custom data to attach to each point. Defaults to None.
 
     Returns
     -------
@@ -275,4 +306,5 @@ def create_cone_traces(
         colorscale=[[0, colour], [1, colour]],
         showscale=False,
         opacity=opacity,
+        text=generate_constant_labels(len(positions), lattice_id),
     )
