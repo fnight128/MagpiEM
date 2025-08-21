@@ -13,6 +13,7 @@ from .classes import Cleaner
 
 class CleanParams(ctypes.Structure):
     """C++ structure for cleaning parameters."""
+
     _fields_ = [
         ("min_distance", ctypes.c_float),
         ("max_distance", ctypes.c_float),

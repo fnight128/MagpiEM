@@ -47,7 +47,7 @@ def setup_cpp_library() -> ctypes.CDLL:
             current_dir / "processing.dll",
             current_dir.parent / "processing.dll",
         ]
-        
+
         for alt_path in alt_paths:
             if alt_path.exists():
                 libname = alt_path
