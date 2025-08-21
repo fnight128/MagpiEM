@@ -601,7 +601,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         _, previous_filename, previous_contents, filename, contents, num_images
     ):
         if not filename:
-            return "Please choose a particle database", True, {}, {}
+            return "Please choose a particle database", True, {}, {}, {}
 
         num_img_dict = {0: 1, 1: 5, 2: -1}
         num_images = num_img_dict[num_images]
@@ -622,7 +622,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         all_tomogram_names = get_tomogram_names(data_file_path, num_images=num_images)
 
         if not all_tomogram_names:
-            return "Data file Unreadable", True, {}, {}
+            return "Data file Unreadable", True, {}, {}, {}
 
         tomogram_raw_data = {
             "__tomogram_names__": all_tomogram_names,
@@ -638,7 +638,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
             progress_result = read_previous_progress(progress_path, tomogram_raw_data)
 
             if isinstance(progress_result, str) or isinstance(progress_result, list):
-                return progress_result, True, {}, {}
+                return progress_result, True, {}, {}, {}
             else:
                 lattice_data, selected_lattices = progress_result
 
