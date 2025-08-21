@@ -46,26 +46,11 @@ POSITION_KEYS = ["x", "y", "z"]
 ORIENTATION_KEYS = ["u", "v", "w"]
 TEMP_TRACE_NAME = "selected_particle_trace"
 
-# Set up logging
 logger = logging.getLogger(__name__)
-
-
-def configure_logging(level=logging.INFO):
-    """Configure logging for the application."""
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.StreamHandler(),
-        ],
-    )
 
 
 def register_callbacks(app, cache_functions, temp_file_dir):
     """Register all callbacks with the Dash app."""
-
-    # Configure logging - can be adjusted based on environment
-    configure_logging(logging.INFO)  # Set to logging.DEBUG for verbose output
 
     # Unpack cache functions
     get_cached_tomogram_figure = cache_functions["get_cached_tomogram_figure"]

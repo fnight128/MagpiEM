@@ -4,11 +4,14 @@ C++ integration functions for the MagpiEM application.
 """
 
 import ctypes
+import logging
 from pathlib import Path
 
 import numpy as np
 
 from .classes import Cleaner
+
+logger = logging.getLogger(__name__)
 
 
 class CleanParams(ctypes.Structure):
@@ -32,9 +35,9 @@ def setup_cpp_library() -> ctypes.CDLL:
     project_root = current_file.parent.parent
     libname = project_root / "processing" / "processing.dll"
 
-    print("Loading processing library from:", libname)
-    print("Current file:", current_file)
-    print("Project root:", project_root)
+    logger.debug("Loading processing library from: %s", libname)
+    logger.debug("Current file: %s", current_file)
+    logger.debug("Project root: %s", project_root)
 
     if not libname.exists():
         alt_paths = [
@@ -46,7 +49,7 @@ def setup_cpp_library() -> ctypes.CDLL:
         for alt_path in alt_paths:
             if alt_path.exists():
                 libname = alt_path
-                print(f"Found DLL at alternative path: {libname}")
+                logger.info("Found DLL at alternative path: %s", libname)
                 break
         else:
             raise FileNotFoundError(

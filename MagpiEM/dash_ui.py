@@ -3,7 +3,10 @@
 Main Dash application for MagpiEM.
 """
 
+import argparse
+import logging
 import os
+import sys
 import webbrowser
 
 import dash_bootstrap_components as dbc
@@ -19,7 +22,18 @@ from .layout import create_main_layout
 TEMP_FILE_DIR = "static/"
 
 
-def main(open_browser=True):
+def configure_logging(level=logging.WARNING):
+    """Configure logging for the application."""
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.StreamHandler(),
+        ],
+    )
+
+
+def main(open_browser=True, log_level=logging.WARNING):
     """
     Main function to run the MagpiEM Dash application.
 
@@ -28,6 +42,8 @@ def main(open_browser=True):
     open_browser : bool, optional
         Whether to automatically open the application in the default browser.
         Default is True. Set to False for testing or headless operation.
+    log_level : int, optional
+        Logging level to use. Default is WARNING.
     """
     server = Flask(__name__)
     app = DashProxy(
@@ -38,6 +54,9 @@ def main(open_browser=True):
         update_title=None,  # Prevent "Updating..." title
     )
     load_figure_template("SOLAR")
+
+    # Configure logging
+    configure_logging(log_level)
 
     if not os.path.exists(TEMP_FILE_DIR):
         os.makedirs(TEMP_FILE_DIR)
@@ -54,5 +73,27 @@ def main(open_browser=True):
     app.run_server(debug=True, use_reloader=False)
 
 
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="MagpiEM - Particle Cleaning Application"
+    )
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="WARNING",
+        help="Set the logging level (default: WARNING)",
+    )
+    parser.add_argument(
+        "--no-browser", action="store_true", help="Don't automatically open the browser"
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    main()
+    args = parse_arguments()
+
+    # Convert string log level to logging constant
+    log_level = getattr(logging, args.log_level.upper())
+
+    main(open_browser=not args.no_browser, log_level=log_level)
