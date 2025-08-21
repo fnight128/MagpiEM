@@ -161,6 +161,155 @@ def create_lattice_plot_from_raw_data(
     return fig
 
 
+def update_lattice_trace_colors(
+    fig: go.Figure,
+    selected_lattices: set,
+    lattice_data: Dict[int, List[int]],
+    cone_size: float = 1.0,
+) -> go.Figure:
+    """
+    Update trace colors for selected lattices without recreating the entire plot.
+    This is much more efficient for large datasets.
+
+    Parameters
+    ----------
+    fig : go.Figure
+        Existing plotly figure to update
+    selected_lattices : set
+        Set of lattice IDs that are selected
+    lattice_data : Dict[int, List[int]]
+        Dictionary mapping lattice_id -> list of particle indices
+    cone_size : float, optional
+        Size of cones to plot. If <=0, scatter points are shown instead.
+        Defaults to 1.0.
+
+    Returns
+    -------
+    go.Figure
+        Updated figure with modified trace colors
+    """
+    if not fig.data:
+        return fig
+
+    # Get the number of lattices and generate colours
+    lattice_ids = list(lattice_data.keys())
+    num_lattices = len(lattice_ids)
+    lattice_colours = colour_range(num_lattices)
+
+    # Update each trace based on selection state
+    for trace in fig.data:
+        # Extract lattice ID from trace name
+        if not trace.name or not trace.name.startswith("Lattice "):
+            continue
+
+        try:
+            lattice_id = int(trace.name.split(" ")[1])
+        except (ValueError, IndexError):
+            continue
+
+        # Skip lattice 0 (removed particles)
+        if lattice_id == 0:
+            continue
+
+        # Determine new color and opacity
+        if lattice_id in selected_lattices:
+            # Selected lattices are plotted in white
+            new_color = "white"
+            new_opacity = 0.9
+        else:
+            # Other lattices use the generated colour range
+            color_index = (lattice_id - 1) % len(lattice_colours)
+            new_color = lattice_colours[color_index]
+            new_opacity = 0.8
+
+        # Update trace color and opacity
+        if hasattr(trace, "marker"):
+            # Scatter trace
+            trace.marker.color = new_color
+            trace.marker.opacity = new_opacity
+        elif hasattr(trace, "colorscale"):
+            # Cone trace - update colorscale and opacity
+            trace.colorscale = [[0, new_color], [1, new_color]]
+            trace.opacity = new_opacity
+        else:
+            # Fallback for other trace types
+            trace.opacity = new_opacity
+
+    return fig
+
+
+def add_selected_points_trace(
+    fig: go.Figure,
+    clicked_point_data: dict,
+    trace_name: str = "selected_particle_trace",
+) -> go.Figure:
+    """
+    Add or update selected points trace without recreating the entire plot.
+
+    Parameters
+    ----------
+    fig : go.Figure
+        Existing plotly figure to update
+    clicked_point_data : dict
+        Dictionary containing point data with keys 'first_point', 'second_point'
+    trace_name : str, optional
+        Name for the selected points trace. Defaults to "selected_particle_trace".
+
+    Returns
+    -------
+    go.Figure
+        Updated figure with selected points trace
+    """
+    if not clicked_point_data:
+        return fig
+
+    # Extract point coordinates
+    selected_points = []
+    for point_key in ["first_point", "second_point"]:
+        if point_key in clicked_point_data:
+            point_data = clicked_point_data[point_key]
+            selected_points.append([point_data["x"], point_data["y"], point_data["z"]])
+
+    if not selected_points:
+        return fig
+
+    # Remove existing selected points trace if it exists
+    fig.data = [trace for trace in fig.data if trace.name != trace_name]
+
+    # Add new selected points trace
+    positions = np.array(selected_points)
+    particles_scatter_trace = create_scatter_trace(
+        positions, colour="black", opacity=0.8
+    )
+    particles_scatter_trace.name = trace_name
+    particles_scatter_trace.marker.size = 8  # Override default size for selected points
+    fig.add_trace(particles_scatter_trace)
+
+    return fig
+
+
+def remove_selected_points_trace(
+    fig: go.Figure, trace_name: str = "selected_particle_trace"
+) -> go.Figure:
+    """
+    Remove selected points trace from the figure.
+
+    Parameters
+    ----------
+    fig : go.Figure
+        Existing plotly figure to update
+    trace_name : str, optional
+        Name of the selected points trace to remove. Defaults to "selected_particle_trace".
+
+    Returns
+    -------
+    go.Figure
+        Updated figure without selected points trace
+    """
+    fig.data = [trace for trace in fig.data if trace.name != trace_name]
+    return fig
+
+
 def generate_constant_labels(num_particles: int, label: str) -> List:
     """
     Generate a list of constant labels for a given number of particles.

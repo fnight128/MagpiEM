@@ -336,6 +336,69 @@ def read_emc_tomogram_raw_data(tomogram_geometry: dict, tomo_name: str) -> list:
     return raw_data
 
 
+def load_single_tomogram_raw_data(
+    filename: str, tomogram_name: str, **kwargs
+) -> list | None:
+    """
+    Load raw data for a single tomogram from a .mat file.
+
+    Parameters
+    ----------
+    filename : str
+        Path to .mat file
+    tomogram_name : str
+        Name of the specific tomogram to load
+    geom_key: str, optional
+        Name of geometry within .mat file
+    cycle : string, optional
+        Key of cycle to read from database
+        Defaults to cycle000.
+
+    Returns
+    -------
+    raw_data : list
+        Raw tomogram data for the specified tomogram
+    """
+    full_geom = read_emc_mat(filename, **kwargs)
+    if full_geom is None or tomogram_name not in full_geom:
+        return None
+
+    return read_emc_tomogram_raw_data(full_geom[tomogram_name], tomogram_name)
+
+
+def get_tomogram_names(filename: str, num_images=-1, **kwargs) -> list[str] | None:
+    """
+    Get tomogram names from a .mat file without returning all the data.
+
+    Parameters
+    ----------
+    filename : str
+        Path to .mat file
+    num_images : int, optional
+        Number of tomograms to get names for
+        Defaults to all (-1).
+    geom_key: str, optional
+        Name of geometry within .mat file
+    cycle : string, optional
+        Key of cycle to read from database
+        Defaults to cycle000.
+
+    Returns
+    -------
+    tomogram_names : list[str]
+        List of tomogram names
+    """
+    full_geom = read_emc_mat(filename, **kwargs)
+    if full_geom is None:
+        return None
+
+    tomogram_names = list(full_geom.keys())
+    if num_images > 0:
+        tomogram_names = tomogram_names[:num_images]
+
+    return tomogram_names
+
+
 def read_multiple_tomograms_raw_data(
     filename: str, num_images=-1, **kwargs
 ) -> dict[str, list] | None:
