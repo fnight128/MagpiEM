@@ -45,6 +45,13 @@ def main(open_browser=True, log_level=logging.WARNING):
     log_level : int, optional
         Logging level to use. Default is WARNING.
     """
+    try:
+        args = parse_arguments()
+        open_browser = not args.no_browser
+        log_level = getattr(logging, args.log_level.upper())
+    except SystemExit:
+        # Help was requested or invalid arguments
+        return
     server = Flask(__name__)
     app = DashProxy(
         server=server,
@@ -91,9 +98,4 @@ def parse_arguments():
 
 
 if __name__ == "__main__":
-    args = parse_arguments()
-
-    # Convert string log level to logging constant
-    log_level = getattr(logging, args.log_level.upper())
-
-    main(open_browser=not args.no_browser, log_level=log_level)
+    main()

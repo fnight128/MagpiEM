@@ -8,6 +8,46 @@
 #include <string>
 #include <map>
 #include <cstring>
+#include <cstdarg>
+
+enum LogLevel {
+    LOG_DEBUG = 0,
+    LOG_INFO = 1,
+    LOG_WARNING = 2,
+    LOG_ERROR = 3
+};
+
+static LogLevel g_log_level = LOG_WARNING;
+
+void log_message(LogLevel level, const char* format, ...) {
+    if (level < g_log_level) {
+        return; 
+    }
+    
+    const char* level_names[] = {"DEBUG", "INFO", "WARNING", "ERROR"};
+    
+    va_list args;
+    va_start(args, format);
+
+    va_list args_copy;
+    va_copy(args_copy, args);
+    int len = vsnprintf(nullptr, 0, format, args_copy);
+    va_end(args_copy);
+    
+    if (len > 0) {
+        std::string message(len + 1, '\0');
+        vsnprintf(&message[0], len + 1, format, args);
+        message.resize(len);
+        
+        std::cerr << "C++ [" << level_names[level] << "] " << message << std::endl;
+    }
+    
+    va_end(args);
+}
+
+EXPORT void set_log_level(int level) {
+    g_log_level = static_cast<LogLevel>(level);
+}
 
 // Particle processor class to manage state
 class ParticleProcessor {
@@ -30,7 +70,7 @@ public:
     }
 
     void find_neighbours(float* data, int num_particles, float min_distance_squared, float max_distance_squared, int* results) {
-        printf("Finding neighbours for %d particles (distance: %.2f - %.2f)\n", num_particles, min_distance_squared, max_distance_squared);
+        log_message(LOG_INFO, "Finding neighbours for %d particles (distance: %.2f - %.2f)", num_particles, min_distance_squared, max_distance_squared);
         
         ensure_initialized(data, num_particles);
         
@@ -65,8 +105,8 @@ public:
     template<typename Predicate>
     void filter_neighbours_generic(float* data, int num_particles, const std::string& filter_name, 
                                   float min_value, float max_value, int* results, Predicate predicate) {
-        printf("Filtering neighbours by %s for %d particles (%s: %.2f - %.2f)\n", 
-               filter_name.c_str(), num_particles, filter_name.c_str(), min_value, max_value);
+        log_message(LOG_INFO, "Filtering neighbours by %s for %d particles (%s: %.2f - %.2f)", 
+                   filter_name.c_str(), num_particles, filter_name.c_str(), min_value, max_value);
         
         ensure_initialized(data, num_particles);
         
@@ -172,25 +212,18 @@ public:
     }
 
     void clean_particles(float* data, int num_particles, CleanParams* params, int* results) {
-        printf("Processing %d particles with parameters:\n", num_particles);
-        printf("  Distance: %.2f - %.2f\n", params->min_distance, params->max_distance);
-        printf("  Orientation: %.2f - %.2f\n", params->min_orientation, params->max_orientation);
-        printf("  Curvature: %.2f - %.2f\n", params->min_curvature, params->max_curvature);
-        printf("  Min lattice size: %d, Min neighbours: %d\n", params->min_lattice_size, params->min_neighbours);
+        log_message(LOG_INFO, "Processing %d particles with parameters:", num_particles);
+        log_message(LOG_DEBUG, "  Distance: %.2f - %.2f", params->min_distance, params->max_distance);
+        log_message(LOG_DEBUG, "  Orientation: %.2f - %.2f", params->min_orientation, params->max_orientation);
+        log_message(LOG_DEBUG, "  Curvature: %.2f - %.2f", params->min_curvature, params->max_curvature);
+        log_message(LOG_DEBUG, "  Min lattice size: %d, Min neighbours: %d", params->min_lattice_size, params->min_neighbours);
         
-        // Reset state to ensure we process the new data
+        // Reset state to ensure we process the new data and avoid leakage
         reset();
         
-        // First find neighbours by distance
         find_neighbours(data, num_particles, params->min_distance, params->max_distance, results);
-        
-        // Then filter by orientation
         filter_by_orientation(data, num_particles, params->min_orientation, params->max_orientation, results);
-        
-        // Then filter by curvature
         filter_by_curvature(data, num_particles, params->min_curvature, params->max_curvature, results);
-        
-        // Finally assign lattices
         assign_lattices(data, num_particles, params->min_neighbours, params->min_lattice_size, results);
     }
 

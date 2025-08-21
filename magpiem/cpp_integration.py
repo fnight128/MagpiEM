@@ -67,6 +67,27 @@ def setup_cpp_library() -> ctypes.CDLL:
     ]
     c_lib.clean_particles.restype = None
 
+    # Set up logging function if available
+    if hasattr(c_lib, "set_log_level"):
+        c_lib.set_log_level.argtypes = [ctypes.c_int]
+        c_lib.set_log_level.restype = None
+
+        # Map Python logging levels to C++ levels
+        log_level_map = {
+            logging.DEBUG: 0,  # LOG_DEBUG
+            logging.INFO: 1,  # LOG_INFO
+            logging.WARNING: 2,  # LOG_WARNING
+            logging.ERROR: 3,  # LOG_ERROR
+        }
+
+        # Get current Python log level and set C++ level accordingly
+        current_level = logging.getLogger().getEffectiveLevel()
+        cpp_level = log_level_map.get(current_level, 2)  # Default to WARNING
+        c_lib.set_log_level(cpp_level)
+        logger.debug(
+            "Set C++ log level to %d (Python level: %s)", cpp_level, current_level
+        )
+
     return c_lib
 
 

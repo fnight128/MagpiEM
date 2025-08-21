@@ -192,6 +192,7 @@ EXPORT void assign_lattices(float* data, int num_points, unsigned int min_neighb
 // return neighbour lists in CSR form. Offsets has length num_points + 1. If
 // neighbours_out is nullptr, only offsets are filled (offsets[num_points] will be total entries).
 EXPORT void get_cleaned_neighbours(float* data, int num_points, CleanParams* params, int* offsets, int* neighbours_out);
+EXPORT void set_log_level(int level);
 #ifdef __cplusplus
 }
 #endif
