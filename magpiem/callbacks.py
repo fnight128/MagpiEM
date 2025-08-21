@@ -6,6 +6,7 @@ Callback functions for the MagpiEM Dash application.
 import base64
 import datetime
 import glob
+import logging
 import os
 import uuid
 from pathlib import Path
@@ -24,6 +25,8 @@ from .layout import EMPTY_FIG
 from .read_write import (
     get_tomogram_names,
     load_single_tomogram_raw_data,
+    read_emc_mat,
+    read_emc_tomogram_raw_data,
     write_emc_mat,
     write_relion_star,
 )
@@ -43,9 +46,26 @@ POSITION_KEYS = ["x", "y", "z"]
 ORIENTATION_KEYS = ["u", "v", "w"]
 TEMP_TRACE_NAME = "selected_particle_trace"
 
+# Set up logging
+logger = logging.getLogger(__name__)
+
+
+def configure_logging(level=logging.INFO):
+    """Configure logging for the application."""
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.StreamHandler(),
+        ],
+    )
+
 
 def register_callbacks(app, cache_functions, temp_file_dir):
     """Register all callbacks with the Dash app."""
+
+    # Configure logging - can be adjusted based on environment
+    configure_logging(logging.INFO)  # Set to logging.DEBUG for verbose output
 
     # Unpack cache functions
     get_cached_tomogram_figure = cache_functions["get_cached_tomogram_figure"]
@@ -133,7 +153,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
             data_path = tomogram_raw_data["__data_path__"]
 
             if can_use_trace_updates:
-                print(f"Using trace updates for {selected_tomo_name}")
+                logger.debug(f"Using trace updates for {selected_tomo_name}")
                 fig = go.Figure(current_figure)
 
                 tomo_selected_lattices = (
@@ -159,9 +179,9 @@ def register_callbacks(app, cache_functions, temp_file_dir):
                     )
                     cache_entry[selected_tomo_name] = fig
                     _add_to_cache_and_evict(cache_entry, selected_tomo_name, fig, 5)
-                    print(f"Cached updated figure for {selected_tomo_name}")
+                    logger.debug(f"Cached updated figure for {selected_tomo_name}")
                 except Exception as e:
-                    print(f"Failed to cache updated figure: {e}")
+                    logger.warning(f"Failed to cache updated figure: {e}")
             else:
                 fig = get_cached_tomogram_figure(
                     selected_tomo_name,
@@ -193,7 +213,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
                     show_removed,
                 )
             except Exception as e:
-                print(f"Pre-loading failed: {e}")
+                logger.warning(f"Pre-loading failed: {e}")
         else:
             fig = EMPTY_FIG
 
@@ -228,7 +248,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         try:
             lattice_id = int(click_data["points"][0]["text"])
         except (KeyError, ValueError, TypeError) as e:
-            print(f"Error getting lattice ID from click data: {e}")
+            logger.warning(f"Error getting lattice ID from click data: {e}")
             return selected_lattices or {}
 
         if lattice_id in selected_lattices[selected_tomo_name]:
@@ -423,8 +443,8 @@ def register_callbacks(app, cache_functions, temp_file_dir):
                 }
                 tomo_dict[tomo_name] = tomo_progress
 
-        print("Saving keys:", tomo_dict.keys())
-        print(tomo_dict)
+        logger.debug("Saving keys: %s", list(tomo_dict.keys()))
+        logger.debug("Saving progress data")
         prog = yaml.safe_dump(tomo_dict)
         with open(file_path, "w") as yaml_file:
             yaml_file.write(prog)
@@ -485,7 +505,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
     ):
         tomo_keys = tomogram_raw_data["__tomogram_names__"]
 
-        print("Available tomograms:", tomo_keys)
+        logger.debug("Available tomograms: %s", tomo_keys)
         if not tomo_keys:
             return [], ""
 
@@ -606,7 +626,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
             file for file in all_files if not file.endswith("_clean_params.yml")
         ]
         if all_files:
-            print("Pre-existing temp files found, removing:", all_files)
+            logger.info("Pre-existing temp files found, removing: %s", all_files)
             for f in all_files:
                 os.remove(f)
 
@@ -684,11 +704,13 @@ def register_callbacks(app, cache_functions, temp_file_dir):
                 prev_vals = [prev_yaml[key] for key in clean_keys]
                 return prev_vals
         except (FileNotFoundError, yaml.YAMLError, KeyError):
-            print(f"Couldn't find or read a previous cleaning file for {filename}.")
+            logger.info(
+                f"Couldn't find or read a previous cleaning file for {filename}."
+            )
             raise PreventUpdate
 
     def save_dash_upload(filename, contents, temp_file_dir):
-        print("Uploading file:", filename)
+        logger.info("Uploading file: %s", filename)
         data = contents.encode("utf8").split(b";base64,")[1]
         with open(os.path.join(temp_file_dir, filename), "wb") as fp:
             fp.write(base64.decodebytes(data))
@@ -745,7 +767,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
             return True, True, False, {}
 
         if not tomogram_raw_data:
-            print("No tomogram data available for cleaning")
+            logger.warning("No tomogram data available for cleaning")
             return True, True, False, {}
 
         # Clear cache when cleaning starts since all cached figures will be invalid
@@ -765,7 +787,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
             allow_flips,
         )
 
-        print("Clean")
+        logger.info("Starting cleaning process")
 
         lattice_data = {}
 
@@ -776,29 +798,44 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         data_path = tomogram_raw_data["__data_path__"]
         total_tomos = len(tomo_names)
 
+        logger.info("Loading .mat file...")
+        full_geom = read_emc_mat(data_path)
+        if full_geom is None:
+            logger.error("Failed to load .mat file")
+            return True, True, False, {}
+
+        logger.info(f"Processing {total_tomos} tomograms...")
+
         for tomo_name in tomo_names:
             t0 = time()
-            print(f"Loading and cleaning tomogram: {tomo_name}")
+            logger.debug(f"Cleaning tomogram: {tomo_name}")
 
-            tomo_raw_data = load_single_tomogram_raw_data(data_path, tomo_name)
+            if tomo_name not in full_geom:
+                logger.warning(f"Tomogram {tomo_name} not found in .mat file")
+                continue
+
+            tomo_raw_data = read_emc_tomogram_raw_data(full_geom[tomo_name], tomo_name)
             if tomo_raw_data is None:
-                print(f"Failed to load tomogram: {tomo_name}")
+                logger.warning(f"Failed to extract data for tomogram: {tomo_name}")
                 continue
 
             lattice_data[tomo_name] = clean_tomo_with_cpp(tomo_raw_data, clean_params)
-            print(lattice_data[tomo_name])
             clean_total_time += time() - t0
             clean_count += 1
-            tomos_remaining = total_tomos - clean_count
-            clean_speed = clean_total_time / clean_count
-            secs_remaining = clean_speed * tomos_remaining
-            formatted_time_remaining = str(
-                datetime.timedelta(seconds=secs_remaining)
-            ).split(".")[0]
-            print(f"Time remaining: {formatted_time_remaining}")
-            print()
 
-        print("Saving cleaning parameters")
+            # Only calculate time remaining every 10 tomograms to reduce overhead
+            if clean_count % 10 == 0 or clean_count == total_tomos:
+                tomos_remaining = total_tomos - clean_count
+                clean_speed = clean_total_time / clean_count
+                secs_remaining = clean_speed * tomos_remaining
+                formatted_time_remaining = str(
+                    datetime.timedelta(seconds=secs_remaining)
+                ).split(".")[0]
+                logger.info(
+                    f"Progress: {clean_count}/{total_tomos} - Time remaining: {formatted_time_remaining}"
+                )
+
+        logger.info("Saving cleaning parameters")
         cleaning_params_dict = {
             "distance": dist_goal,
             "distance tolerance": dist_tol,
@@ -846,11 +883,11 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         if not output_name:
             return None
         if output_name == input_name:
-            print("Output and input file cannot be identical")
+            logger.warning("Output and input file cannot be identical")
             return None
 
         if not lattice_data:
-            print("No lattice data available for saving")
+            logger.warning("No lattice data available for saving")
             return None
         saving_ids = {}
         for tomo_name, tomo_lattice_data in lattice_data.items():
@@ -891,5 +928,5 @@ def register_callbacks(app, cache_functions, temp_file_dir):
             )
 
         out_file = temp_file_dir + output_name
-        print(out_file)
+        logger.info("Saving output file: %s", out_file)
         return dcc.send_file(out_file)
