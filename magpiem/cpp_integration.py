@@ -13,6 +13,9 @@ from .classes import Cleaner
 
 logger = logging.getLogger(__name__)
 
+# Keep cached
+_cpp_library = None
+
 
 class CleanParams(ctypes.Structure):
     """C++ structure for cleaning parameters."""
@@ -31,6 +34,12 @@ class CleanParams(ctypes.Structure):
 
 def setup_cpp_library() -> ctypes.CDLL:
     """Load and configure the C++ library."""
+    global _cpp_library
+
+    # Return cached library if already loaded
+    if _cpp_library is not None:
+        return _cpp_library
+
     current_file = Path(__file__)
     project_root = current_file.parent.parent
     libname = project_root / "processing" / "processing.dll"
@@ -88,7 +97,16 @@ def setup_cpp_library() -> ctypes.CDLL:
             "Set C++ log level to %d (Python level: %s)", cpp_level, current_level
         )
 
+    # Cache library
+    _cpp_library = c_lib
     return c_lib
+
+
+def clear_cpp_library_cache():
+    """Clear the cached C++ library instance. Useful for testing or reloading."""
+    global _cpp_library
+    _cpp_library = None
+    logger.debug("Cleared C++ library cache")
 
 
 def convert_raw_data_to_cpp_format(tomogram_raw_data: list) -> tuple[np.ndarray, int]:
