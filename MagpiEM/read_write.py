@@ -109,19 +109,54 @@ def write_emc_mat(
     except Exception as e:
         print("Unable to open original matlab file, was it moved?")
         raise e
-    blank_tomos = set()
+
+    print(f"Processing {len(keep_ids)} tomograms for saving")
+
+    tomograms_with_particles = set(keep_ids.keys())
+
+    new_geom = {}
+
     for tomo_id, particles in keep_ids.items():
         if len(particles) == 0:
-            blank_tomos.add(tomo_id)
+            print(f"Skipping {tomo_id} (no particles)")
             continue
+
+        print(f"Processing {tomo_id} with {len(particles)} particles")
         table_rows = list()
         mat_table = mat_geom[tomo_id]
         for particle_id in particles:
             table_rows.append(mat_table[particle_id])
-        mat_geom[tomo_id] = table_rows
-    if purge_blanks and len(blank_tomos) > 0:
-        purge_blank_tomos(mat_full, blank_tomos)
-    mat_full["subTomoMeta"]["cycle000"]["geometry"] = mat_geom
+        new_geom[tomo_id] = table_rows
+
+    # Replace geometry and all other fields with only tomograms that have particles
+    mat_full["subTomoMeta"]["cycle000"]["geometry"] = new_geom
+    sub_tomo = mat_full["subTomoMeta"]
+
+    # Function to filter metadata sections
+    def filter_metadata_section(section_data):
+        """Filter a metadata section to only include tomograms with particles."""
+        if isinstance(section_data, dict):
+            return {
+                tomo_id: data
+                for tomo_id, data in section_data.items()
+                if tomo_id in tomograms_with_particles
+            }
+        else:
+            # For list/array types, filter based on tomogram names
+            return [item for item in section_data if item in tomograms_with_particles]
+
+    # Apply function to metadata
+    for section_name in ["ctfGroupSize", "reconGeometry", "tiltGeometry"]:
+        if section_name in sub_tomo:
+            sub_tomo[section_name] = filter_metadata_section(sub_tomo[section_name])
+
+    # mapBackGeometry may not exist
+    if "mapBackGeometry" in sub_tomo:
+        map_back = sub_tomo["mapBackGeometry"]
+        if "tomoName" in map_back:
+            map_back["tomoName"] = filter_metadata_section(map_back["tomoName"])
+
+    print(f"Final geometry contains {len(new_geom)} tomograms")
     scipy.io.savemat(out_path, mdict=mat_full)
 
 

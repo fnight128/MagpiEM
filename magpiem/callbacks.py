@@ -22,6 +22,7 @@ from dash_extensions.enrich import Input, Output
 from .classes import Cleaner, Particle, Tomogram
 from .cpp_integration import clean_tomo_with_cpp
 from .layout import EMPTY_FIG
+from .test_mat_file_comparison import validate_mat_files
 from .read_write import (
     get_tomogram_names,
     load_single_tomogram_raw_data,
@@ -897,7 +898,9 @@ def register_callbacks(app, cache_functions, temp_file_dir):
                 if should_include:
                     particle_ids.extend(particle_indices)
 
-            saving_ids[tomo_name] = particle_ids
+            # Only add tomogram to saving_ids if it has particles to save
+            if particle_ids:
+                saving_ids[tomo_name] = particle_ids
 
         if ".mat" in input_name:
             write_emc_mat(
@@ -905,6 +908,13 @@ def register_callbacks(app, cache_functions, temp_file_dir):
                 temp_file_dir + output_name,
                 temp_file_dir + input_name,
             )
+
+            # Ensure .mat files are otherwise identical
+            out_file = temp_file_dir + output_name
+            input_file = temp_file_dir + input_name
+            logger.info("Running validation test on output file: %s", out_file)
+            validate_mat_files(input_file, out_file)
+
         elif ".star" in input_name:
             write_relion_star(
                 saving_ids,
