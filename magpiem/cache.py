@@ -19,9 +19,7 @@ PRELOAD_COUNT = 2  # Number of tomograms to pre-load ahead
 __preloaded_tomograms = {}  # session_key -> {tomogram_name: figure}
 
 
-def _get_or_create_cache_entry(
-    tomogram_name: str, session_key: str, cache_key: str = None
-):
+def _get_or_create_cache_entry(tomogram_name: str, session_key: str):
     """
     Get or create a cache entry for a tomogram.
 
@@ -31,9 +29,6 @@ def _get_or_create_cache_entry(
         Name of the tomogram
     session_key : str
         Unique session identifier for this user
-    cache_key : str, optional
-        Additional cache key to differentiate between different states
-        (e.g., before/after cleaning)
 
     Returns
     -------
@@ -47,18 +42,16 @@ def _get_or_create_cache_entry(
 
     session_cache = __preloaded_tomograms[session_key]
 
-    key = f"{tomogram_name}_{cache_key}" if cache_key else tomogram_name
-
-    if key in session_cache:
-        cached_item = session_cache.pop(key)
-        session_cache[key] = cached_item
+    if tomogram_name in session_cache:
+        cached_item = session_cache.pop(tomogram_name)
+        session_cache[tomogram_name] = cached_item
         return session_cache, cached_item
 
     return session_cache, None
 
 
 def _add_to_cache_and_evict(
-    session_cache: dict, tomogram_name: str, item, max_size: int, cache_key: str = None
+    session_cache: dict, tomogram_name: str, item, max_size: int
 ):
     """
     Add an item to cache and implement LRU eviction.
@@ -73,11 +66,8 @@ def _add_to_cache_and_evict(
         Item to cache
     max_size : int
         Maximum cache size
-    cache_key : str, optional
-        Additional cache key to differentiate between different states
     """
-    key = f"{tomogram_name}_{cache_key}" if cache_key else tomogram_name
-    session_cache[key] = item
+    session_cache[tomogram_name] = item
 
     if len(session_cache) > max_size:
         oldest_key = next(iter(session_cache))
@@ -155,10 +145,9 @@ def get_cached_tomogram_figure(
         Tomogram figure or None if loading failed
     """
     has_lattice = lattice_data and tomogram_name in lattice_data
-    cache_key = f"lattice_{has_lattice}_cone_{cone_size}_removed_{show_removed}"
 
     session_cache, cached_figure = _get_or_create_cache_entry(
-        tomogram_name, session_key, cache_key
+        tomogram_name, session_key
     )
 
     if cached_figure is not None:
@@ -197,9 +186,7 @@ def get_cached_tomogram_figure(
             colour="white",
         )
 
-    _add_to_cache_and_evict(
-        session_cache, tomogram_name, figure, MAX_CACHE_SIZE, cache_key
-    )
+    _add_to_cache_and_evict(session_cache, tomogram_name, figure, MAX_CACHE_SIZE)
 
     return figure
 
@@ -249,9 +236,8 @@ def preload_tomograms(
         next_tomo_name = tomogram_names[next_index]
 
         has_lattice = lattice_data and next_tomo_name in lattice_data
-        cache_key = f"lattice_{has_lattice}_cone_{cone_size}_removed_{show_removed}"
         session_cache, cached_figure = _get_or_create_cache_entry(
-            next_tomo_name, session_key, cache_key
+            next_tomo_name, session_key
         )
         if cached_figure is None:
             try:
@@ -270,9 +256,17 @@ def preload_tomograms(
                 continue
 
 
+def clear_cache(session_key: str):
+    """Clear all cached figures for a session."""
+    if session_key in __preloaded_tomograms:
+        __preloaded_tomograms[session_key].clear()
+        print(f"Cleared cache for session {session_key}")
+
+
 def get_cache_functions():
     """Get a dictionary of cache functions for use in callbacks."""
     return {
         "get_cached_tomogram_figure": get_cached_tomogram_figure,
         "preload_tomograms": preload_tomograms,
+        "clear_cache": clear_cache,
     }

@@ -14,7 +14,7 @@ from time import time
 import numpy as np
 import plotly.graph_objects as go
 import yaml
-from dash import State, ctx
+from dash import State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Input, Output
 
@@ -30,6 +30,11 @@ from .read_write import (
 from .plotting_helpers import (
     add_selected_points_trace,
     update_lattice_trace_colors,
+)
+from .cache import (
+    _get_or_create_cache_entry,
+    _add_to_cache_and_evict,
+    clear_cache,
 )
 
 # Constants
@@ -147,6 +152,16 @@ def register_callbacks(app, cache_functions, temp_file_dir):
                     fig = add_selected_points_trace(
                         fig, clicked_point_data, TEMP_TRACE_NAME
                     )
+
+                try:
+                    cache_entry, _ = _get_or_create_cache_entry(
+                        selected_tomo_name, session_key
+                    )
+                    cache_entry[selected_tomo_name] = fig
+                    _add_to_cache_and_evict(cache_entry, selected_tomo_name, fig, 5)
+                    print(f"Cached updated figure for {selected_tomo_name}")
+                except Exception as e:
+                    print(f"Failed to cache updated figure: {e}")
             else:
                 fig = get_cached_tomogram_figure(
                     selected_tomo_name,
@@ -354,6 +369,19 @@ def register_callbacks(app, cache_functions, temp_file_dir):
     )
     def cone_clicks(_):
         return 1
+
+    @app.callback(
+        Output("store-cache-cleared", "data"),
+        Input("button-set-cone-size", "n_clicks"),
+        Input("switch-show-removed", "on"),
+        State("store-session-key", "data"),
+        prevent_initial_call=True,
+    )
+    def clear_cache_on_settings_change(_, __, session_key):
+        """Clear cache when cone size or show_removed settings change."""
+        if session_key:
+            clear_cache(session_key)
+        return True
 
     @app.callback(
         Output("download-file", "data"),
@@ -719,6 +747,10 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         if not tomogram_raw_data:
             print("No tomogram data available for cleaning")
             return True, True, False, {}
+
+        # Clear cache when cleaning starts since all cached figures will be invalid
+        if session_key:
+            clear_cache(session_key)
 
         clean_params = Cleaner.from_user_params(
             cc_thresh,
