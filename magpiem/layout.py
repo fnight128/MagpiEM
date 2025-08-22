@@ -425,5 +425,9 @@ def create_main_layout():
                 id="confirm-cant-save-progress",
                 message="Progress can only be saved if cleaning was run on all tomograms.",
             ),
+            dcc.ConfirmDialog(
+                id="confirm-validation-failed",
+                message="Failed to produce a valid output file. Use \"Save current progress\" to save the current state, and try restarting the application. Please report this issue if it persists.",
+            ),
         ],
     )

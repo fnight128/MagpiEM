@@ -847,6 +847,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
 
     @app.callback(
         Output("download-file", "data"),
+        Output("confirm-validation-failed", "displayed"),
         State("input-save-filename", "value"),
         State("upload-data", "filename"),
         State("switch-keep-particles", "on"),
@@ -913,7 +914,13 @@ def register_callbacks(app, cache_functions, temp_file_dir):
             out_file = temp_file_dir + output_name
             input_file = temp_file_dir + input_name
             logger.info("Running validation test on output file: %s", out_file)
-            validate_mat_files(input_file, out_file)
+            
+            try:
+                validate_mat_files(input_file, out_file)
+            except Exception as e:
+                logger.error("File validation failed: %s", str(e))
+                # Trigger error popup
+                return None, True
 
         elif ".star" in input_name:
             write_relion_star(
@@ -924,4 +931,4 @@ def register_callbacks(app, cache_functions, temp_file_dir):
 
         out_file = temp_file_dir + output_name
         logger.info("Saving output file: %s", out_file)
-        return dcc.send_file(out_file)
+        return dcc.send_file(out_file), False
