@@ -40,22 +40,41 @@ def setup_cpp_library() -> ctypes.CDLL:
     if _cpp_library is not None:
         return _cpp_library
 
-    current_file = Path(__file__)
+    current_file = Path(__file__).resolve()
+    # Calculate project root more reliably using absolute paths
     project_root = current_file.parent.parent
+    
+    # Primary path: should be MagpiEM/processing/processing.dll
     libname = project_root / "processing" / "processing.dll"
 
     logger.debug("Loading processing library from: %s", libname)
     logger.debug("Current file: %s", current_file)
     logger.debug("Project root: %s", project_root)
+    logger.debug("DLL exists at primary path: %s", libname.exists())
 
     if not libname.exists():
+        # Try alternative paths, focusing on project-relative paths first
         alt_paths = [
-            project_root / "processing.dll",
-            Path.cwd() / "processing" / "processing.dll",
+            project_root / "processing.dll",  # Direct in project root
+            # If running from test directory, go up one level
+            Path.cwd().parent / "processing" / "processing.dll" if Path.cwd().name == "test" else Path.cwd() / "processing" / "processing.dll",
             Path.cwd() / "processing.dll",
+            # Try some common locations relative to the current file
+            current_file.parent.parent / "processing" / "processing.dll",
+            # Last resort: try to find MagpiEM directory in the path hierarchy
+            *[p / "processing" / "processing.dll" for p in current_file.parents if p.name == "MagpiEM"],
         ]
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_alt_paths = []
+        for path in alt_paths:
+            if path not in seen:
+                seen.add(path)
+                unique_alt_paths.append(path)
 
-        for alt_path in alt_paths:
+        for alt_path in unique_alt_paths:
+            logger.debug("Trying alternative path: %s", alt_path)
             if alt_path.exists():
                 libname = alt_path
                 logger.info("Found DLL at alternative path: %s", libname)
@@ -63,7 +82,7 @@ def setup_cpp_library() -> ctypes.CDLL:
         else:
             raise FileNotFoundError(
                 f"Processing DLL not found. Tried:\n- {libname}\n"
-                + "\n".join(f"- {p}" for p in alt_paths)
+                + "\n".join(f"- {p}" for p in unique_alt_paths)
             )
 
     c_lib = ctypes.CDLL(str(libname))
