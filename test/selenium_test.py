@@ -15,6 +15,7 @@ import warnings
 # Suppress ResourceWarnings for cleaner test output
 warnings.filterwarnings("ignore", category=ResourceWarning)
 
+import argparse
 import os
 import sys
 import time
@@ -53,12 +54,16 @@ class MagpiEMTest(unittest.TestCase):
     def setUpClass(cls):
         """Set up the test environment."""
         firefox_options = Options()
-        firefox_options.add_argument("--headless")
         firefox_options.add_argument("--width=1920")
         firefox_options.add_argument("--height=1080")
         firefox_options.add_argument("--disable-extensions")
         firefox_options.add_argument("--disable-plugins")
-        firefox_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0")
+        firefox_options.add_argument(
+            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0"
+        )
+
+        if HEADLESS_MODE:
+            firefox_options.add_argument("--headless")
 
         service = Service(GeckoDriverManager().install())
         cls.driver = webdriver.Firefox(service=service, options=firefox_options)
@@ -293,5 +298,37 @@ class MagpiEMTest(unittest.TestCase):
         print("✅ Complete workflow test passed!")
 
 
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Selenium test for MagpiEM's Dash application"
+    )
+    parser.add_argument(
+        "--no-headless",
+        action="store_true",
+        help="Run tests with visible browser window (for debugging)",
+    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+    return parser.parse_args()
+
+
+def set_headless_mode(enabled):
+    """Set the global headless mode."""
+    global HEADLESS_MODE
+    HEADLESS_MODE = enabled
+
+
 if __name__ == "__main__":
+    args = parse_arguments()
+
+    set_headless_mode(not args.no_headless)
+
+    if args.verbose:
+        print(f"Running tests in {'headless' if HEADLESS_MODE else 'visible'} mode")
+
+    # Filter out custom arguments before passing to unittest
+    import sys
+
+    sys.argv = [sys.argv[0]]  # Keep only the script name
+
     unittest.main(verbosity=2)
