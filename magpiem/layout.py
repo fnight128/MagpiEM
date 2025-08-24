@@ -309,7 +309,11 @@ def create_graph():
                 "filename": "custom_image",
                 "height": 10000,
                 "width": 10000,
-            }
+            },
+            "displayModeBar": True,
+            "displaylogo": False,
+            "modeBarButtonsToRemove": ["pan2d", "lasso2d", "select2d"],
+            "responsive": True,
         },
     )
 
