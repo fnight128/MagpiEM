@@ -337,7 +337,6 @@ def create_store_components():
             dcc.Store(id="store-selected-lattices"),
             dcc.Store(id="store-clicked-point"),
             dcc.Store(id="store-camera"),
-            dcc.Store(id="store-last-click", data=0.0),
             dcc.Store(id="store-session-key", data=""),
             dcc.Store(id="store-cache-cleared", data=False),
         ]
@@ -408,9 +407,6 @@ def create_main_layout():
                         style={"height": "30px"},
                     ),
                     dcc.Interval(id="interval-processing", interval=100),
-                    dcc.Interval(
-                        id="interval-clear-points", interval=200, disabled=True
-                    ),
                 ]
             ),
             dbc.Row([create_graph()]),

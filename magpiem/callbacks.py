@@ -247,77 +247,65 @@ def register_callbacks(app, cache_functions, temp_file_dir):
     @app.callback(
         Output("store-clicked-point", "data"),
         Output("div-graph-data", "children"),
-        Output("interval-clear-points", "disabled"),
-        Output("store-last-click", "data"),
         Input("graph-picking", "clickData"),
         State("store-clicked-point", "data"),
         State("store-tomogram-data", "data"),
         State("dropdown-tomo", "value"),
         State("store-lattice-data", "data"),
-        State("store-last-click", "data"),
         prevent_initial_call=True,
     )
     def handle_point_selection(
         click_data,
-        previous_point_data,
+        clicked_points_data,
         tomogram_raw_data,
         selected_tomo_name,
         lattice_data,
-        last_click_time,
     ):
         """Handle point selection logic for geometric measurements."""
         if not click_data or not selected_tomo_name:
-            return previous_point_data, "", True, last_click_time
+            return clicked_points_data or [], ""
 
         if lattice_data and selected_tomo_name in lattice_data:
-            return previous_point_data, "", True, last_click_time
+            return clicked_points_data or [], ""
 
-        current_time = time()
+        current_point_data = click_data["points"][0]
+        particle_data_keys = POSITION_KEYS + ORIENTATION_KEYS
+        new_point = {key: current_point_data[key] for key in particle_data_keys}
 
-        if current_time - last_click_time < 0.5:
-            raise PreventUpdate
+        # Initialize clicked points list if it doesn't exist
+        if not clicked_points_data:
+            clicked_points_data = []
 
-        if previous_point_data:
-            current_point_data = click_data["points"][0]
+        # Check if we already have 2 points - if so, clear and start fresh
+        if len(clicked_points_data) >= 2:
+            clicked_points_data = []
+
+        # Add the new point
+        clicked_points_data.append(new_point)
+
+        # If we now have exactly 2 points, calculate parameters
+        if len(clicked_points_data) == 2:
             selected_particles = []
-
-            first_point_data = previous_point_data["first_point"]
-
-            for idx, point_data in enumerate([first_point_data, current_point_data]):
+            for idx, point_data in enumerate(clicked_points_data):
                 selected_particles.append(particle_from_point_data(point_data, idx=idx))
 
+            # Check if points are too close together
             if selected_particles[0].distance_sq(selected_particles[1]) < 0.001:
-                raise PreventUpdate
+                # Remove the second point if they're too close
+                clicked_points_data = clicked_points_data[:-1]
+                return clicked_points_data, ""
 
+            # Calculate and display parameters
             params_dict = selected_particles[0].calculate_params(selected_particles[1])
             params_message = []
             for param_name, param_value in params_dict.items():
                 params_message.append(f"{param_name}: {param_value:.2f}")
                 params_message.append(html.Br())
 
-            both_points = {
-                "first_point": first_point_data,
-                "second_point": {
-                    "x": current_point_data["x"],
-                    "y": current_point_data["y"],
-                    "z": current_point_data["z"],
-                    "u": current_point_data["u"],
-                    "v": current_point_data["v"],
-                    "w": current_point_data["w"],
-                },
-                "clear_after_plot": True,
-            }
-            return (
-                both_points,
-                params_message,
-                False,
-                current_time,
-            )
-        else:
-            point_data = click_data["points"][0]
-            particle_data_keys = POSITION_KEYS + ORIENTATION_KEYS
-            first_point_data = {key: point_data[key] for key in particle_data_keys}
-            return {"first_point": first_point_data}, "", True, current_time
+            return clicked_points_data, params_message
+
+        # If we have 0 or 1 points, just return the updated list
+        return clicked_points_data, ""
 
     @app.callback(
         Output("store-camera", "data"),
@@ -329,19 +317,6 @@ def register_callbacks(app, cache_functions, temp_file_dir):
             return relayout_data[CAMERA_KEY]
         else:
             return previous_camera
-
-    @app.callback(
-        Output("store-clicked-point", "data"),
-        Output("interval-clear-points", "disabled"),
-        Input("interval-clear-points", "n_intervals"),
-        State("store-clicked-point", "data"),
-        prevent_initial_call=True,
-    )
-    def clear_two_point_selection(n_intervals, clicked_point_data):
-        """Clear two-point selection after a brief delay to allow plotting."""
-        if clicked_point_data and "clear_after_plot" in clicked_point_data:
-            return {}, True
-        return clicked_point_data, True
 
     @app.callback(
         Output("dropdown-filetype", "value"),

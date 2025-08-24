@@ -240,7 +240,7 @@ def update_lattice_trace_colors(
 
 def add_selected_points_trace(
     fig: go.Figure,
-    clicked_point_data: dict,
+    clicked_point_data: list,
     trace_name: str = "selected_particle_trace",
 ) -> go.Figure:
     """
@@ -250,8 +250,8 @@ def add_selected_points_trace(
     ----------
     fig : go.Figure
         Existing plotly figure to update
-    clicked_point_data : dict
-        Dictionary containing point data with keys 'first_point', 'second_point'
+    clicked_point_data : list
+        List of point data dictionaries, each containing x, y, z coordinates
     trace_name : str, optional
         Name for the selected points trace. Defaults to "selected_particle_trace".
 
@@ -265,10 +265,8 @@ def add_selected_points_trace(
 
     # Extract point coordinates
     selected_points = []
-    for point_key in ["first_point", "second_point"]:
-        if point_key in clicked_point_data:
-            point_data = clicked_point_data[point_key]
-            selected_points.append([point_data["x"], point_data["y"], point_data["z"]])
+    for point_data in clicked_point_data:
+        selected_points.append([point_data["x"], point_data["y"], point_data["z"]])
 
     if not selected_points:
         return fig
