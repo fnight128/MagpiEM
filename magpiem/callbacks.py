@@ -437,8 +437,8 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         return dcc.send_file(file_path), False
 
     @app.callback(
-        Input("upload-previous-session", "filename"),
         Output("button-read", "disabled"),
+        Input("upload-previous-session", "filename"),
         prevent_initial_call=True,
     )
     def hide_read_button(_):
@@ -652,7 +652,6 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         )
 
     @app.callback(
-        Input("upload-data", "filename"),
         Output("inp-dist-goal", "value"),
         Output("inp-dist-tol", "value"),
         Output("inp-ori-goal", "value"),
@@ -663,6 +662,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         Output("inp-cc-thresh", "value"),
         Output("inp-array-size", "value"),
         Output("switch-allow-flips", "on"),
+        Input("upload-data", "filename"),
         prevent_initial_call=True,
     )
     def read_previous_clean_params(filename):
