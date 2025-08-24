@@ -427,7 +427,7 @@ def create_main_layout():
             ),
             dcc.ConfirmDialog(
                 id="confirm-validation-failed",
-                message="Failed to produce a valid output file. Use \"Save current progress\" to save the current state, and try restarting the application. Please report this issue if it persists.",
+                message='Failed to produce a valid output file. Use "Save current progress" to save the current state, and try restarting the application. Please report this issue if it persists.',
             ),
         ],
     )

@@ -43,7 +43,7 @@ def setup_cpp_library() -> ctypes.CDLL:
     current_file = Path(__file__).resolve()
     # Calculate project root more reliably using absolute paths
     project_root = current_file.parent.parent
-    
+
     # Primary path: should be MagpiEM/processing/processing.dll
     libname = project_root / "processing" / "processing.dll"
 
@@ -57,14 +57,22 @@ def setup_cpp_library() -> ctypes.CDLL:
         alt_paths = [
             project_root / "processing.dll",  # Direct in project root
             # If running from test directory, go up one level
-            Path.cwd().parent / "processing" / "processing.dll" if Path.cwd().name == "test" else Path.cwd() / "processing" / "processing.dll",
+            (
+                Path.cwd().parent / "processing" / "processing.dll"
+                if Path.cwd().name == "test"
+                else Path.cwd() / "processing" / "processing.dll"
+            ),
             Path.cwd() / "processing.dll",
             # Try some common locations relative to the current file
             current_file.parent.parent / "processing" / "processing.dll",
             # Last resort: try to find MagpiEM directory in the path hierarchy
-            *[p / "processing" / "processing.dll" for p in current_file.parents if p.name == "MagpiEM"],
+            *[
+                p / "processing" / "processing.dll"
+                for p in current_file.parents
+                if p.name == "MagpiEM"
+            ],
         ]
-        
+
         # Remove duplicates while preserving order
         seen = set()
         unique_alt_paths = []

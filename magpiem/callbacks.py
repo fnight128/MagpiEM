@@ -914,7 +914,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
             out_file = temp_file_dir + output_name
             input_file = temp_file_dir + input_name
             logger.info("Running validation test on output file: %s", out_file)
-            
+
             try:
                 validate_mat_files(input_file, out_file)
             except Exception as e:

@@ -8,10 +8,11 @@ selenium cannot handle. The actual cleaning process is tested elsewhere
 
 Note: Tests MUST be run in firefox. Although the app itself is perfectly compatible
 with chrome, the combination of chrome, selenium and plotly all together prevents
-plots from displaying. 
+plots from displaying.
 """
 
 import warnings
+
 # Suppress ResourceWarnings for cleaner test output
 warnings.filterwarnings("ignore", category=ResourceWarning)
 
@@ -34,17 +35,19 @@ from webdriver_manager.firefox import GeckoDriverManager
 TEST_FILE_NAME = "test_data_miniscule.mat"
 
 TEST_PARAMETERS = {
-            "switch-allow-flips": False,
-            "inp-cc-thresh": 3,
-            "inp-curv-goal": 90,
-            "inp-curv-tol": 20,
-            "inp-dist-goal": 60,
-            "inp-dist-tol": 20,
-            "inp-array-size": 3,
-            "inp-min-neighbours": 2,
-            "inp-ori-goal": 10,
-            "inp-ori-tol": 20,
-        }
+    "switch-allow-flips": False,
+    "inp-cc-thresh": 3,
+    "inp-curv-goal": 90,
+    "inp-curv-tol": 20,
+    "inp-dist-goal": 60,
+    "inp-dist-tol": 20,
+    "inp-array-size": 3,
+    "inp-min-neighbours": 2,
+    "inp-ori-goal": 10,
+    "inp-ori-tol": 20,
+}
+
+HEADLESS_MODE = True
 
 
 class MagpiEMTest(unittest.TestCase):
@@ -90,7 +93,7 @@ class MagpiEMTest(unittest.TestCase):
         WebDriverWait(self.driver, 30).until(
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
-        
+
         # Give firefox time to initialize WebGL and rendering components
         time.sleep(3)
 
@@ -105,10 +108,12 @@ class MagpiEMTest(unittest.TestCase):
         import os
 
         env = os.environ.copy()
-        env['PYTHONPATH'] = str(self.project_root) + os.pathsep + env.get('PYTHONPATH', '')
-        
+        env["PYTHONPATH"] = (
+            str(self.project_root) + os.pathsep + env.get("PYTHONPATH", "")
+        )
+
         # Ensure the processing DLL can be found by adding project root to PATH
-        env['PATH'] = str(self.project_root) + os.pathsep + env.get('PATH', '')
+        env["PATH"] = str(self.project_root) + os.pathsep + env.get("PATH", "")
 
         cmd = [sys.executable, "-m", "magpiem.dash_ui", "--no-browser"]
         self.dash_process = subprocess.Popen(
@@ -116,12 +121,12 @@ class MagpiEMTest(unittest.TestCase):
             cwd=self.project_root,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env=env
+            env=env,
         )
 
         # Wait for the app to start and check if it's running
         time.sleep(3)
-        
+
         if self.dash_process.poll() is not None:
             # Process died, get the error output
             stdout, stderr = self.dash_process.communicate()
@@ -138,9 +143,9 @@ class MagpiEMTest(unittest.TestCase):
             self.dash_process.terminate()
             self.dash_process.wait()
             # Close the file handles to prevent ResourceWarnings
-            if hasattr(self.dash_process, 'stdout') and self.dash_process.stdout:
+            if hasattr(self.dash_process, "stdout") and self.dash_process.stdout:
                 self.dash_process.stdout.close()
-            if hasattr(self.dash_process, 'stderr') and self.dash_process.stderr:
+            if hasattr(self.dash_process, "stderr") and self.dash_process.stderr:
                 self.dash_process.stderr.close()
 
     def test_complete_workflow(self):
@@ -149,24 +154,29 @@ class MagpiEMTest(unittest.TestCase):
 
         print("Step 1: Checking application loads...")
         time.sleep(2)
-        
+
         title = self.driver.find_element(By.TAG_NAME, "h1")
         self.assertEqual(title.text, "MagpiEM")
         print("✓ Application loaded successfully")
 
         print("Step 2: Uploading test file...")
-        self.assertTrue(self.test_data_path.exists(), f"{TEST_FILE_NAME} file not found")
-        
+        self.assertTrue(
+            self.test_data_path.exists(), f"{TEST_FILE_NAME} file not found"
+        )
+
         upload_element = self.driver.find_element(By.ID, "upload-data")
         WebDriverWait(self.driver, 10).until(
             EC.element_to_be_clickable((By.ID, "upload-data"))
         )
-        
-        file_input = self.driver.find_element(By.CSS_SELECTOR, "#upload-data input[type='file']")
+
+        file_input = self.driver.find_element(
+            By.CSS_SELECTOR, "#upload-data input[type='file']"
+        )
         file_input.send_keys(str(self.test_data_path.absolute()))
-        
+
         WebDriverWait(self.driver, 10).until(
-            lambda driver: TEST_FILE_NAME in driver.find_element(By.ID, "upload-data").text
+            lambda driver: TEST_FILE_NAME
+            in driver.find_element(By.ID, "upload-data").text
         )
         print("✓ File uploaded successfully")
 
@@ -176,12 +186,12 @@ class MagpiEMTest(unittest.TestCase):
             EC.element_to_be_clickable((By.ID, "dropdown-filetype"))
         )
         dropdown.click()
-        
+
         # Try different selectors for the dropdown options
         mat_option = WebDriverWait(self.driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, "//div[text()='.mat']"))
         )
-        
+
         mat_option.click()
         time.sleep(1)
         print("✓ File type set to .mat")
@@ -193,7 +203,7 @@ class MagpiEMTest(unittest.TestCase):
         WebDriverWait(self.driver, 30).until(
             EC.presence_of_element_located((By.ID, "dropdown-tomo"))
         )
-        
+
         dropdown = self.driver.find_element(By.ID, "dropdown-tomo")
         self.assertFalse(dropdown.get_attribute("disabled"))
         print("✓ Tomograms read successfully")
@@ -230,13 +240,15 @@ class MagpiEMTest(unittest.TestCase):
         print("✓ Cleaning process started")
 
         print("Waiting for cleaning to complete...")
-        
+
         # First, wait a bit to see if cleaning actually starts processing, or
         # errors occur
         time.sleep(5)
         try:
             # Check for dash error popups in case cleaning failed to start
-            alerts = self.driver.find_elements(By.CSS_SELECTOR, ".alert-danger, .alert-warning")
+            alerts = self.driver.find_elements(
+                By.CSS_SELECTOR, ".alert-danger, .alert-warning"
+            )
             if alerts:
                 print("Found alert messages:")
                 for alert in alerts:
@@ -244,33 +256,37 @@ class MagpiEMTest(unittest.TestCase):
                         print(f"  Alert: {alert.text}")
         except:
             pass
-        
+
         # Appearance of the saving card indicates cleaning is finished
         print("Waiting for saving card to appear...")
-        
+
         try:
             WebDriverWait(self.driver, 60).until(
-                lambda driver: driver.find_element(By.ID, "collapse-save").is_displayed()
+                lambda driver: driver.find_element(
+                    By.ID, "collapse-save"
+                ).is_displayed()
             )
             print("✓ Saving card appeared - cleaning completed successfully")
-            
+
         except Exception as e:
             print(f"✗ Timeout waiting for saving card: {e}")
-            
+
             # Check for error messages in the browser console
             try:
-                logs = self.driver.get_log('browser')
+                logs = self.driver.get_log("browser")
                 if logs:
                     print("Browser console errors:")
                     for log in logs:
-                        if log['level'] in ['SEVERE', 'ERROR']:
+                        if log["level"] in ["SEVERE", "ERROR"]:
                             print(f"  {log['level']}: {log['message']}")
             except:
                 print("Could not retrieve browser console logs")
-            
+
             # Check for any visible error alerts
             try:
-                alerts = self.driver.find_elements(By.CSS_SELECTOR, ".alert-danger, .alert-warning, .alert-info")
+                alerts = self.driver.find_elements(
+                    By.CSS_SELECTOR, ".alert-danger, .alert-warning, .alert-info"
+                )
                 if alerts:
                     print("Found alert messages:")
                     for alert in alerts:
@@ -278,22 +294,22 @@ class MagpiEMTest(unittest.TestCase):
                             print(f"  Alert: {alert.text}")
             except:
                 print("Could not check for alerts")
-            
+
             return
 
         print("✓ Cleaning process completed")
 
         # Step 7: Verify results
         print("Step 7: Verifying cleaning results...")
-        
+
         # Verify that the save card is visible and accessible
         save_card = self.driver.find_element(By.ID, "collapse-save")
         self.assertTrue(save_card.is_displayed(), "Save card not displayed")
-        
+
         # Verify that the save button within the card is accessible
         save_button = self.driver.find_element(By.ID, "button-save")
         self.assertTrue(save_button.is_displayed(), "Save button not displayed")
-        
+
         print("✓ Cleaning results verified - save functionality is available")
         print("✅ Complete workflow test passed!")
 
