@@ -338,7 +338,7 @@ def create_store_components():
             dcc.Store(id="store-clicked-point"),
             dcc.Store(id="store-camera"),
             dcc.Store(id="store-session-key", data=""),
-            dcc.Store(id="store-cache-cleared", data=False),
+            dcc.Store(id="store-cache-cleared", data=0),
         ]
     )
 

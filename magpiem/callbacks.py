@@ -91,121 +91,157 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         )
 
     @app.callback(
+        Output("store-cache-cleared", "data"),
+        Input("switch-cone-plot", "on"),
+        Input("inp-cone-size", "value"),
+        Input("button-set-cone-size", "n_clicks"),
+        Input("switch-show-removed", "on"),
+        State("store-session-key", "data"),
+        State("store-tomogram-data", "data"),
+        State("store-lattice-data", "data"),
+        State("store-selected-lattices", "data"),
+        State("dropdown-tomo", "value"),
+        prevent_initial_call=True,
+    )
+    def handle_plot_style_changes(
+        make_cones,
+        cone_size,
+        cone_clicks,
+        show_removed,
+        session_key,
+        tomogram_raw_data,
+        lattice_data,
+        selected_lattices,
+        selected_tomo_name,
+    ):
+        """Handle plot style changes and update cache accordingly."""
+        logger.debug("handle_plot_style_changes called")
+        logger.debug(
+            "make_cones=%s, cone_size=%s, show_removed=%s",
+            make_cones,
+            cone_size,
+            show_removed,
+        )
+
+        if not session_key or not tomogram_raw_data or not selected_tomo_name:
+            logger.debug("Missing required data, returning True")
+            return True
+
+        if not make_cones:
+            cone_size = -1
+            logger.debug("Cones disabled, setting cone_size to -1")
+
+        # Clear cache and create new preloaded figures with updated style
+        logger.debug("Clearing cache")
+        clear_cache(session_key)
+        try:
+            data_path = tomogram_raw_data["__data_path__"]
+            logger.debug("Preloading tomograms with new style")
+            preload_tomograms(
+                selected_tomo_name,
+                tomogram_raw_data["__tomogram_names__"],
+                data_path,
+                session_key,
+                lattice_data,
+                cone_size,
+                show_removed,
+            )
+        except Exception as e:
+            logger.debug("Failed to update cache: %s", e)
+            logger.warning(f"Failed to update cache with new plot style: {e}")
+
+        logger.debug("Returning True to trigger cache clear")
+        return True
+
+    @app.callback(
         Output("graph-picking", "figure"),
         Input("dropdown-tomo", "value"),
         Input("store-lattice-data", "data"),
-        State("store-tomogram-data", "data"),
         Input("store-selected-lattices", "data"),
-        Input("switch-cone-plot", "on"),
-        State("inp-cone-size", "value"),
-        Input("button-set-cone-size", "n_clicks"),
-        Input("switch-show-removed", "on"),
-        State("store-clicked-point", "data"),
+        Input("store-clicked-point", "data"),
+        Input("store-cache-cleared", "data"),
+        State("store-tomogram-data", "data"),
         State("store-camera", "data"),
         State("store-session-key", "data"),
-        State("graph-picking", "figure"),
+        State("switch-cone-plot", "on"),
+        State("inp-cone-size", "value"),
+        State("switch-show-removed", "on"),
         prevent_initial_call=True,
     )
     def plot_tomo(
         selected_tomo_name,
         lattice_data,
-        tomogram_raw_data,
         selected_lattices,
-        make_cones: bool,
-        cone_size: float,
-        _,
-        show_removed: bool,
         clicked_point_data,
+        cache_cleared,
+        tomogram_raw_data,
         camera_data,
         session_key,
-        current_figure,
+        make_cones,
+        cone_size,
+        show_removed,
     ):
-        if not make_cones:
-            cone_size = -1
+        """Retrieve and plot cached tomo"""
+        logger.debug("plot_tomo called with selected_tomo_name=%s", selected_tomo_name)
+        logger.debug("make_cones=%s, cone_size=%s", make_cones, cone_size)
+        logger.debug("cache_cleared=%s", cache_cleared)
 
-        if not selected_tomo_name:
+        if not selected_tomo_name or not tomogram_raw_data:
+            logger.debug("Returning EMPTY_FIG - missing data")
             return EMPTY_FIG
 
-        can_use_trace_updates = (
-            current_figure
-            and current_figure.get("data")
-            and len(current_figure["data"]) > 0
-            and lattice_data
-            and selected_tomo_name in lattice_data
-            and ctx.triggered_id in ["store-selected-lattices", "store-clicked-point"]
+        if selected_tomo_name not in tomogram_raw_data["__tomogram_names__"]:
+            logger.debug("Returning EMPTY_FIG - tomogram not found")
+            return EMPTY_FIG
+
+        # Get the cached figure
+        data_path = tomogram_raw_data["__data_path__"]
+        logger.debug("Getting cached figure for %s", selected_tomo_name)
+
+        # Determine cone size based on switch state
+        actual_cone_size = cone_size if make_cones else -1
+        logger.debug("actual_cone_size=%s", actual_cone_size)
+
+        fig = get_cached_tomogram_figure(
+            selected_tomo_name,
+            data_path,
+            session_key,
+            lattice_data,
+            actual_cone_size,
+            show_removed,  # Use current show_removed state
         )
 
-        if selected_tomo_name in tomogram_raw_data["__tomogram_names__"]:
-            data_path = tomogram_raw_data["__data_path__"]
+        logger.debug("Got figure from cache: %s", fig is not None)
 
-            if can_use_trace_updates:
-                logger.debug(f"Using trace updates for {selected_tomo_name}")
-                fig = go.Figure(current_figure)
-
-                tomo_selected_lattices = (
-                    selected_lattices.get(selected_tomo_name, [])
-                    if selected_lattices
-                    else []
-                )
-                tomo_lattice_data = (
-                    lattice_data.get(selected_tomo_name, {}) if lattice_data else {}
+        if fig is None:
+            logger.debug("Figure is None, returning EMPTY_FIG")
+            fig = EMPTY_FIG
+        else:
+            # Update lattice selection by trace update
+            if selected_lattices and selected_tomo_name in selected_lattices:
+                logger.debug(
+                    "Updating lattice colors for %s selected lattices",
+                    len(selected_lattices[selected_tomo_name]),
                 )
                 fig = update_lattice_trace_colors(
-                    fig, set(tomo_selected_lattices), tomo_lattice_data, cone_size
+                    fig,
+                    set(selected_lattices[selected_tomo_name]),
+                    lattice_data.get(selected_tomo_name, {}),
+                    cone_size if make_cones else -1,
                 )
 
-                if clicked_point_data:
-                    fig = add_selected_points_trace(
-                        fig, clicked_point_data, TEMP_TRACE_NAME
-                    )
-
-                try:
-                    cache_entry, _ = _get_or_create_cache_entry(
-                        selected_tomo_name, session_key
-                    )
-                    cache_entry[selected_tomo_name] = fig
-                    _add_to_cache_and_evict(cache_entry, selected_tomo_name, fig, 5)
-                    logger.debug(f"Cached updated figure for {selected_tomo_name}")
-                except Exception as e:
-                    logger.warning(f"Failed to cache updated figure: {e}")
-            else:
-                fig = get_cached_tomogram_figure(
-                    selected_tomo_name,
-                    data_path,
-                    session_key,
-                    lattice_data,
-                    selected_lattices,
-                    cone_size,
-                    show_removed,
+            # Add selected points if any
+            if clicked_point_data:
+                logger.debug("Adding %s selected points", len(clicked_point_data))
+                fig = add_selected_points_trace(
+                    fig, clicked_point_data, TEMP_TRACE_NAME
                 )
 
-            if fig is None:
-                fig = EMPTY_FIG
-            elif not can_use_trace_updates:
-                if clicked_point_data:
-                    fig = add_selected_points_trace(
-                        fig, clicked_point_data, TEMP_TRACE_NAME
-                    )
-
-            try:
-                preload_tomograms(
-                    selected_tomo_name,
-                    tomogram_raw_data["__tomogram_names__"],
-                    data_path,
-                    session_key,
-                    lattice_data,
-                    selected_lattices,
-                    cone_size,
-                    show_removed,
-                )
-            except Exception as e:
-                logger.warning(f"Pre-loading failed: {e}")
-        else:
-            fig = EMPTY_FIG
-
+        # Restore camera position
         if camera_data:
             fig["layout"]["scene"]["camera"] = camera_data
 
+        logger.debug("Returning figure")
         return fig
 
     @app.callback(
@@ -272,15 +308,10 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         particle_data_keys = POSITION_KEYS + ORIENTATION_KEYS
         new_point = {key: current_point_data[key] for key in particle_data_keys}
 
-        # Initialize clicked points list if it doesn't exist
         if not clicked_points_data:
             clicked_points_data = []
-
-        # Check if we already have 2 points - if so, clear and start fresh
         if len(clicked_points_data) >= 2:
             clicked_points_data = []
-
-        # Add the new point
         clicked_points_data.append(new_point)
 
         # If we now have exactly 2 points, calculate parameters
@@ -289,13 +320,12 @@ def register_callbacks(app, cache_functions, temp_file_dir):
             for idx, point_data in enumerate(clicked_points_data):
                 selected_particles.append(particle_from_point_data(point_data, idx=idx))
 
-            # Check if points are too close together
+            # Check if points are too close together - implies same point and could lead to errors
             if selected_particles[0].distance_sq(selected_particles[1]) < 0.001:
                 # Remove the second point if they're too close
                 clicked_points_data = clicked_points_data[:-1]
                 return clicked_points_data, ""
 
-            # Calculate and display parameters
             params_dict = selected_particles[0].calculate_params(selected_particles[1])
             params_message = []
             for param_name, param_value in params_dict.items():
@@ -304,7 +334,6 @@ def register_callbacks(app, cache_functions, temp_file_dir):
 
             return clicked_points_data, params_message
 
-        # If we have 0 or 1 points, just return the updated list
         return clicked_points_data, ""
 
     @app.callback(
@@ -350,19 +379,6 @@ def register_callbacks(app, cache_functions, temp_file_dir):
     )
     def cone_clicks(_):
         return 1
-
-    @app.callback(
-        Output("store-cache-cleared", "data"),
-        Input("button-set-cone-size", "n_clicks"),
-        Input("switch-show-removed", "on"),
-        State("store-session-key", "data"),
-        prevent_initial_call=True,
-    )
-    def clear_cache_on_settings_change(_, __, session_key):
-        """Clear cache when cone size or show_removed settings change."""
-        if session_key:
-            clear_cache(session_key)
-        return True
 
     @app.callback(
         Output("download-file", "data"),
@@ -819,6 +835,54 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         with open(temp_file_dir + clean_yaml_name, "w") as yaml_file:
             yaml_file.write(yaml.safe_dump(cleaning_params_dict))
         return False, False, True, lattice_data
+
+    @app.callback(
+        Output("store-cache-cleared", "data"),
+        Input("store-lattice-data", "data"),
+        State("store-session-key", "data"),
+        State("store-tomogram-data", "data"),
+        State("store-selected-lattices", "data"),
+        State("dropdown-tomo", "value"),
+        State("switch-cone-plot", "on"),
+        State("inp-cone-size", "value"),
+        State("switch-show-removed", "on"),
+        prevent_initial_call=True,
+    )
+    def handle_lattice_data_cache_update(
+        lattice_data,
+        session_key,
+        tomogram_raw_data,
+        selected_lattices,
+        selected_tomo_name,
+        make_cones,
+        cone_size,
+        show_removed,
+    ):
+        """Update cache when lattice data is produced via cleaning"""
+        if not session_key or not tomogram_raw_data or not selected_tomo_name:
+            return True
+
+        if not make_cones:
+            cone_size = -1
+
+        # Clear cache and regenerate with new lattice data
+        clear_cache(session_key)
+
+        try:
+            data_path = tomogram_raw_data["__data_path__"]
+            preload_tomograms(
+                selected_tomo_name,
+                tomogram_raw_data["__tomogram_names__"],
+                data_path,
+                session_key,
+                lattice_data,
+                cone_size,
+                show_removed,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to update cache with new lattice data: {e}")
+
+        return True
 
     @app.callback(
         Output("download-file", "data"),
