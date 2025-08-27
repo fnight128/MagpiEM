@@ -1097,6 +1097,7 @@ def simple_figure() -> go.Figure:
     fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
     fig.update_layout(scene_aspectmode="data")
     fig.update_layout(margin={"l": 10, "r": 10, "t": 10, "b": 10})
+    fig.update_layout(showlegend=False)
     fig["layout"]["uirevision"] = "a"
     return fig
 

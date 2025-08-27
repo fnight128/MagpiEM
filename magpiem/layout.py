@@ -315,6 +315,10 @@ def create_graph():
             "modeBarButtonsToRemove": ["pan2d", "lasso2d", "select2d"],
             "responsive": True,
         },
+        style={
+            "height": "600px",
+            "width": "100%",
+        },
     )
 
 
@@ -409,7 +413,14 @@ def create_main_layout():
                     dcc.Interval(id="interval-processing", interval=100),
                 ]
             ),
-            dbc.Row([create_graph()]),
+            dbc.Row(
+                [create_graph()],
+                style={
+                    "minHeight": "600px",
+                    "height": "600px",
+                    "overflow": "hidden",
+                }
+            ),
             create_store_components(),
             html.Footer(
                 html.Div(
@@ -418,7 +429,15 @@ def create_main_layout():
                         href="https://github.com/fnight128/MagpiEM",
                         target="_blank",
                     )
-                )
+                ),
+                style={
+                    "position": "relative",
+                    "bottom": "0",
+                    "width": "100%",
+                    "textAlign": "center",
+                    "padding": "10px",
+                    "marginTop": "20px",
+                }
             ),
             create_empty_div(),
             dcc.ConfirmDialog(

@@ -42,7 +42,7 @@ def create_particle_plot_from_raw_data(
         Plotly figure with either particle positions (scatter3d) or cones
     """
     if not tomogram_raw_data:
-        return go.Figure()
+        return simple_figure()
 
     positions = np.array([particle[0] for particle in tomogram_raw_data])
     orientations = np.array([particle[1] for particle in tomogram_raw_data])
@@ -281,6 +281,7 @@ def add_selected_points_trace(
     )
     particles_scatter_trace.name = trace_name
     particles_scatter_trace.marker.size = 8  # Override default size for selected points
+    particles_scatter_trace.showlegend = False  # Ensure legend is hidden for selected points
     fig.add_trace(particles_scatter_trace)
 
     return fig
@@ -347,7 +348,7 @@ def create_scatter_trace(
         mode="markers",
         marker=dict(size=3, color=colour, opacity=opacity),
         name="Particles",
-        showlegend=True,
+        showlegend=False,
         text=generate_constant_labels(len(positions), lattice_id),
     )
 
@@ -452,6 +453,7 @@ def create_cone_traces(
         sizeref=cone_size,
         colorscale=[[0, colour], [1, colour]],
         showscale=False,
+        showlegend=False,
         opacity=opacity,
         text=generate_constant_labels(len(positions), lattice_id),
     )
