@@ -406,12 +406,11 @@ def calculate_python_reference(
         for particle in particles:
             particle.neighbours = saved_neighbours[particle].copy()
 
-    # Create base tomogram with initial neighbours (expensive operation - do once!)
     logger.debug("  Setting up base tomogram with neighbour relationships...")
     base_tomo = setup_test_tomogram()
     all_particles = list(base_tomo.all_particles)
 
-    # Save initial neighbour state
+    # Save initial neighbour state - alleviates need to re-instantiate the Tomogram
     initial_neighbours = copy_neighbour_sets(all_particles)
 
     # Initial neighbour counts (after distance filtering)
@@ -441,10 +440,9 @@ def calculate_python_reference(
 
     # Lattice assignment (need fresh tomogram for autoclean)
     logger.debug("  Running lattice assignment...")
-    test_tomo = setup_test_tomogram()  # This is necessary for autoclean
+    test_tomo = setup_test_tomogram()
     test_tomo.autoclean()
     lattice_assignments_python = empty_particle_list()
-    # Override with actual lattice assignments
     for particle in test_tomo.all_particles:
         lattice_assignments_python[particle.particle_id] = particle.lattice
 
@@ -755,12 +753,6 @@ def verify_neighbour_relationships(
     logger.info("  ✓ The differences are indeed only in the lattice assignment phase")
 
 
-
-
-
-
-
-
 def compare_results(
     cpp_distance_time: float,
     cpp_orientation_time: float,
@@ -863,8 +855,6 @@ def main() -> None:
         python_reference["curvature"],
     )
 
-
-
     # Now run full pipeline lattice assignment (strict)
     full_counts_cpp, cpp_full_time = test_cpp_full_pipeline(
         c_lib, test_data, params, python_reference["lattice"]
@@ -885,8 +875,7 @@ def main() -> None:
 if __name__ == "__main__":
     # Configure logging when running directly
     logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s %(levelname)s: %(message)s'
+        level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s"
     )
     # Override logger level to DEBUG for more detailed output
     logger.setLevel(logging.DEBUG)
