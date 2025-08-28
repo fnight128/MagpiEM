@@ -419,7 +419,7 @@ def create_main_layout():
                     "minHeight": "600px",
                     "height": "600px",
                     "overflow": "hidden",
-                }
+                },
             ),
             create_store_components(),
             html.Footer(
@@ -437,7 +437,7 @@ def create_main_layout():
                     "textAlign": "center",
                     "padding": "10px",
                     "marginTop": "20px",
-                }
+                },
             ),
             create_empty_div(),
             dcc.ConfirmDialog(
