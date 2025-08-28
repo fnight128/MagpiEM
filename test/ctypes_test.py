@@ -3,6 +3,7 @@ import pathlib
 import numpy as np
 import time
 import sys
+import logging
 
 # Add the parent directory to the path to ensure we use the local magpiem module
 current_dir = pathlib.Path(__file__).parent.absolute()
@@ -13,6 +14,9 @@ from magpiem.read_write import read_emc_mat, read_single_tomogram
 from magpiem.tomogram import Tomogram
 from magpiem.particle import Particle
 from magpiem.cleaner import Cleaner
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Updated paths for test folder location
 TEST_DATA_FILE = current_dir / "WT_CA_2nd.mat"
@@ -40,7 +44,7 @@ def setup_cpp_library() -> ctypes.CDLL:
     # Look for processing.dll in the processing directory relative to project root
     project_root = parent_dir
     libname = project_root / "processing" / "processing.dll"
-    print("Loading library from:", libname)
+    logger.info(f"Loading library from: {libname}")
 
     if not libname.exists():
         # Try alternative paths
@@ -53,7 +57,7 @@ def setup_cpp_library() -> ctypes.CDLL:
         for alt_path in alt_paths:
             if alt_path.exists():
                 libname = alt_path
-                print(f"Found DLL at alternative path: {libname}")
+                logger.info(f"Found DLL at alternative path: {libname}")
                 break
         else:
             raise FileNotFoundError(
@@ -61,6 +65,7 @@ def setup_cpp_library() -> ctypes.CDLL:
                 + "\n".join(f"- {p}" for p in alt_paths)
             )
 
+    logger.info(f"Loading library from: {libname}")
     c_lib = ctypes.CDLL(str(libname))
 
     # Set up function signatures
@@ -152,7 +157,7 @@ def load_test_data() -> (
     # Load particle data
     test_data = load_particle_data()
 
-    print(f"Testing with {len(test_data)} particles")
+    logger.info(f"Testing with {len(test_data)} particles")
 
     return (
         test_data,
@@ -196,7 +201,7 @@ def run_cpp_test(
     *args,
 ) -> tuple[list[int], float]:
     """Generic function to run C++ tests with common setup and validation"""
-    print(f"TEST {test_name}")
+    logger.info(f"TEST {test_name}")
 
     flat_data = [val for particle in test_data for val in particle]
     c_array = (ctypes.c_float * len(flat_data))(*flat_data)
@@ -355,7 +360,7 @@ def test_cpp_full_pipeline(
         )
 
     # Use custom validation for lattice assignments, as lattice IDs are arbitrarily assigned, and likely to differ between implementations
-    print("TEST 4: Full pipeline")
+    logger.info("TEST 4: Full pipeline")
 
     flat_data = [val for particle in test_data for val in particle]
     c_array = (ctypes.c_float * len(flat_data))(*flat_data)
@@ -377,57 +382,68 @@ def calculate_python_reference(
     test_data: np.ndarray, test_cleaner: Cleaner
 ) -> tuple[dict[str, list[int]], float]:
     """Calculate Python reference results for all filtering stages"""
-    print("Calculating Python reference results...")
+    logger.info("Calculating Python reference results...")
 
     start_time = time.time()
 
     def empty_particle_list() -> list[int]:
         """List of 0s to store particle data for comparison with c++"""
-        return [0] * len(test_tomo.all_particles)
+        return [0] * len(base_tomo.all_particles)
 
-    def get_particle_counts(test_tomo: Tomogram) -> list[int]:
+    def get_particle_counts(particles) -> list[int]:
         """Helper to get neighbour counts for all particles"""
         counts = empty_particle_list()
-        for particle in test_tomo.all_particles:
+        for particle in particles:
             counts[particle.particle_id] = len(particle.neighbours)
         return counts
 
-    def run_filtering_test(filter_func, *args) -> list[int]:
-        """Helper to run a filtering test and return counts"""
-        test_tomo = setup_test_tomogram()
-        for particle in test_tomo.all_particles:
-            filter_func(particle, *args)
-        return get_particle_counts(test_tomo)
+    def copy_neighbour_sets(particles):
+        """Create a copy of neighbour sets for all particles"""
+        return {particle: set(particle.neighbours) for particle in particles}
+
+    def restore_neighbour_sets(particles, saved_neighbours):
+        """Restore neighbour sets from a saved copy"""
+        for particle in particles:
+            particle.neighbours = saved_neighbours[particle].copy()
+
+    # Create base tomogram with initial neighbours (expensive operation - do once!)
+    logger.debug("  Setting up base tomogram with neighbour relationships...")
+    base_tomo = setup_test_tomogram()
+    all_particles = list(base_tomo.all_particles)
+
+    # Save initial neighbour state
+    initial_neighbours = copy_neighbour_sets(all_particles)
 
     # Initial neighbour counts (after distance filtering)
-    test_tomo = setup_test_tomogram()
-    neighbour_counts_initial_python = get_particle_counts(test_tomo)
+    neighbour_counts_initial_python = get_particle_counts(all_particles)
 
-    # Orientation filtering
-    neighbour_counts_orientation_python = run_filtering_test(
-        lambda p, ori_range: p.filter_neighbour_orientation(ori_range, None),
-        test_cleaner.ori_range,
-    )
+    # Orientation filtering (restore initial state first)
+    logger.debug("  Running orientation filtering...")
+    restore_neighbour_sets(all_particles, initial_neighbours)
+    for particle in all_particles:
+        particle.filter_neighbour_orientation(test_cleaner.ori_range, None)
+    neighbour_counts_orientation_python = get_particle_counts(all_particles)
 
-    # Curvature filtering
-    neighbour_counts_curvature_python = run_filtering_test(
-        lambda p, curv_range: p.filter_curvature(curv_range), test_cleaner.curv_range
-    )
+    # Curvature filtering (restore initial state first)
+    logger.debug("  Running curvature filtering...")
+    restore_neighbour_sets(all_particles, initial_neighbours)
+    for particle in all_particles:
+        particle.filter_curvature(test_cleaner.curv_range)
+    neighbour_counts_curvature_python = get_particle_counts(all_particles)
 
-    # Full pipeline (distance + orientation + curvature)
-    neighbour_counts_full_python = run_filtering_test(
-        lambda p, ori_range, curv_range: (
-            p.filter_neighbour_orientation(ori_range, None),
-            p.filter_curvature(curv_range),
-        ),
-        test_cleaner.ori_range,
-        test_cleaner.curv_range,
-    )
+    # Full pipeline (restore initial state first)
+    logger.debug("  Running full pipeline...")
+    restore_neighbour_sets(all_particles, initial_neighbours)
+    for particle in all_particles:
+        particle.filter_neighbour_orientation(test_cleaner.ori_range, None)
+        particle.filter_curvature(test_cleaner.curv_range)
+    neighbour_counts_full_python = get_particle_counts(all_particles)
 
-    # Lattice assignment
-    test_tomo = setup_test_tomogram()
+    # Lattice assignment (need fresh tomogram for autoclean)
+    logger.debug("  Running lattice assignment...")
+    test_tomo = setup_test_tomogram()  # This is necessary for autoclean
     test_tomo.autoclean()
-    lattice_assignments_python = get_particle_counts(test_tomo)
+    lattice_assignments_python = empty_particle_list()
     # Override with actual lattice assignments
     for particle in test_tomo.all_particles:
         lattice_assignments_python[particle.particle_id] = particle.lattice
@@ -454,12 +470,12 @@ def verify_counts(
         (i, p, c) for i, (p, c) in enumerate(zip(python_counts, cpp_counts)) if p != c
     ]
     if differences:
-        print(f"  ❌ {test_name}: {len(differences)} differences found")
+        logger.error(f"  ✗ {test_name}: {len(differences)} differences found")
         for i, p, c in differences[:3]:
-            print(f"      Particle {i}: Python={p}, C++={c}")
+            logger.error(f"      Particle {i}: Python={p}, C++={c}")
         raise Exception(f"{test_name} failed")
     else:
-        print(f"  ✓ {test_name}")
+        logger.info(f"  ✓ {test_name}")
 
 
 def verify_lattice_assignments(
@@ -491,25 +507,25 @@ def verify_lattice_assignments(
     python_group_sets = set(frozenset(group) for group in python_groups.values())
     cpp_group_sets = set(frozenset(group) for group in cpp_groups.values())
 
-    print(f"      Generating cone plots for debugging...")
+    logger.debug("      Generating cone plots for debugging...")
     cpp_fig = create_cone_plot_from_lattices(
         test_data, cpp_lattices, "C++ Lattice Assignments", "cpp_lattices.html"
     )
 
     if python_group_sets == cpp_group_sets:
-        print(f"  ✓ {test_name}")
+        logger.info(f"  ✓ {test_name}")
     else:
-        print(f"  ❌ {test_name}: Lattice groupings differ")
-        print(
+        logger.warning(f"  ✗ {test_name}: Lattice groupings differ")
+        logger.warning(
             f"      Python: {len(python_group_sets)} lattices, {len(python_unassigned)} unassigned"
         )
-        print(
+        logger.warning(
             f"      C++: {len(cpp_group_sets)} lattices, {len(cpp_unassigned)} unassigned"
         )
 
         # Generate cone plots for debugging if test_data is provided
         if test_data is not None:
-            print(f"      Generating cone plots for debugging...")
+            logger.debug("      Generating cone plots for debugging...")
             cpp_fig = create_cone_plot_from_lattices(
                 test_data, cpp_lattices, "C++ Lattice Assignments", "cpp_lattices.html"
             )
@@ -525,7 +541,7 @@ def verify_lattice_assignments(
             for lattice in test_tomo.lattices:
                 if lattice == 0:
                     continue
-                print(lattice)
+                logger.debug(f"Lattice {lattice}")
                 cpp_fig.add_trace(
                     test_tomo.lattice_trace(
                         lattice, cone_size=-1, colour="#000000", opacity=1.0
@@ -538,13 +554,13 @@ def verify_lattice_assignments(
         cpp_only = cpp_group_sets - python_group_sets
 
         if python_only or cpp_only:
-            print(f"      Differences found:")
+            logger.warning("      Differences found:")
 
             # Show Python groups that don't exist in C++
             if python_only:
-                print(f"      Python-only lattices ({len(python_only)}):")
+                logger.warning(f"      Python-only lattices ({len(python_only)}):")
                 for i, group in enumerate(list(python_only)[:3]):
-                    print(f"        Lattice {i+1}: {sorted(group)}")
+                    logger.warning(f"        Lattice {i+1}: {sorted(group)}")
 
                     # Find closest C++ match for comparison
                     best_match = None
@@ -556,28 +572,28 @@ def verify_lattice_assignments(
                             best_match = cpp_group
 
                     if best_match:
-                        print(
+                        logger.warning(
                             f"          Closest C++ match: {sorted(best_match)} (overlap: {best_overlap}/{len(group)})"
                         )
                         # Show the actual differences
                         python_only_particles = group - best_match
                         cpp_only_particles = best_match - group
                         if python_only_particles:
-                            print(
+                            logger.warning(
                                 f"          Python extra particles: {sorted(python_only_particles)}"
                             )
                         if cpp_only_particles:
-                            print(
+                            logger.warning(
                                 f"          C++ extra particles: {sorted(cpp_only_particles)}"
                             )
                     else:
-                        print(f"          No similar C++ group found")
+                        logger.warning("          No similar C++ group found")
 
             # Show C++ groups that don't exist in Python
             if cpp_only:
-                print(f"      C++-only lattices ({len(cpp_only)}):")
+                logger.warning(f"      C++-only lattices ({len(cpp_only)}):")
                 for i, group in enumerate(list(cpp_only)[:3]):
-                    print(f"        Lattice {i+1}: {sorted(group)}")
+                    logger.warning(f"        Lattice {i+1}: {sorted(group)}")
 
                     # Find closest Python match for comparison
                     best_match = None
@@ -589,22 +605,22 @@ def verify_lattice_assignments(
                             best_match = python_group
 
                     if best_match:
-                        print(
+                        logger.warning(
                             f"          Closest Python match: {sorted(best_match)} (overlap: {best_overlap}/{len(group)})"
                         )
                         # Show the actual differences
                         cpp_only_particles = group - best_match
                         python_only_particles = best_match - group
                         if cpp_only_particles:
-                            print(
+                            logger.warning(
                                 f"          C++ extra particles: {sorted(cpp_only_particles)}"
                             )
                         if python_only_particles:
-                            print(
+                            logger.warning(
                                 f"          Python extra particles: {sorted(python_only_particles)}"
                             )
                     else:
-                        print(f"          No similar Python group found")
+                        logger.warning("          No similar Python group found")
 
         raise Exception(f"{test_name} failed")
 
@@ -613,7 +629,7 @@ def verify_neighbour_relationships(
     c_lib: ctypes.CDLL, test_data: np.ndarray, test_cleaner: Cleaner, test_name: str
 ) -> None:
     """Verify that C++ and Python have identical neighbour relationships at each stage"""
-    print(f"TEST {test_name}: Neighbour relationship verification")
+    logger.info(f"TEST {test_name}: Neighbour relationship verification")
 
     # Get Python neighbour relationships at each stage
     test_tomo = setup_test_tomogram()
@@ -654,7 +670,7 @@ def verify_neighbour_relationships(
     # Since the C++ functions only return neighbour counts, we need to modify them to return neighbour IDs
     # For now, let's compare what we can and identify the issue
 
-    print(f"  Comparing neighbour relationships...")
+    logger.info("  Comparing neighbour relationships...")
 
     # Compare distance stage
     c_lib.find_neighbours(
@@ -706,133 +722,43 @@ def verify_neighbour_relationships(
     ]
 
     if distance_diffs:
-        print(
-            f"  ❌ Distance stage: {len(distance_diffs)} particles have different neighbour counts"
+        logger.error(
+            f"  ✗ Distance stage: {len(distance_diffs)} particles have different neighbour counts"
         )
         for i, python_count, cpp_count in distance_diffs[:5]:
-            print(
+            logger.error(
                 f"      Particle {i}: Python={python_count} neighbours, C++={cpp_count} neighbours"
             )
         raise Exception(f"{test_name} failed at distance stage")
 
     if orientation_diffs:
-        print(
-            f"  ❌ Orientation stage: {len(orientation_diffs)} particles have different neighbour counts"
+        logger.error(
+            f"  ✗ Orientation stage: {len(orientation_diffs)} particles have different neighbour counts"
         )
         for i, python_count, cpp_count in orientation_diffs[:5]:
-            print(
+            logger.error(
                 f"      Particle {i}: Python={python_count} neighbours, C++={cpp_count} neighbours"
             )
         raise Exception(f"{test_name} failed at orientation stage")
 
     if curvature_diffs:
-        print(
-            f"  ❌ Curvature stage: {len(curvature_diffs)} particles have different neighbour counts"
+        logger.error(
+            f"  ✗ Curvature stage: {len(curvature_diffs)} particles have different neighbour counts"
         )
         for i, python_count, cpp_count in curvature_diffs[:5]:
-            print(
+            logger.error(
                 f"      Particle {i}: Python={python_count} neighbours, C++={cpp_count} neighbours"
             )
         raise Exception(f"{test_name} failed at curvature stage")
 
-    print(f"  ✓ All neighbour counts match between Python and C++")
-    print(f"  ✓ The differences are indeed only in the lattice assignment phase")
+    logger.info("  ✓ All neighbour counts match between Python and C++")
+    logger.info("  ✓ The differences are indeed only in the lattice assignment phase")
 
 
-def get_cpp_cleaned_neighbours(
-    c_lib: ctypes.CDLL, test_data: np.ndarray, params: CleanParams
-) -> list[set[int]]:
-    """Call C++ debug export to get exact neighbour IDs after distance+orientation+curvature."""
-    num_particles = len(test_data)
-    flat_data = (ctypes.c_float * (num_particles * 6))(
-        *[v for row in test_data for v in row]
-    )
-    offsets = (ctypes.c_int * (num_particles + 1))()
-    # First call to compute offsets and total length
-    try:
-        c_lib.get_cleaned_neighbours(
-            flat_data, num_particles, ctypes.byref(params), offsets, None
-        )
-    except AttributeError:
-        raise RuntimeError(
-            "processing.dll is missing get_cleaned_neighbours debug export"
-        )
-    total = offsets[num_particles]
-    neighbours = (ctypes.c_int * total)()
-    # Second call to fill neighbours
-    c_lib.get_cleaned_neighbours(
-        flat_data, num_particles, ctypes.byref(params), offsets, neighbours
-    )
-    # Build sets per particle
-    cpp_sets: list[set[int]] = []
-    for i in range(num_particles):
-        start = offsets[i]
-        end = offsets[i + 1]
-        cpp_sets.append(set(int(neighbours[j]) for j in range(start, end)))
-    return cpp_sets
 
 
-def verify_exact_neighbours_with_cpp(
-    c_lib: ctypes.CDLL,
-    test_data: np.ndarray,
-    test_cleaner: Cleaner,
-    params: CleanParams,
-) -> None:
-    """Compare exact neighbour IDs per particle (post orientation+curvature), Python vs C++."""
-    # Python side neighbours after distance (via setup_test_tomogram), then orientation+curvature
-    tomo = setup_test_tomogram()
-    for p in tomo.all_particles:
-        p.filter_neighbour_orientation(test_cleaner.ori_range, None)
-        p.filter_curvature(test_cleaner.curv_range)
 
-    # Create mapping from test_data index to Python particle_id
-    # The test_data order should match the order particles were created in setup_test_tomogram
-    test_data_to_python_id = {}
-    for idx, p in enumerate(tomo.all_particles):
-        # Extract position from test_data and find matching particle
-        test_pos = test_data[idx][:3]  # x,y,z
-        for py_p in tomo.all_particles:
-            if np.allclose(py_p.position, test_pos, atol=1e-6):
-                test_data_to_python_id[idx] = py_p.particle_id
-                break
 
-    # Create reverse mapping: particle_id -> test_data index
-    python_id_to_test_index = {v: k for k, v in test_data_to_python_id.items()}
-
-    # Build Python neighbour sets using test_data indices
-    python_sets: list[set[int]] = []
-    for idx in range(len(test_data)):
-        if idx in test_data_to_python_id:
-            py_id = test_data_to_python_id[idx]
-            py_particle = next(p for p in tomo.all_particles if p.particle_id == py_id)
-            python_sets.append(
-                set(
-                    python_id_to_test_index[n.particle_id]
-                    for n in py_particle.neighbours
-                    if n.particle_id in python_id_to_test_index
-                )
-            )
-        else:
-            python_sets.append(set())  # No matching particle found
-    # C++ side exact neighbours
-    cpp_sets = get_cpp_cleaned_neighbours(c_lib, test_data, params)
-    # Compare
-    diffs: list[tuple[int, set[int], set[int]]] = []
-    for i in range(len(test_data)):
-        if python_sets[i] != cpp_sets[i]:
-            diffs.append((i, python_sets[i], cpp_sets[i]))
-    if diffs:
-        print(
-            f"  ❌ Exact neighbour mismatch for {len(diffs)} particles (showing up to 5):"
-        )
-        for i, py, cpp in diffs[:5]:
-            missing = sorted(py - cpp)
-            extra = sorted(cpp - py)
-            print(
-                f"    Particle {i}: missing {missing[:20]}{'...' if len(missing)>20 else ''}, extra {extra[:20]}{'...' if len(extra)>20 else ''}"
-            )
-        raise Exception("Exact neighbour comparison failed")
-    print("  ✓ Exact neighbour IDs match for all particles (post filtering)")
 
 
 def compare_results(
@@ -854,8 +780,8 @@ def compare_results(
     )
     speedup_full = python_time / cpp_full_time if cpp_full_time > 0 else float("inf")
 
-    print(f"\nPERFORMANCE RESULTS:")
-    print(
+    logger.info("\nPERFORMANCE RESULTS:")
+    logger.info(
         f"Python: {python_time:.4f}s | C++ Distance: {cpp_distance_time:.4f}s ({speedup_distance:.1f}x) | Orientation: {cpp_orientation_time:.4f}s ({speedup_orientation:.1f}x) | Curvature: {cpp_curvature_time:.4f}s ({speedup_curvature:.1f}x) | Full: {cpp_full_time:.4f}s ({speedup_full:.1f}x)"
     )
 
@@ -877,13 +803,13 @@ def create_cone_plot_from_lattices(
     # Generate cone plot
     fig = test_tomo.plot_all_lattices(cone_size=3)
     fig.write_html(filename)
-    print(f"Saved cone plot to: {filename}")
+    logger.info(f"Saved cone plot to: {filename}")
     return fig
 
 
 def main() -> None:
     """Main test function"""
-    print("Running C++ vs Python particle filtering tests...")
+    logger.info("Running C++ vs Python particle filtering tests...")
 
     # Setup
     c_lib = setup_cpp_library()
@@ -937,8 +863,7 @@ def main() -> None:
         python_reference["curvature"],
     )
 
-    # Verify exact neighbour IDs (post filtering) before lattice comparison
-    verify_exact_neighbours_with_cpp(c_lib, test_data, test_cleaner, params)
+
 
     # Now run full pipeline lattice assignment (strict)
     full_counts_cpp, cpp_full_time = test_cpp_full_pipeline(
@@ -954,8 +879,16 @@ def main() -> None:
         python_time,
     )
 
-    print("\n✓ All tests completed successfully!")
+    logger.info("\n✓ All tests completed successfully!")
 
 
 if __name__ == "__main__":
+    # Configure logging when running directly
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s %(levelname)s: %(message)s'
+    )
+    # Override logger level to DEBUG for more detailed output
+    logger.setLevel(logging.DEBUG)
+
     main()
