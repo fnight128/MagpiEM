@@ -19,7 +19,7 @@ from .cache import get_cache_functions
 from .layout import create_main_layout
 
 # Constants
-TEMP_FILE_DIR = "static/"
+TEMP_FILE_DIR = "upload_cache/"
 
 
 def configure_logging(level=logging.WARNING):
