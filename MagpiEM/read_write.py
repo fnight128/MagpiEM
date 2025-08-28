@@ -15,7 +15,8 @@ from zipfile import ZipFile
 import starfile
 import eulerangles
 
-from .classes import Tomogram, Particle
+from .tomogram import Tomogram
+from .particle import Particle
 
 
 def em_format(particle) -> list:

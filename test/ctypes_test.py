@@ -10,7 +10,9 @@ parent_dir = current_dir.parent
 sys.path.insert(0, str(parent_dir))
 
 from magpiem.read_write import read_emc_mat, read_single_tomogram
-from magpiem.classes import Tomogram, Particle, Cleaner
+from magpiem.tomogram import Tomogram
+from magpiem.particle import Particle
+from magpiem.cleaner import Cleaner
 
 # Updated paths for test folder location
 TEST_DATA_FILE = current_dir / "WT_CA_2nd.mat"
@@ -862,7 +864,8 @@ def create_cone_plot_from_lattices(
     test_data: np.ndarray, lattice_assignments: list[int], title: str, filename: str
 ) -> None:
     """Create a cone plot from lattice assignments for debugging"""
-    from magpiem.classes import Tomogram, Particle
+    from magpiem.tomogram import Tomogram
+    from magpiem.particle import Particle
 
     # Create tomogram and particles
     test_tomo = create_test_tomogram()

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .classes import Cleaner
+from .cleaner import Cleaner
 
 logger = logging.getLogger(__name__)
 

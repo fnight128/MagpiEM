@@ -6,8 +6,43 @@ Helper functions for plotting tomogram data without requiring Tomogram objects.
 import numpy as np
 import plotly.graph_objects as go
 import pandas as pd
+import colorsys
 from typing import List, Dict, Tuple, Optional
-from .classes import simple_figure, colour_range
+
+
+def simple_figure() -> go.Figure:
+    """
+    Returns a simple empty figure with generally appropriate settings for particle display
+    """
+    layout = go.Layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+    fig = go.Figure(layout=layout)
+    fig.update_scenes(xaxis_visible=False, yaxis_visible=False, zaxis_visible=False)
+    fig.update_layout(scene_aspectmode="data")
+    fig.update_layout(margin={"l": 10, "r": 10, "t": 10, "b": 10})
+    fig.update_layout(showlegend=False)
+    fig["layout"]["uirevision"] = "a"
+    return fig
+
+
+def colour_range(num_points: int) -> list[str]:
+    """
+    Create an even range of colours across the spectrum
+
+    Parameters
+    ----------
+    num_points
+        Number of colours to create
+
+    Returns
+    -------
+        List of colours in the form "rgb({},{},{})"
+    """
+    hsv_tuples = [(x * 1.0 / num_points, 0.75, 0.75) for x in range(num_points)]
+    rgb_tuples = [colorsys.hsv_to_rgb(*x) for x in hsv_tuples]
+    return [
+        "rgb({},{},{})".format(int(r * 255), int(g * 255), int(b * 255))
+        for (r, g, b) in rgb_tuples
+    ]
 
 
 def create_particle_plot_from_raw_data(
@@ -281,7 +316,7 @@ def add_selected_points_trace(
     )
     particles_scatter_trace.name = trace_name
     particles_scatter_trace.marker.size = 8  # Override default size for selected points
-    particles_scatter_trace.showlegend = False  # Ensure legend is hidden for selected points
+    particles_scatter_trace.showlegend = False  # Ensure legend is hidden
     fig.add_trace(particles_scatter_trace)
 
     return fig

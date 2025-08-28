@@ -19,7 +19,9 @@ from dash import State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Input, Output
 
-from .classes import Cleaner, Particle, Tomogram
+from .cleaner import Cleaner
+from .particle import Particle
+from .tomogram import Tomogram
 from .cpp_integration import clean_tomo_with_cpp
 from .layout import EMPTY_FIG
 from .test_mat_file_comparison import validate_mat_files
