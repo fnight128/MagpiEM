@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # Test configuration
 TEST_DATA_FILE = current_dir / "WT_CA_2nd.mat"
-TEST_TOMO_NAME = "wt2nd_4004_6"
+TEST_TOMO_NAME = "wt2nd_4004_2"
 TEST_CLEANER_VALUES = [2.0, 3, 10, 60.0, 40.0, 10.0, 20.0, 90.0, 20.0]
 
 
@@ -58,7 +58,7 @@ def test_tomogram_plotting():
 
     logger.info("Generating cone plot...")
     fig = test_tomo.plot_all_lattices(
-        cone_size=3.0,
+        cone_size=10.0,
         cone_fix=True,
         showing_removed_particles=False,
     )
