@@ -9,12 +9,19 @@ import math
 from collections import defaultdict
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
+from typing import Union
 
 from .cleaner import Cleaner
 from .particle import Particle
 from .utilities import within
-from .plotting_helpers import simple_figure, colour_range
+from .plotting_helpers import (
+    simple_figure,
+    colour_range,
+    create_scatter_trace,
+    create_cone_traces,
+    generate_cone_fix_points,
+    append_cone_fix_to_lattice,
+)
 
 WHITE = "#FFFFFF"
 GREY = "#646464"
@@ -402,30 +409,6 @@ class Tomogram:
         elif n != 0:
             self.selected_lattices.add(n)
 
-    def get_convex_arrays(self) -> set[int]:
-        """Get set of all array ids with an average convex curvature"""
-        return {
-            a_id
-            for a_id, particles in self.lattices.items()
-            if np.mean([particle.get_avg_curvature() for particle in particles]) < 0
-        }
-
-    def get_concave_arrays(self) -> set[int]:
-        """Get set of all array ids with an average concave curvature"""
-        # TODO merge with convex
-        return set(self.lattices.keys()).difference(self.get_convex_arrays())
-
-    def toggle_convex_arrays(self) -> None:
-        """Toggle whether convex arrays are manually selected or not"""
-        for a_id in self.get_convex_arrays():
-            self.toggle_selected(a_id)
-
-    def toggle_concave_arrays(self) -> None:
-        """Toggle whether concave arrays are manually selected or not"""
-        # TODO merge with convex
-        for a_id in self.get_concave_arrays():
-            self.toggle_selected(a_id)
-
     def delete_lattice(self, n: int) -> None:
         """Delete lattice from tomogram and un-assign all its particles"""
         array_particles = self.lattices[n].copy()
@@ -490,42 +473,26 @@ class Tomogram:
     @staticmethod
     def scatter3d_trace(
         df: pd.DataFrame, colour="#000000", opacity=1.0, **kwargs
-    ) -> go.Scatter3d:
+    ) -> "go.Scatter3d":
         """
         Produce 3d scatter plot of given dataframe of particles
         """
-        return go.Scatter3d(
-            x=df["x"],
-            y=df["y"],
-            z=df["z"],
-            mode="markers",
-            text=df["n"],
-            marker={"size": 6, "color": colour, "opacity": opacity},
-            showlegend=False,
-            **kwargs,
-        )
+        positions = df[["x", "y", "z"]].values
+        lattice_id = df["n"].iloc[0] if len(df) > 0 else 0
+        return create_scatter_trace(positions, colour, opacity, lattice_id, **kwargs)
 
     @staticmethod
     def cone_trace(
         df: pd.DataFrame, colour="#000000", opacity=1, cone_size=10.0, **kwargs
-    ) -> go.Cone:
+    ) -> "go.Cone":
         """
         Produce cone plot of given dataframe of particles
         """
-        return go.Cone(
-            x=df["x"],
-            y=df["y"],
-            z=df["z"],
-            u=df["u"],
-            v=df["v"],
-            w=df["w"],
-            text=df["n"],
-            sizemode="absolute",
-            sizeref=cone_size,
-            colorscale=[[0, colour], [1, colour]],
-            showscale=False,
-            opacity=opacity,
-            **kwargs,
+        positions = df[["x", "y", "z"]].values
+        orientations = df[["u", "v", "w"]].values
+        lattice_id = df["n"].iloc[0] if len(df) > 0 else 0
+        return create_cone_traces(
+            positions, orientations, cone_size, colour, opacity, lattice_id, **kwargs
         )
 
     def particles_trace(
@@ -544,9 +511,23 @@ class Tomogram:
         Cone or Scatter3d trace of particles
         """
         if cone_size > 0:
+            positions = df[["x", "y", "z"]].values
+            orientations = df[["u", "v", "w"]].values
+            lattice_id = df["n"].iloc[0] if len(df) > 0 else 0
+
             if cone_fix:
-                df = pd.concat([df, self.cone_fix])
-            return Tomogram.cone_trace(df, cone_size=cone_size, **kwargs)
+                # Generate cone fix points for this tomogram
+                cone_fix_positions, cone_fix_orientations = generate_cone_fix_points(
+                    [
+                        [pos.tolist(), ori.tolist()]
+                        for pos, ori in zip(positions, orientations)
+                    ]
+                )
+                positions, orientations = append_cone_fix_to_lattice(
+                    positions, orientations, cone_fix_positions, cone_fix_orientations
+                )
+
+            return create_cone_traces(positions, orientations, cone_size, **kwargs)
         else:
             return Tomogram.scatter3d_trace(df, **kwargs)
 
@@ -563,6 +544,16 @@ class Tomogram:
         colour_dict = dict()
         hex_vals = colour_range(len(self.lattices))
         tomo_is_uncleaned = len(self.lattices) == 1
+
+        # Generate cone fix points for this tomogram
+        all_particles_data = [
+            [particle.position.tolist(), particle.orientation.tolist()]
+            for particle in self.all_particles
+        ]
+        cone_fix_positions, cone_fix_orientations = generate_cone_fix_points(
+            all_particles_data
+        )
+
         for idx, lattice_key in enumerate(self.lattices.keys()):
             hex_val = WHITE if lattice_key in self.selected_lattices else hex_vals[idx]
             colour_dict.update({lattice_key: hex_val})
@@ -586,15 +577,36 @@ class Tomogram:
                     colour = BLACK
                 else:
                     continue
-            traces.append(
-                self.lattice_trace(
-                    lattice_key, colour=colour, opacity=opacity, **kwargs
-                )
+
+            # Get particles for this lattice
+            lattice_particles = self.lattices[lattice_key]
+            if len(lattice_particles) == 0:
+                continue
+
+            # Extract positions and orientations
+            positions = np.array([particle.position for particle in lattice_particles])
+            orientations = np.array(
+                [particle.orientation for particle in lattice_particles]
             )
+
+            cone_size = kwargs.get("cone_size", 0)
+            if cone_size > 0:
+                # Add cone fix points
+                positions, orientations = append_cone_fix_to_lattice(
+                    positions, orientations, cone_fix_positions, cone_fix_orientations
+                )
+                trace = create_cone_traces(
+                    positions, orientations, cone_size, colour, opacity, lattice_key
+                )
+            else:
+                trace = create_scatter_trace(positions, colour, opacity, lattice_key)
+
+            trace.name = f"Lattice {lattice_key}"
+            traces.append(trace)
 
         return traces
 
-    def plot_all_lattices(self, **kwargs) -> go.Figure:
+    def plot_all_lattices(self, **kwargs) -> "go.Figure":
         """
         Returns a figure of all lattices in a tomogram
 
