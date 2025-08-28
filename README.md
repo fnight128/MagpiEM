@@ -13,7 +13,13 @@ Open a python terminal (e.g. [anaconda](https://www.anaconda.com/)), with python
 
     pip install MagpiEM
 
-This should install the software and all dependencies.
+This should install the software and all dependencies. **The package includes a C++ component that will be automatically compiled during installation.** This process requires a C++ compiler to be available on your system:
+
+- **Windows**: Visual Studio Build Tools or MinGW-w64
+- **macOS**: Xcode Command Line Tools (install with `xcode-select --install`)
+- **Linux**: GCC or Clang (usually pre-installed)
+
+If you encounter compilation issues, please ensure you have the appropriate development tools installed for your operating system.
 
 Note: to update the package in future, run
 

@@ -14,6 +14,7 @@ from magpiem.read_write import read_emc_mat, read_single_tomogram
 from magpiem.tomogram import Tomogram
 from magpiem.particle import Particle
 from magpiem.cleaner import Cleaner
+from magpiem.cpp_integration import setup_cpp_library, clean_tomo_with_cpp
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -23,111 +24,6 @@ TEST_DATA_FILE = current_dir / "WT_CA_2nd.mat"
 TEST_TOMO_NAME = "wt2nd_4004_6"
 # appropriate values for test tomogram
 TEST_CLEANER_VALUES = [2.0, 3, 10, 60.0, 40.0, 10.0, 20.0, 90.0, 20.0]
-
-
-# Define the CleanParams struct for ctypes
-class CleanParams(ctypes.Structure):
-    _fields_ = [
-        ("min_distance", ctypes.c_float),
-        ("max_distance", ctypes.c_float),
-        ("min_orientation", ctypes.c_float),
-        ("max_orientation", ctypes.c_float),
-        ("min_curvature", ctypes.c_float),
-        ("max_curvature", ctypes.c_float),
-        ("min_lattice_size", ctypes.c_uint),
-        ("min_neighbours", ctypes.c_uint),
-    ]
-
-
-def setup_cpp_library() -> ctypes.CDLL:
-    """Load and configure the C++ library"""
-    # Look for processing.dll in the processing directory relative to project root
-    project_root = parent_dir
-    libname = project_root / "processing" / "processing.dll"
-    logger.info(f"Loading library from: {libname}")
-
-    if not libname.exists():
-        # Try alternative paths
-        alt_paths = [
-            project_root / "processing.dll",
-            current_dir / "processing.dll",
-            current_dir.parent / "processing.dll",
-        ]
-
-        for alt_path in alt_paths:
-            if alt_path.exists():
-                libname = alt_path
-                logger.info(f"Found DLL at alternative path: {libname}")
-                break
-        else:
-            raise FileNotFoundError(
-                f"Processing DLL not found. Tried:\n- {libname}\n"
-                + "\n".join(f"- {p}" for p in alt_paths)
-            )
-
-    logger.info(f"Loading library from: {libname}")
-    c_lib = ctypes.CDLL(str(libname))
-
-    # Set up function signatures
-    c_lib.find_neighbours.argtypes = [
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.c_int,
-        ctypes.c_float,
-        ctypes.c_float,
-        ctypes.POINTER(ctypes.c_int),
-    ]
-    c_lib.find_neighbours.restype = None
-
-    c_lib.filter_by_orientation.argtypes = [
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.c_int,
-        ctypes.c_float,
-        ctypes.c_float,
-        ctypes.POINTER(ctypes.c_int),
-    ]
-    c_lib.filter_by_orientation.restype = None
-
-    c_lib.filter_by_curvature.argtypes = [
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.c_int,
-        ctypes.c_float,
-        ctypes.c_float,
-        ctypes.POINTER(ctypes.c_int),
-    ]
-    c_lib.filter_by_curvature.restype = None
-
-    c_lib.assign_lattices.argtypes = [
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.c_int,
-        ctypes.c_uint,
-        ctypes.c_uint,
-        ctypes.POINTER(ctypes.c_int),
-    ]
-    c_lib.assign_lattices.restype = None
-
-    c_lib.clean_particles.argtypes = [
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.c_int,
-        ctypes.POINTER(CleanParams),
-        ctypes.POINTER(ctypes.c_int),
-    ]
-    c_lib.clean_particles.restype = None
-
-    # Debug export to fetch cleaned neighbour IDs (CSR)
-    try:
-        c_lib.get_cleaned_neighbours.argtypes = [
-            ctypes.POINTER(ctypes.c_float),
-            ctypes.c_int,
-            ctypes.POINTER(CleanParams),
-            ctypes.POINTER(ctypes.c_int),
-            ctypes.POINTER(ctypes.c_int),
-        ]
-        c_lib.get_cleaned_neighbours.restype = None
-    except AttributeError:
-        # Older DLLs may not have this; tests that rely on it should guard accordingly
-        pass
-
-    return c_lib
 
 
 def load_particle_data() -> np.ndarray:
@@ -193,7 +89,7 @@ def setup_test_tomogram() -> Tomogram:
 
 
 def run_cpp_test(
-    c_lib: ctypes.CDLL,
+    c_lib,
     test_data: np.ndarray,
     test_name: str,
     python_reference: list[int],
@@ -246,7 +142,7 @@ def create_test_function(cpp_func_name: str, setup_steps: list[str] = None) -> c
 
 
 def test_cpp_distance_only(
-    c_lib: ctypes.CDLL,
+    c_lib,
     test_data: np.ndarray,
     min_dist: float,
     max_dist: float,
@@ -255,7 +151,12 @@ def test_cpp_distance_only(
     """Test C++ distance-only neighbour finding"""
 
     def distance_test(c_lib, c_array, num_particles, results_array, min_dist, max_dist):
-        c_lib.find_neighbours(c_array, num_particles, min_dist, max_dist, results_array)
+        # Convert numpy array to Python list for the C++ extension
+        data_list = [float(val) for val in c_array]
+        results = c_lib.find_neighbours(data_list, num_particles, min_dist, max_dist)
+        # Copy results back to the results array
+        for i in range(num_particles):
+            results_array[i] = results[i]
 
     return run_cpp_test(
         c_lib,
@@ -269,7 +170,7 @@ def test_cpp_distance_only(
 
 
 def test_cpp_orientation_only(
-    c_lib: ctypes.CDLL,
+    c_lib,
     test_data: np.ndarray,
     min_dist: float,
     max_dist: float,
@@ -289,10 +190,15 @@ def test_cpp_orientation_only(
         min_ori,
         max_ori,
     ):
-        c_lib.find_neighbours(c_array, num_particles, min_dist, max_dist, results_array)
-        c_lib.filter_by_orientation(
-            c_array, num_particles, min_ori, max_ori, results_array
-        )
+        # Convert numpy array to Python list for the C++ extension
+        data_list = [float(val) for val in c_array]
+        # find neighbours
+        c_lib.find_neighbours(data_list, num_particles, min_dist, max_dist)
+        # filter by orientation
+        results = c_lib.filter_by_orientation(data_list, num_particles, min_ori, max_ori)
+        # Copy results back
+        for i in range(num_particles):
+            results_array[i] = results[i]
 
     return run_cpp_test(
         c_lib,
@@ -308,7 +214,7 @@ def test_cpp_orientation_only(
 
 
 def test_cpp_curvature_only(
-    c_lib: ctypes.CDLL,
+    c_lib,
     test_data: np.ndarray,
     min_dist: float,
     max_dist: float,
@@ -328,10 +234,15 @@ def test_cpp_curvature_only(
         min_curv,
         max_curv,
     ):
-        c_lib.find_neighbours(c_array, num_particles, min_dist, max_dist, results_array)
-        c_lib.filter_by_curvature(
-            c_array, num_particles, min_curv, max_curv, results_array
-        )
+        # Convert numpy array to Python list for the C++ extension
+        data_list = [float(val) for val in c_array]
+        # find neighbours
+        c_lib.find_neighbours(data_list, num_particles, min_dist, max_dist)
+        # filter by curvature
+        results = c_lib.filter_by_curvature(data_list, num_particles, min_curv, max_curv)
+        # Copy results back
+        for i in range(num_particles):
+            results_array[i] = results[i]
 
     return run_cpp_test(
         c_lib,
@@ -347,30 +258,30 @@ def test_cpp_curvature_only(
 
 
 def test_cpp_full_pipeline(
-    c_lib: ctypes.CDLL,
     test_data: np.ndarray,
-    params: CleanParams,
+    test_cleaner: Cleaner,
     python_reference: list[int],
 ) -> tuple[list[int], float]:
-    """Test C++ full pipeline (distance + orientation + curvature + lattice assignment)"""
-
-    def full_pipeline_test(c_lib, c_array, num_particles, results_array, params):
-        c_lib.clean_particles(
-            c_array, num_particles, ctypes.byref(params), results_array
-        )
-
-    # Use custom validation for lattice assignments, as lattice IDs are arbitrarily assigned, and likely to differ between implementations
+    """Test C++ full pipeline"""
     logger.info("TEST 4: Full pipeline")
 
-    flat_data = [val for particle in test_data for val in particle]
-    c_array = (ctypes.c_float * len(flat_data))(*flat_data)
-    results_array = (ctypes.c_int * len(test_data))()
+    # Convert test_data to the format expected by cpp_integration
+    # test_data is numpy array, but cpp_integration expects list of [[[x,y,z], [rx,ry,rz]], ...]
+    tomogram_raw_data = []
+    for particle in test_data:
+        pos = particle[:3]  # x, y, z
+        orient = particle[3:]  # rx, ry, rz
+        tomogram_raw_data.append([pos, orient])
 
     start_time = time.time()
-    full_pipeline_test(c_lib, c_array, len(test_data), results_array, params)
+    lattice_assignments = clean_tomo_with_cpp(tomogram_raw_data, test_cleaner)
     test_time = time.time() - start_time
 
-    counts_cpp = [results_array[i] for i in range(len(test_data))]
+    # Convert lattice assignments back to list format for comparison
+    counts_cpp = [0] * len(test_data)
+    for lattice_id, particle_indices in lattice_assignments.items():
+        for particle_idx in particle_indices:
+            counts_cpp[particle_idx] = lattice_id
 
     # Use lattice-specific verification
     verify_lattice_assignments(python_reference, counts_cpp, "Full pipeline", test_data)
@@ -535,7 +446,6 @@ def verify_lattice_assignments(
             )
             test_tomo = setup_test_tomogram()
             test_tomo.autoclean()
-            test_tomo.generate_lattice_dfs()
             for lattice in test_tomo.lattices:
                 if lattice == 0:
                     continue
@@ -624,7 +534,7 @@ def verify_lattice_assignments(
 
 
 def verify_neighbour_relationships(
-    c_lib: ctypes.CDLL, test_data: np.ndarray, test_cleaner: Cleaner, test_name: str
+    c_lib, test_data: np.ndarray, test_cleaner: Cleaner, test_name: str
 ) -> None:
     """Verify that C++ and Python have identical neighbour relationships at each stage"""
     logger.info(f"TEST {test_name}: Neighbour relationship verification")
@@ -790,7 +700,6 @@ def create_cone_plot_from_lattices(
 
     for particle in test_tomo.all_particles:
         particle.set_lattice(lattice_assignments[particle.particle_id])
-    test_tomo.generate_lattice_dfs()
 
     # Generate cone plot
     fig = test_tomo.plot_all_lattices(cone_size=3)
@@ -817,17 +726,6 @@ def main() -> None:
         min_neighbours,
     ) = params_tuple
 
-    # Create CleanParams struct
-    params = CleanParams(
-        min_distance=min_dist,
-        max_distance=max_dist,
-        min_orientation=min_ori,
-        max_orientation=max_ori,
-        min_curvature=min_curv,
-        max_curvature=max_curv,
-        min_lattice_size=min_lattice_size,
-        min_neighbours=min_neighbours,
-    )
 
     # Calculate Python reference results first
     python_reference, python_time = calculate_python_reference(test_data, test_cleaner)
@@ -857,7 +755,7 @@ def main() -> None:
 
     # Now run full pipeline lattice assignment (strict)
     full_counts_cpp, cpp_full_time = test_cpp_full_pipeline(
-        c_lib, test_data, params, python_reference["lattice"]
+        test_data, test_cleaner, python_reference["lattice"]
     )
 
     # Display performance results

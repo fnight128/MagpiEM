@@ -1,4 +1,3 @@
-#define BUILDING_DLL
 #include "processing.hpp"
 
 #include <iostream>
@@ -45,7 +44,7 @@ void log_message(LogLevel level, const char* format, ...) {
     va_end(args);
 }
 
-EXPORT void set_log_level(int level) {
+void set_log_level(int level) {
     g_log_level = static_cast<LogLevel>(level);
 }
 
@@ -265,27 +264,27 @@ public:
 static ParticleProcessor g_processor;
 
 // Direct exports of the processor methods
-EXPORT void find_neighbours(float* data, int num_particles, float min_distance_squared, float max_distance_squared, int* results) {
+void find_neighbours(float* data, int num_particles, float min_distance_squared, float max_distance_squared, int* results) {
     g_processor.find_neighbours(data, num_particles, min_distance_squared, max_distance_squared, results);
 }
 
-EXPORT void filter_by_orientation(float* data, int num_particles, float min_orientation, float max_orientation, int* results) {
+void filter_by_orientation(float* data, int num_particles, float min_orientation, float max_orientation, int* results) {
     g_processor.filter_by_orientation(data, num_particles, min_orientation, max_orientation, results);
 }
 
-EXPORT void filter_by_curvature(float* data, int num_particles, float min_curvature, float max_curvature, int* results) {
+void filter_by_curvature(float* data, int num_particles, float min_curvature, float max_curvature, int* results) {
     g_processor.filter_by_curvature(data, num_particles, min_curvature, max_curvature, results);
 }
 
-EXPORT void assign_lattices(float* data, int num_particles, unsigned int min_neighbours, unsigned int min_lattice_size, int* results) {
+void assign_lattices(float* data, int num_particles, unsigned int min_neighbours, unsigned int min_lattice_size, int* results) {
     g_processor.assign_lattices(data, num_particles, min_neighbours, min_lattice_size, results);
 }
 
-EXPORT void clean_particles(float* data, int num_particles, CleanParams* params, int* results) {
+void clean_particles(float* data, int num_particles, CleanParams* params, int* results) {
     g_processor.clean_particles(data, num_particles, params, results);
 }
 
-EXPORT void get_cleaned_neighbours(float* data, int num_particles, CleanParams* params, int* offsets, int* neighbours_out) {
+void get_cleaned_neighbours(float* data, int num_particles, CleanParams* params, int* offsets, int* neighbours_out) {
     g_processor.get_cleaned_neighbours(data, num_particles, params, offsets, neighbours_out);
 }
 

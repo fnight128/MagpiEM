@@ -8,15 +8,6 @@
 #include <cmath>
 #include <array>
 #include <immintrin.h> // For AVX/SSE intrinsics
-#ifdef _WIN32
-    #ifdef BUILDING_DLL
-        #define EXPORT __declspec(dllexport)
-    #else
-        #define EXPORT __declspec(dllimport)
-    #endif
-#else
-    #define EXPORT
-#endif
 
 #define MAX_PARTICLES 1000000
 
@@ -183,16 +174,16 @@ struct Particle {
 #ifdef __cplusplus
 extern "C" {
 #endif
-EXPORT void clean_particles(float* data, int num_points, CleanParams* params, int* results);
-EXPORT void find_neighbours(float* data, int num_points, float min_distance, float max_distance, int* results);
-EXPORT void filter_by_orientation(float* data, int num_points, float min_orientation, float max_orientation, int* results);
-EXPORT void filter_by_curvature(float* data, int num_points, float min_curvature, float max_curvature, int* results);
-EXPORT void assign_lattices(float* data, int num_points, unsigned int min_neighbours, unsigned int min_lattice_size, int* results);
+void clean_particles(float* data, int num_points, CleanParams* params, int* results);
+void find_neighbours(float* data, int num_points, float min_distance, float max_distance, int* results);
+void filter_by_orientation(float* data, int num_points, float min_orientation, float max_orientation, int* results);
+void filter_by_curvature(float* data, int num_points, float min_curvature, float max_curvature, int* results);
+void assign_lattices(float* data, int num_points, unsigned int min_neighbours, unsigned int min_lattice_size, int* results);
 // Debug/testing utility: perform distance + orientation + curvature filtering and
 // return neighbour lists in CSR form. Offsets has length num_points + 1. If
 // neighbours_out is nullptr, only offsets are filled (offsets[num_points] will be total entries).
-EXPORT void get_cleaned_neighbours(float* data, int num_points, CleanParams* params, int* offsets, int* neighbours_out);
-EXPORT void set_log_level(int level);
+void get_cleaned_neighbours(float* data, int num_points, CleanParams* params, int* offsets, int* neighbours_out);
+void set_log_level(int level);
 #ifdef __cplusplus
 }
 #endif
