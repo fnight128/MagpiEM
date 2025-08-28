@@ -86,8 +86,18 @@ def create_particle_plot_from_raw_data(
     fig = simple_figure()
 
     if cone_size > 0:
+        # Generate cone fix points for this plot
+        cone_fix_positions, cone_fix_orientations = generate_cone_fix_points(
+            tomogram_raw_data
+        )
+
+        # Append cone fix points to positions and orientations
+        positions_with_fix, orientations_with_fix = append_cone_fix_to_lattice(
+            positions, orientations, cone_fix_positions, cone_fix_orientations
+        )
+
         cone_trace = create_cone_traces(
-            positions, orientations, cone_size, colour, opacity
+            positions_with_fix, orientations_with_fix, cone_size, colour, opacity
         )
         fig.add_trace(cone_trace)
     else:
@@ -130,10 +140,12 @@ def create_lattice_plot_from_raw_data(
     if not tomogram_raw_data or not lattice_data:
         return simple_figure()
 
-    # Create base figure
     fig = simple_figure()
 
-    # Get the number of lattices and generate colours
+    cone_fix_positions, cone_fix_orientations = generate_cone_fix_points(
+        tomogram_raw_data
+    )
+
     lattice_ids = list(lattice_data.keys())
     num_lattices = len(lattice_ids)
     lattice_colours = colour_range(num_lattices)
@@ -171,23 +183,28 @@ def create_lattice_plot_from_raw_data(
                 colour = lattice_colours[color_index]
                 opacity = 0.8
 
-        # Create trace for this lattice
+        # Create trace
         if cone_size > 0:
-            # Create cone trace for this lattice
             positions = np.array([p[0] for p in lattice_particles])
             orientations = np.array([p[1] for p in lattice_particles])
 
+            positions_with_fix, orientations_with_fix = append_cone_fix_to_lattice(
+                positions, orientations, cone_fix_positions, cone_fix_orientations
+            )
+
             cone_trace = create_cone_traces(
-                positions, orientations, cone_size, colour, opacity, lattice_id
+                positions_with_fix,
+                orientations_with_fix,
+                cone_size,
+                colour,
+                opacity,
+                lattice_id,
             )
             cone_trace.name = f"Lattice {lattice_id}"
             fig.add_trace(cone_trace)
         else:
             # Create scatter trace for this lattice
             positions = np.array([p[0] for p in lattice_particles])
-
-            # Create customdata with lattice ID for each particle
-            customdata = [lattice_id] * len(positions)
 
             scatter_trace = create_scatter_trace(positions, colour, opacity, lattice_id)
             scatter_trace.name = f"Lattice {lattice_id}"
@@ -388,43 +405,41 @@ def create_scatter_trace(
     )
 
 
-def generate_cone_fix_data(
-    positions: np.ndarray, orientations: np.ndarray
+def generate_cone_fix_points(
+    tomogram_raw_data: List[List[List[float]]],
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Generate cone_fix data to ensure consistent cone sizing.
-    See cone_fix_readme.txt for more details.
+    Generate the two cone fix points that should be added to all lattices.
+    These points ensure consistent cone sizing across all lattices in a plot.
 
     Parameters
     ----------
-    positions : np.ndarray
-        Array of particle positions [N, 3]
-    orientations : np.ndarray
-        Array of particle orientations [N, 3]
+    tomogram_raw_data : List[List[List[float]]]
+        Raw particle data in format [[[x,y,z], [rx,ry,rz]], ...]
 
     Returns
     -------
     Tuple[np.ndarray, np.ndarray]
-        Tuple of (positions_with_fix, orientations_with_fix)
+        Tuple of (cone_fix_positions, cone_fix_orientations) - just the two fix points
     """
-    if len(positions) == 0:
-        return positions, orientations
+    if not tomogram_raw_data:
+        return np.array([]), np.array([])
 
-    # Calculate data range for cone_fix
+    positions = np.array([particle[0] for particle in tomogram_raw_data])
+
+    # Calculate data range for cone fix points
     max_pos = np.max(positions, axis=0)
     min_pos = np.min(positions, axis=0)
     range_magnitude = np.linalg.norm(max_pos - min_pos)
 
-    # Create cone_fix vectors (two tiny vectors close together)
+    # Create cone fix vectors (two tiny vectors close together)
     scaling = 1000000
     fudge_factor = 1000
     min_plus_mag = min_pos + range_magnitude / (scaling * fudge_factor)
 
-    # Add cone_fix vectors to positions and orientations
-    cone_fix_positions = np.vstack([positions, min_pos, min_plus_mag])
+    cone_fix_positions = np.vstack([min_pos, min_plus_mag])
     cone_fix_orientations = np.vstack(
         [
-            orientations,
             np.array(
                 [1 / (3**0.5 * scaling)] * 3
             ),  # Tiny orientation for first fix vector
@@ -435,6 +450,41 @@ def generate_cone_fix_data(
     )
 
     return cone_fix_positions, cone_fix_orientations
+
+
+def append_cone_fix_to_lattice(
+    positions: np.ndarray,
+    orientations: np.ndarray,
+    cone_fix_positions: np.ndarray,
+    cone_fix_orientations: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Append cone fix points to a lattice's positions and orientations.
+
+    Parameters
+    ----------
+    positions : np.ndarray
+        Array of particle positions [N, 3]
+    orientations : np.ndarray
+        Array of particle orientations [N, 3]
+    cone_fix_positions : np.ndarray
+        Array of cone fix positions [2, 3]
+    cone_fix_orientations : np.ndarray
+        Array of cone fix orientations [2, 3]
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        Tuple of (positions_with_fix, orientations_with_fix)
+    """
+    if len(positions) == 0:
+        return positions, orientations
+
+    # Append cone fix points to positions and orientations
+    positions_with_fix = np.vstack([positions, cone_fix_positions])
+    orientations_with_fix = np.vstack([orientations, cone_fix_orientations])
+
+    return positions_with_fix, orientations_with_fix
 
 
 def create_cone_traces(
@@ -449,41 +499,33 @@ def create_cone_traces(
     Create cone traces for particle orientations using Plotly's built-in Cone trace.
     Orientations are assumed to be normalised.
 
-    Includes cone_fix mechanism to ensure consistent cone sizing.
-    See cone_fix_readme.txt for more details.
-
     Parameters
     ----------
     positions : np.ndarray
-        Array of particle positions [N, 3]
+        Array of particle positions [N, 3] (should include cone fix points if needed)
     orientations : np.ndarray
-        Array of particle orientations [N, 3] (already normalised)
+        Array of particle orientations [N, 3] (should be normalised, and should include cone fix orientations if needed)
     cone_size : float
         Size of cones to plot
     colour : str, optional
         Colour for cones. Defaults to "red".
     opacity : float, optional
         Opacity for cones (0.0 to 1.0). Defaults to 1.0.
-    customdata : Optional[List], optional
-        Custom data to attach to each point. Defaults to None.
+    lattice_id : int, optional
+        Lattice ID to use for text labels. Defaults to 0.
 
     Returns
     -------
     go.Cone
         Plotly cone trace
     """
-    # Generate cone_fix data
-    cone_fix_positions, cone_fix_orientations = generate_cone_fix_data(
-        positions, orientations
-    )
-
     return go.Cone(
-        x=cone_fix_positions[:, 0],
-        y=cone_fix_positions[:, 1],
-        z=cone_fix_positions[:, 2],
-        u=cone_fix_orientations[:, 0],
-        v=cone_fix_orientations[:, 1],
-        w=cone_fix_orientations[:, 2],
+        x=positions[:, 0],
+        y=positions[:, 1],
+        z=positions[:, 2],
+        u=orientations[:, 0],
+        v=orientations[:, 1],
+        w=orientations[:, 2],
         sizemode="absolute",
         sizeref=cone_size,
         colorscale=[[0, colour], [1, colour]],

@@ -203,7 +203,7 @@ def create_graph_controls_table():
                     html.Td(
                         dbc.Input(
                             id="inp-cone-size",
-                            value=15,
+                            value=10,
                             type="number",
                             style={"width": "70%"},
                         )
