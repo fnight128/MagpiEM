@@ -22,7 +22,7 @@ from dash_extensions.enrich import Input, Output
 from .cleaner import Cleaner
 from .particle import Particle
 from .tomogram import Tomogram
-from .cpp_integration import clean_tomo_with_cpp
+from .cpp_integration import clean_tomo_with_cpp, check_cpp_availability
 from .layout import EMPTY_FIG
 from .test_mat_file_comparison import validate_mat_files
 from .read_write import (
@@ -58,6 +58,20 @@ def register_callbacks(app, cache_functions, temp_file_dir):
     # Unpack cache functions
     get_cached_tomogram_figure = cache_functions["get_cached_tomogram_figure"]
     preload_tomograms = cache_functions["preload_tomograms"]
+
+    @app.callback(
+        Output("confirm-cpp-unavailable", "displayed"),
+        Input("div-page-load", "children"),
+        prevent_initial_call=False,
+    )
+    def check_cpp_on_startup(_):
+        """Check C++ availability on app startup and show warning if unavailable."""
+        if check_cpp_availability():
+            logger.info("C++ library available")
+            return False
+        else:
+            logger.error("C++ library not available - using Python fallback")
+            return True
 
     @app.callback(
         Output("store-session-key", "data"),

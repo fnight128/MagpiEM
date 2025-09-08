@@ -322,11 +322,11 @@ def create_graph():
     )
 
 
-def create_empty_div():
+def create_empty_div(div_id: str = "div-null"):
     """Create the empty div for hidden outputs."""
     return html.Div(
         [
-            html.Div(id="div-null", style={"display": "none"}),
+            html.Div(id=div_id, style={"display": "none"}),
         ],
         style={"display": "none"},
     )
@@ -439,7 +439,8 @@ def create_main_layout():
                     "marginTop": "20px",
                 },
             ),
-            create_empty_div(),
+            create_empty_div("div-null"),
+            create_empty_div("div-page-load"),
             dcc.ConfirmDialog(
                 id="confirm-cant-save-progress",
                 message="Progress can only be saved if cleaning was run on all tomograms.",
@@ -447,6 +448,11 @@ def create_main_layout():
             dcc.ConfirmDialog(
                 id="confirm-validation-failed",
                 message='Failed to produce a valid output file. Use "Save current progress" to save the current state, and try restarting the application. Please report this issue if it persists.',
+            ),
+            dcc.ConfirmDialog(
+                id="confirm-cpp-unavailable",
+                message="C++ library has not been installed correctly. The application will use a (much) slower Python fallback for cleaning operations. For better performance, please reinstall the package, and check for any warnings during installation.",
+                displayed=False,
             ),
         ],
     )

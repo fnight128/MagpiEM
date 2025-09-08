@@ -31,16 +31,17 @@ def setup_cpp_library():
     try:
         # Import the compiled extension
         import magpiem.processing_cpp as cpp_module
+
         _cpp_library = cpp_module
         logger.info("Successfully loaded compiled C++ extension")
         return _cpp_library
     except ImportError as e:
         logger.error(f"Could not import compiled C++ extension: {e}")
-        logger.error("Please ensure the package was installed correctly with: pip install -e .")
+        logger.error("Please ensure the package was installed correctly.")
         raise ImportError(
             "C++ extension not available. This usually means the package wasn't "
             "installed correctly or the C++ component failed to compile. "
-            "Try reinstalling with: pip install -e ."
+            "Try reinstalling."
         ) from e
 
 
@@ -49,6 +50,22 @@ def clear_cpp_library_cache():
     global _cpp_library
     _cpp_library = None
     logger.debug("Cleared C++ library cache")
+
+
+def check_cpp_availability() -> bool:
+    """
+    Check if the C++ library is available without raising an exception.
+
+    Returns
+    -------
+    bool
+        True if C++ library is available, False otherwise
+    """
+    try:
+        setup_cpp_library()
+        return True
+    except ImportError:
+        return False
 
 
 def convert_raw_data_to_cpp_format(tomogram_raw_data: list) -> tuple[list, int]:
@@ -126,10 +143,10 @@ def _clean_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> dict:
     ]
 
     c_lib = setup_cpp_library()
-    
+
     # call with Python lists
     results = c_lib.clean_particles(flat_data, num_particles, params_list)
-    
+
     # Convert results to lattice assignments
     lattice_assignments = {}
     for i, lattice_id in enumerate(results):
