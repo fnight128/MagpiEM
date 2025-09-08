@@ -11,8 +11,13 @@ test_root = Path(__file__).parent.parent
 sys.path.insert(0, str(test_root))
 
 from test_utils import (
-    TestConfig, setup_test_logging, get_test_data_path, 
-    log_test_start, log_test_success, log_test_failure, setup_test_environment
+    TestConfig,
+    setup_test_logging,
+    get_test_data_path,
+    log_test_start,
+    log_test_success,
+    log_test_failure,
+    setup_test_environment,
 )
 
 setup_test_environment()
@@ -56,7 +61,9 @@ def test_tomogram_plotting():
 
         for lattice_id, particles in test_tomo.lattices.items():
             if lattice_id == 0:
-                logger.debug(f"Lattice {lattice_id}: {len(particles)} unassigned particles")
+                logger.debug(
+                    f"Lattice {lattice_id}: {len(particles)} unassigned particles"
+                )
             else:
                 logger.debug(f"Lattice {lattice_id}: {len(particles)} particles")
 
@@ -77,10 +84,10 @@ def test_tomogram_plotting():
 
         assert test_tomo is not None
         assert fig is not None
-        assert len(test_tomo.lattices) > 1 
-        
+        assert len(test_tomo.lattices) > 1
+
         return test_tomo, fig
-        
+
     except Exception as e:
         log_test_failure(test_name, e, logger)
         raise

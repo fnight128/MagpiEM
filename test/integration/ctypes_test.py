@@ -9,8 +9,13 @@ test_root = Path(__file__).parent.parent
 sys.path.insert(0, str(test_root))
 
 from test_utils import (
-    TestConfig, setup_test_logging, get_test_data_path,
-    log_test_start, log_test_success, log_test_failure, setup_test_environment
+    TestConfig,
+    setup_test_logging,
+    get_test_data_path,
+    log_test_start,
+    log_test_success,
+    log_test_failure,
+    setup_test_environment,
 )
 
 setup_test_environment()
@@ -55,16 +60,16 @@ def test_params():
     min_curv, max_curv = test_cleaner.curv_range
     min_lattice_size = test_cleaner.min_lattice_size
     min_neighbours = test_cleaner.min_neighbours
-    
+
     return {
-        'min_dist': min_dist,
-        'max_dist': max_dist,
-        'min_ori': min_ori,
-        'max_ori': max_ori,
-        'min_curv': min_curv,
-        'max_curv': max_curv,
-        'min_lattice_size': min_lattice_size,
-        'min_neighbours': min_neighbours
+        "min_dist": min_dist,
+        "max_dist": max_dist,
+        "min_ori": min_ori,
+        "max_ori": max_ori,
+        "min_curv": min_curv,
+        "max_curv": max_curv,
+        "min_lattice_size": min_lattice_size,
+        "min_neighbours": min_neighbours,
     }
 
 
@@ -194,12 +199,18 @@ def test_cpp_distance_only(c_lib, test_data, test_params):
         test_tomo = read_single_tomogram(str(TEST_DATA_FILE), TEST_TOMO_NAME)
         test_tomo.set_clean_params(test_cleaner)
         test_tomo.find_particle_neighbours(test_cleaner.dist_range)
-        python_reference = [len(particle.neighbours) for particle in test_tomo.all_particles]
+        python_reference = [
+            len(particle.neighbours) for particle in test_tomo.all_particles
+        ]
 
-        def distance_test(c_lib, c_array, num_particles, results_array, min_dist, max_dist):
+        def distance_test(
+            c_lib, c_array, num_particles, results_array, min_dist, max_dist
+        ):
             # Convert numpy array to Python list for the C++ extension
             data_list = [float(val) for val in c_array]
-            results = c_lib.find_neighbours(data_list, num_particles, min_dist, max_dist)
+            results = c_lib.find_neighbours(
+                data_list, num_particles, min_dist, max_dist
+            )
             # Copy results back to the results array
             for i in range(num_particles):
                 results_array[i] = results[i]
@@ -210,8 +221,8 @@ def test_cpp_distance_only(c_lib, test_data, test_params):
             "1: Distance-only neighbour finding",
             python_reference,
             distance_test,
-            test_params['min_dist'],
-            test_params['max_dist'],
+            test_params["min_dist"],
+            test_params["max_dist"],
         )
 
         log_test_success(test_name, logger)
@@ -236,7 +247,9 @@ def test_cpp_orientation_only(c_lib, test_data, test_params):
         # Apply orientation filtering to each particle
         for particle in test_tomo.all_particles:
             particle.filter_neighbour_orientation(test_cleaner.ori_range, None)
-        python_reference = [len(particle.neighbours) for particle in test_tomo.all_particles]
+        python_reference = [
+            len(particle.neighbours) for particle in test_tomo.all_particles
+        ]
 
         def orientation_test(
             c_lib,
@@ -253,7 +266,9 @@ def test_cpp_orientation_only(c_lib, test_data, test_params):
             # find neighbours
             c_lib.find_neighbours(data_list, num_particles, min_dist, max_dist)
             # filter by orientation
-            results = c_lib.filter_by_orientation(data_list, num_particles, min_ori, max_ori)
+            results = c_lib.filter_by_orientation(
+                data_list, num_particles, min_ori, max_ori
+            )
             # Copy results back
             for i in range(num_particles):
                 results_array[i] = results[i]
@@ -264,10 +279,10 @@ def test_cpp_orientation_only(c_lib, test_data, test_params):
             "2: Orientation filtering",
             python_reference,
             orientation_test,
-            test_params['min_dist'],
-            test_params['max_dist'],
-            test_params['min_ori'],
-            test_params['max_ori'],
+            test_params["min_dist"],
+            test_params["max_dist"],
+            test_params["min_ori"],
+            test_params["max_ori"],
         )
 
         log_test_success(test_name, logger)
@@ -292,7 +307,9 @@ def test_cpp_curvature_only(c_lib, test_data, test_params):
         # Apply curvature filtering to each particle
         for particle in test_tomo.all_particles:
             particle.filter_curvature(test_cleaner.curv_range)
-        python_reference = [len(particle.neighbours) for particle in test_tomo.all_particles]
+        python_reference = [
+            len(particle.neighbours) for particle in test_tomo.all_particles
+        ]
 
         def curvature_test(
             c_lib,
@@ -309,7 +326,9 @@ def test_cpp_curvature_only(c_lib, test_data, test_params):
             # find neighbours
             c_lib.find_neighbours(data_list, num_particles, min_dist, max_dist)
             # filter by curvature
-            results = c_lib.filter_by_curvature(data_list, num_particles, min_curv, max_curv)
+            results = c_lib.filter_by_curvature(
+                data_list, num_particles, min_curv, max_curv
+            )
             # Copy results back
             for i in range(num_particles):
                 results_array[i] = results[i]
@@ -320,10 +339,10 @@ def test_cpp_curvature_only(c_lib, test_data, test_params):
             "3: Curvature filtering",
             python_reference,
             curvature_test,
-            test_params['min_dist'],
-            test_params['max_dist'],
-            test_params['min_curv'],
-            test_params['max_curv'],
+            test_params["min_dist"],
+            test_params["max_dist"],
+            test_params["min_curv"],
+            test_params["max_curv"],
         )
 
         log_test_success(test_name, logger)
@@ -344,7 +363,9 @@ def test_cpp_full_pipeline(test_data, test_cleaner):
         test_tomo = read_single_tomogram(str(TEST_DATA_FILE), TEST_TOMO_NAME)
         test_tomo.set_clean_params(test_cleaner)
         test_tomo.autoclean()
-        python_reference = [len(particle.neighbours) for particle in test_tomo.all_particles]
+        python_reference = [
+            len(particle.neighbours) for particle in test_tomo.all_particles
+        ]
 
         # Convert test_data to the format expected by cpp_integration
         # test_data is numpy array, but cpp_integration expects list of [[[x,y,z], [rx,ry,rz]], ...]
@@ -365,7 +386,9 @@ def test_cpp_full_pipeline(test_data, test_cleaner):
                 counts_cpp[particle_idx] = lattice_id
 
         # Use lattice-specific verification
-        verify_lattice_assignments(python_reference, counts_cpp, "Full pipeline", test_data)
+        verify_lattice_assignments(
+            python_reference, counts_cpp, "Full pipeline", test_data
+        )
 
         log_test_success(test_name, logger)
         return counts_cpp, test_time
@@ -533,7 +556,9 @@ def verify_lattice_assignments(
             # Save both plots for comparison
             cpp_fig.write_html("cpp_lattices.html")
             python_fig.write_html("python_lattices.html")
-            logger.info("      Saved debug plots: cpp_lattices.html, python_lattices.html")
+            logger.info(
+                "      Saved debug plots: cpp_lattices.html, python_lattices.html"
+            )
 
         # Find differences with meaningful comparisons
         python_only = python_group_sets - cpp_group_sets
@@ -803,7 +828,6 @@ def main() -> None:
         min_lattice_size,
         min_neighbours,
     ) = params_tuple
-
 
     # Calculate Python reference results first
     python_reference, python_time = calculate_python_reference(test_data, test_cleaner)
