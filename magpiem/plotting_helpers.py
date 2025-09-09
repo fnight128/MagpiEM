@@ -534,3 +534,117 @@ def create_cone_traces(
         opacity=opacity,
         text=generate_constant_labels(len(positions), lattice_id),
     )
+
+
+def get_tomogram_figure(
+    selected_tomo_name,
+    tomogram_raw_data,
+    session_key,
+    lattice_data,
+    make_cones,
+    cone_size,
+    show_removed,
+    get_cached_tomogram_figure,
+    EMPTY_FIG,
+):
+    """Get cached tomogram figure with proper validation."""
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    if not selected_tomo_name or not tomogram_raw_data:
+        logger.debug("Returning EMPTY_FIG - missing data")
+        return EMPTY_FIG
+
+    if selected_tomo_name not in tomogram_raw_data["__tomogram_names__"]:
+        logger.debug("Returning EMPTY_FIG - tomogram not found")
+        return EMPTY_FIG
+
+    data_path = tomogram_raw_data["__data_path__"]
+    logger.debug("Getting cached figure for %s", selected_tomo_name)
+
+    actual_cone_size = cone_size if make_cones else -1
+    logger.debug("actual_cone_size=%s", actual_cone_size)
+
+    fig = get_cached_tomogram_figure(
+        selected_tomo_name,
+        data_path,
+        session_key,
+        lattice_data,
+        actual_cone_size,
+        show_removed,
+    )
+
+    logger.debug("Got figure from cache: %s", fig is not None)
+    return fig if fig is not None else EMPTY_FIG
+
+
+def apply_figure_customizations(
+    fig,
+    selected_lattices,
+    selected_tomo_name,
+    lattice_data,
+    make_cones,
+    cone_size,
+    clicked_point_data,
+    camera_data,
+    EMPTY_FIG,
+    TEMP_TRACE_NAME,
+):
+    """Apply lattice selection, point selection, and camera position to figure."""
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    if fig is None or fig == EMPTY_FIG:
+        return fig
+
+    # Update lattice selection by trace update
+    if selected_lattices and selected_tomo_name in selected_lattices:
+        logger.debug(
+            "Updating lattice colors for %s selected lattices",
+            len(selected_lattices[selected_tomo_name]),
+        )
+        fig = update_lattice_trace_colors(
+            fig,
+            set(selected_lattices[selected_tomo_name]),
+            lattice_data.get(selected_tomo_name, {}),
+            cone_size if make_cones else -1,
+        )
+
+    # Add selected points if any
+    if clicked_point_data:
+        logger.debug("Adding %s selected points", len(clicked_point_data))
+        fig = add_selected_points_trace(fig, clicked_point_data, TEMP_TRACE_NAME)
+
+    # Restore camera position
+    if camera_data:
+        fig["layout"]["scene"]["camera"] = camera_data
+
+    return fig
+
+
+def extract_point_data(click_data, POSITION_KEYS, ORIENTATION_KEYS):
+    """Extract particle data from click data."""
+    current_point_data = click_data["points"][0]
+    particle_data_keys = POSITION_KEYS + ORIENTATION_KEYS
+    return {key: current_point_data[key] for key in particle_data_keys}
+
+
+def calculate_geometric_params(clicked_points_data, particle_from_point_data, html):
+    """Calculate geometric parameters between two selected points."""
+    selected_particles = []
+    for idx, point_data in enumerate(clicked_points_data):
+        selected_particles.append(particle_from_point_data(point_data, idx=idx))
+
+    # Check if points are too close together
+    if selected_particles[0].distance_sq(selected_particles[1]) < 0.001:
+        return None, "Points too close together"
+
+    params_dict = selected_particles[0].calculate_params(selected_particles[1])
+    params_message = []
+    for param_name, param_value in params_dict.items():
+        params_message.append(f"{param_name}: {param_value:.2f}")
+        params_message.append(html.Br())
+
+    return params_message, None

@@ -568,3 +568,135 @@ def write_relion_star(keep_ids: dict, out_path: str, inp_path: str):
     rln_dict["particles"] = cleaned_df
 
     starfile.write(rln_dict, out_path)
+
+
+# Callback helper functions for file operations
+def process_uploaded_file(
+    filename, contents, num_images, temp_file_dir, save_dash_upload, get_tomogram_names
+):
+    """Process uploaded file and extract tomogram data."""
+    if not filename:
+        return None, "Please choose a particle database"
+
+    num_img_dict = {0: 1, 1: 5, 2: -1}
+    num_images = num_img_dict[num_images]
+
+    save_dash_upload(filename, contents, temp_file_dir)
+    data_file_path = temp_file_dir + filename
+
+    all_tomogram_names = get_tomogram_names(data_file_path, num_images=num_images)
+
+    if not all_tomogram_names:
+        return None, "Data file Unreadable"
+
+    tomogram_raw_data = {
+        "__tomogram_names__": all_tomogram_names,
+        "__data_path__": data_file_path,
+        "__num_images__": num_images,
+    }
+
+    return tomogram_raw_data, None
+
+
+def load_previous_session(
+    previous_filename,
+    previous_contents,
+    tomogram_raw_data,
+    temp_file_dir,
+    ctx,
+    save_dash_upload,
+    read_previous_progress,
+):
+    """Load previous session data if available."""
+    if ctx.triggered_id != "upload-previous-session":
+        return {}, {}
+
+    save_dash_upload(previous_filename, previous_contents, temp_file_dir)
+    progress_path = temp_file_dir + previous_filename
+    progress_result = read_previous_progress(progress_path, tomogram_raw_data)
+
+    if isinstance(progress_result, str) or isinstance(progress_result, list):
+        return None, progress_result
+    else:
+        return progress_result, None
+
+
+def validate_save_inputs(output_name, input_name, lattice_data):
+    """Validate inputs for save operation."""
+    if not output_name:
+        return False, "No output filename provided"
+    if output_name == input_name:
+        return False, "Output and input file cannot be identical"
+    if not lattice_data:
+        return False, "No lattice data available for saving"
+    return True, None
+
+
+def extract_particle_ids_for_saving(lattice_data, selected_lattices, keep_selected):
+    """Extract particle IDs based on selection criteria."""
+    saving_ids = {}
+    for tomo_name, tomo_lattice_data in lattice_data.items():
+        if not tomo_lattice_data:
+            continue
+
+        tomo_selected_lattices = (
+            selected_lattices.get(tomo_name, []) if selected_lattices else []
+        )
+
+        particle_ids = []
+        for lattice_id, particle_indices in tomo_lattice_data.items():
+            lattice_id_int = (
+                int(lattice_id) if isinstance(lattice_id, str) else lattice_id
+            )
+
+            lattice_is_selected = lattice_id_int in tomo_selected_lattices
+            should_include = (
+                lattice_is_selected if keep_selected else not lattice_is_selected
+            )
+
+            if should_include:
+                particle_ids.extend(particle_indices)
+
+        # Only add tomogram to saving_ids if it has particles to save
+        if particle_ids:
+            saving_ids[tomo_name] = particle_ids
+
+    return saving_ids
+
+
+def save_file_by_type(
+    saving_ids,
+    output_name,
+    input_name,
+    temp_file_dir,
+    write_emc_mat,
+    write_relion_star,
+    validate_mat_files,
+):
+    """Save file based on input file type and validate if necessary."""
+    if ".mat" in input_name:
+        write_emc_mat(
+            saving_ids,
+            temp_file_dir + output_name,
+            temp_file_dir + input_name,
+        )
+
+        # Validate .mat files
+        out_file = temp_file_dir + output_name
+        input_file = temp_file_dir + input_name
+        logger.info("Running validation test on output file: %s", out_file)
+
+        try:
+            validate_mat_files(input_file, out_file)
+        except Exception as e:
+            logger.error("File validation failed: %s", str(e))
+            return False, "Validation failed"
+
+    elif ".star" in input_name:
+        write_relion_star(
+            saving_ids,
+            temp_file_dir + output_name,
+            temp_file_dir + input_name,
+        )
+
+    return True, None

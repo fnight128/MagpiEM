@@ -20,7 +20,8 @@ from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Input, Output
 from dash.long_callback import DiskcacheLongCallbackManager
 
-from .cleaner import Cleaner
+from .cleaner import Cleaner, save_cleaning_parameters
+from .processing_utils import process_single_tomogram
 from .particle import Particle
 from .tomogram import Tomogram
 from .cpp_integration import clean_tomo_with_cpp, check_cpp_availability
@@ -33,16 +34,26 @@ from .read_write import (
     read_emc_tomogram_raw_data,
     write_emc_mat,
     write_relion_star,
+    process_uploaded_file,
+    load_previous_session,
+    validate_save_inputs,
+    extract_particle_ids_for_saving,
+    save_file_by_type,
 )
 from .plotting_helpers import (
     add_selected_points_trace,
     update_lattice_trace_colors,
+    get_tomogram_figure,
+    apply_figure_customizations,
+    extract_point_data,
+    calculate_geometric_params,
 )
 from .plot_cache import (
     _get_or_create_cache_entry,
     _add_to_cache_and_evict,
     clear_cache,
 )
+from .utilities import validate_required_data, log_callback_start, handle_callback_error
 
 # Constants
 CAMERA_KEY = "scene.camera"
@@ -203,60 +214,30 @@ def register_callbacks(app, cache_functions, temp_file_dir, cleaning_params_dir)
         logger.debug("make_cones=%s, cone_size=%s", make_cones, cone_size)
         logger.debug("cache_cleared=%s", cache_cleared)
 
-        if not selected_tomo_name or not tomogram_raw_data:
-            logger.debug("Returning EMPTY_FIG - missing data")
-            return EMPTY_FIG
-
-        if selected_tomo_name not in tomogram_raw_data["__tomogram_names__"]:
-            logger.debug("Returning EMPTY_FIG - tomogram not found")
-            return EMPTY_FIG
-
-        # Get the cached figure
-        data_path = tomogram_raw_data["__data_path__"]
-        logger.debug("Getting cached figure for %s", selected_tomo_name)
-
-        # Determine cone size based on switch state
-        actual_cone_size = cone_size if make_cones else -1
-        logger.debug("actual_cone_size=%s", actual_cone_size)
-
-        fig = get_cached_tomogram_figure(
+        fig = get_tomogram_figure(
             selected_tomo_name,
-            data_path,
+            tomogram_raw_data,
             session_key,
             lattice_data,
-            actual_cone_size,
-            show_removed,  # Use current show_removed state
+            make_cones,
+            cone_size,
+            show_removed,
+            get_cached_tomogram_figure,
+            EMPTY_FIG,
         )
 
-        logger.debug("Got figure from cache: %s", fig is not None)
-
-        if fig is None:
-            logger.debug("Figure is None, returning EMPTY_FIG")
-            fig = EMPTY_FIG
-        else:
-            # Update lattice selection by trace update
-            if selected_lattices and selected_tomo_name in selected_lattices:
-                logger.debug(
-                    "Updating lattice colors for %s selected lattices",
-                    len(selected_lattices[selected_tomo_name]),
-                )
-                fig = update_lattice_trace_colors(
-                    fig,
-                    set(selected_lattices[selected_tomo_name]),
-                    lattice_data.get(selected_tomo_name, {}),
-                    cone_size if make_cones else -1,
-                )
-
-            # Add selected points if any
-            if clicked_point_data:
-                logger.debug("Adding %s selected points", len(clicked_point_data))
-                fig = add_selected_points_trace(
-                    fig, clicked_point_data, TEMP_TRACE_NAME
-                )
-
-        # Restore camera position
-        if camera_data:
-            fig["layout"]["scene"]["camera"] = camera_data
+        fig = apply_figure_customizations(
+            fig,
+            selected_lattices,
+            selected_tomo_name,
+            lattice_data,
+            make_cones,
+            cone_size,
+            clicked_point_data,
+            camera_data,
+            EMPTY_FIG,
+            TEMP_TRACE_NAME,
+        )
 
         logger.debug("Returning figure")
         return fig
@@ -321,9 +302,7 @@ def register_callbacks(app, cache_functions, temp_file_dir, cleaning_params_dir)
         if lattice_data and selected_tomo_name in lattice_data:
             return clicked_points_data or [], ""
 
-        current_point_data = click_data["points"][0]
-        particle_data_keys = POSITION_KEYS + ORIENTATION_KEYS
-        new_point = {key: current_point_data[key] for key in particle_data_keys}
+        new_point = extract_point_data(click_data, POSITION_KEYS, ORIENTATION_KEYS)
 
         if not clicked_points_data:
             clicked_points_data = []
@@ -333,22 +312,13 @@ def register_callbacks(app, cache_functions, temp_file_dir, cleaning_params_dir)
 
         # If we now have exactly 2 points, calculate parameters
         if len(clicked_points_data) == 2:
-            selected_particles = []
-            for idx, point_data in enumerate(clicked_points_data):
-                selected_particles.append(particle_from_point_data(point_data, idx=idx))
-
-            # Check if points are too close together - implies same point and could lead to errors
-            if selected_particles[0].distance_sq(selected_particles[1]) < 0.001:
+            params_message, error = calculate_geometric_params(
+                clicked_points_data, particle_from_point_data, html
+            )
+            if error:
                 # Remove the second point if they're too close
                 clicked_points_data = clicked_points_data[:-1]
                 return clicked_points_data, ""
-
-            params_dict = selected_particles[0].calculate_params(selected_particles[1])
-            params_message = []
-            for param_name, param_value in params_dict.items():
-                params_message.append(f"{param_name}: {param_value:.2f}")
-                params_message.append(html.Br())
-
             return clicked_points_data, params_message
 
         return clicked_points_data, ""
@@ -609,41 +579,35 @@ def register_callbacks(app, cache_functions, temp_file_dir, cleaning_params_dir)
     def read_tomograms(
         _, previous_filename, previous_contents, filename, contents, num_images
     ):
-        if not filename:
-            return "Please choose a particle database", True, {}, {}, {}
+        tomogram_raw_data, error = process_uploaded_file(
+            filename,
+            contents,
+            num_images,
+            temp_file_dir,
+            save_dash_upload,
+            get_tomogram_names,
+        )
+        if error:
+            return error, True, {}, {}, {}
 
-        num_img_dict = {0: 1, 1: 5, 2: -1}
-        num_images = num_img_dict[num_images]
+        lattice_data, selected_lattices = {}, {}
+        session_result, session_error = load_previous_session(
+            previous_filename,
+            previous_contents,
+            tomogram_raw_data,
+            temp_file_dir,
+            ctx,
+            save_dash_upload,
+            read_previous_progress,
+        )
 
-        save_dash_upload(filename, contents, temp_file_dir)
-
-        data_file_path = temp_file_dir + filename
-
-        all_tomogram_names = get_tomogram_names(data_file_path, num_images=num_images)
-
-        if not all_tomogram_names:
-            return "Data file Unreadable", True, {}, {}, {}
-
-        tomogram_raw_data = {
-            "__tomogram_names__": all_tomogram_names,
-            "__data_path__": data_file_path,
-            "__num_images__": num_images,
-        }
-        lattice_data = {}
-        selected_lattices = {}
-
-        if ctx.triggered_id == "upload-previous-session":
-            save_dash_upload(previous_filename, previous_contents, temp_file_dir)
-            progress_path = temp_file_dir + previous_filename
-            progress_result = read_previous_progress(progress_path, tomogram_raw_data)
-
-            if isinstance(progress_result, str) or isinstance(progress_result, list):
-                return progress_result, True, {}, {}, {}
-            else:
-                lattice_data, selected_lattices = progress_result
+        if session_error:
+            return session_error, True, {}, {}, {}
+        elif session_result:
+            lattice_data, selected_lattices = session_result
 
         return (
-            f"Found {len(all_tomogram_names)} tomograms (loading on-demand)",
+            f"Found {len(tomogram_raw_data['__tomogram_names__'])} tomograms (loading on-demand)",
             False,
             lattice_data,
             tomogram_raw_data,
@@ -786,11 +750,6 @@ def register_callbacks(app, cache_functions, temp_file_dir, cleaning_params_dir)
 
         logger.info("Starting cleaning process")
 
-        lattice_data = {}
-
-        clean_count = 0
-        clean_total_time = 0
-
         tomo_names = tomogram_raw_data["__tomogram_names__"]
         data_path = tomogram_raw_data["__data_path__"]
         total_tomos = len(tomo_names)
@@ -803,60 +762,43 @@ def register_callbacks(app, cache_functions, temp_file_dir, cleaning_params_dir)
 
         logger.info(f"Processing {total_tomos} tomograms...")
 
+        lattice_data = {}
+        clean_count = 0
+        clean_total_time = 0
+
         for tomo_name in tomo_names:
-            t0 = time()
-            logger.debug(f"Cleaning tomogram: {tomo_name}")
-
-            if tomo_name not in full_geom:
-                logger.warning(f"Tomogram {tomo_name} not found in .mat file")
-                continue
-
-            tomo_raw_data = read_emc_tomogram_raw_data(full_geom[tomo_name], tomo_name)
-            if tomo_raw_data is None:
-                logger.warning(f"Failed to extract data for tomogram: {tomo_name}")
-                continue
-
-            lattice_data[tomo_name] = clean_tomo_with_cpp(tomo_raw_data, clean_params)
-            clean_total_time += time() - t0
             clean_count += 1
+            lattice_result, processing_time = process_single_tomogram(
+                tomo_name,
+                full_geom,
+                clean_params,
+                set_progress,
+                clean_count,
+                total_tomos,
+                clean_total_time,
+                read_emc_tomogram_raw_data,
+                clean_tomo_with_cpp,
+            )
 
-            progress_percent = int((clean_count / total_tomos) * 100)
-            set_progress(progress_percent)
-
-            # Only calculate time remaining every 10 tomograms to reduce overhead
-            if clean_count % 10 == 0 or clean_count == total_tomos:
-                tomos_remaining = total_tomos - clean_count
-                clean_speed = clean_total_time / clean_count
-                secs_remaining = clean_speed * tomos_remaining
-                formatted_time_remaining = str(
-                    datetime.timedelta(seconds=secs_remaining)
-                ).split(".")[0]
-                logger.info(
-                    f"Progress: {clean_count}/{total_tomos} ({progress_percent}%) - Time remaining: {formatted_time_remaining}"
-                )
+            if lattice_result is not None:
+                lattice_data[tomo_name] = lattice_result
+                clean_total_time += processing_time
 
         logger.info("Saving cleaning parameters")
-        cleaning_params_dict = {
-            "distance": dist_goal,
-            "distance tolerance": dist_tol,
-            "orientation": ori_goal,
-            "orientation tolerance": ori_tol,
-            "curvature": curv_goal,
-            "curvature tolerance": curv_tol,
-            "cc threshold": cc_thresh,
-            "min neighbours": min_neighbours,
-            "min array size": array_size,
-            "allow flips": allow_flips,
-        }
-
-        if filename:
-            base_name = Path(filename).stem
-            clean_yaml_name = f"{base_name}_clean_params.yml"
-        else:
-            clean_yaml_name = "unknown_file_clean_params.yml"
-
-        with open(cleaning_params_dir + clean_yaml_name, "w") as yaml_file:
-            yaml_file.write(yaml.safe_dump(cleaning_params_dict))
+        save_cleaning_parameters(
+            dist_goal,
+            dist_tol,
+            ori_goal,
+            ori_tol,
+            curv_goal,
+            curv_tol,
+            cc_thresh,
+            min_neighbours,
+            array_size,
+            allow_flips,
+            filename,
+            cleaning_params_dir,
+        )
 
         set_progress(100)
         return False, False, True, lattice_data, 100
@@ -931,67 +873,31 @@ def register_callbacks(app, cache_functions, temp_file_dir, cleaning_params_dir)
         lattice_data,
         _,
     ):
-        if not output_name:
-            return None
-        if output_name == input_name:
-            logger.warning("Output and input file cannot be identical")
-            return None
+        # Validate inputs
+        is_valid, error_msg = validate_save_inputs(
+            output_name, input_name, lattice_data
+        )
+        if not is_valid:
+            logger.warning(error_msg)
+            return None, False
 
-        if not lattice_data:
-            logger.warning("No lattice data available for saving")
-            return None
-        saving_ids = {}
-        for tomo_name, tomo_lattice_data in lattice_data.items():
-            if not tomo_lattice_data:
-                continue
+        # Extract particle IDs for saving
+        saving_ids = extract_particle_ids_for_saving(
+            lattice_data, selected_lattices, keep_selected
+        )
 
-            tomo_selected_lattices = (
-                selected_lattices.get(tomo_name, []) if selected_lattices else []
-            )
-
-            particle_ids = []
-            for lattice_id, particle_indices in tomo_lattice_data.items():
-                lattice_id_int = (
-                    int(lattice_id) if isinstance(lattice_id, str) else lattice_id
-                )
-
-                lattice_is_selected = lattice_id_int in tomo_selected_lattices
-                should_include = (
-                    lattice_is_selected if keep_selected else not lattice_is_selected
-                )
-
-                if should_include:
-                    particle_ids.extend(particle_indices)
-
-            # Only add tomogram to saving_ids if it has particles to save
-            if particle_ids:
-                saving_ids[tomo_name] = particle_ids
-
-        if ".mat" in input_name:
-            write_emc_mat(
-                saving_ids,
-                temp_file_dir + output_name,
-                temp_file_dir + input_name,
-            )
-
-            # Ensure .mat files are otherwise identical
-            out_file = temp_file_dir + output_name
-            input_file = temp_file_dir + input_name
-            logger.info("Running validation test on output file: %s", out_file)
-
-            try:
-                validate_mat_files(input_file, out_file)
-            except Exception as e:
-                logger.error("File validation failed: %s", str(e))
-                # Trigger error popup
-                return None, True
-
-        elif ".star" in input_name:
-            write_relion_star(
-                saving_ids,
-                temp_file_dir + output_name,
-                temp_file_dir + input_name,
-            )
+        # Save file and validate if necessary
+        save_success, validation_error = save_file_by_type(
+            saving_ids,
+            output_name,
+            input_name,
+            temp_file_dir,
+            write_emc_mat,
+            write_relion_star,
+            validate_mat_files,
+        )
+        if not save_success:
+            return None, True
 
         out_file = temp_file_dir + output_name
         logger.info("Saving output file: %s", out_file)

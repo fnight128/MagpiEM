@@ -119,3 +119,23 @@ def setup_cleanup_handlers(cache_dir):
     # on windows, also SIGBREAK
     if hasattr(signal, "SIGBREAK"):
         signal.signal(signal.SIGBREAK, cleanup_handler)
+
+
+def validate_required_data(*data_items):
+    """Validate that required data items are not None or empty."""
+    return all(item is not None and item != "" for item in data_items)
+
+
+def log_callback_start(callback_name, **kwargs):
+    """Log callback start with relevant parameters."""
+    logger = logging.getLogger(__name__)
+    logger.debug(
+        f"{callback_name} called with: {', '.join(f'{k}={v}' for k, v in kwargs.items())}"
+    )
+
+
+def handle_callback_error(callback_name, error, default_return=None):
+    """Handle callback errors with consistent logging."""
+    logger = logging.getLogger(__name__)
+    logger.error(f"Error in {callback_name}: {error}")
+    return default_return

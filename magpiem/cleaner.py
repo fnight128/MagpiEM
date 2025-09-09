@@ -174,3 +174,44 @@ class Cleaner:
             max_ang = 180
 
         return tuple([float(np.cos(np.radians(ang))) for ang in [max_ang, min_ang]])
+
+
+def save_cleaning_parameters(
+    dist_goal,
+    dist_tol,
+    ori_goal,
+    ori_tol,
+    curv_goal,
+    curv_tol,
+    cc_thresh,
+    min_neighbours,
+    array_size,
+    allow_flips,
+    filename,
+    cleaning_params_dir,
+):
+    """Save cleaning parameters to YAML file."""
+    import yaml
+    from pathlib import Path
+
+    cleaning_params_dict = {
+        "distance": dist_goal,
+        "distance tolerance": dist_tol,
+        "orientation": ori_goal,
+        "orientation tolerance": ori_tol,
+        "curvature": curv_goal,
+        "curvature tolerance": curv_tol,
+        "cc threshold": cc_thresh,
+        "min neighbours": min_neighbours,
+        "min array size": array_size,
+        "allow flips": allow_flips,
+    }
+
+    if filename:
+        base_name = Path(filename).stem
+        clean_yaml_name = f"{base_name}_clean_params.yml"
+    else:
+        clean_yaml_name = "unknown_file_clean_params.yml"
+
+    with open(cleaning_params_dir + clean_yaml_name, "w") as yaml_file:
+        yaml_file.write(yaml.safe_dump(cleaning_params_dict))
