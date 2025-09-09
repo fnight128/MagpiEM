@@ -729,13 +729,11 @@ def register_callbacks(app, cache_functions, temp_file_dir, cleaning_params_dir)
         State("store-session-key", "data"),
         State("upload-data", "filename"),
         Input("button-full-clean", "n_clicks"),
-        Input("button-preview-clean", "n_clicks"),
         prevent_initial_call=True,
         background=True,
         # Disable buttons during cleaning
         running=[
             (Output("button-full-clean", "disabled"), True, False),
-            (Output("button-preview-clean", "disabled"), True, False),
             (
                 Output("progress-processing", "style"),
                 {"visibility": "visible"},
@@ -760,9 +758,8 @@ def register_callbacks(app, cache_functions, temp_file_dir, cleaning_params_dir)
         session_key: str,
         filename: str,
         clicks,
-        clicks2,
     ):
-        if not clicks or clicks2:
+        if not clicks:
             return True, True, False, {}, 0
 
         if not tomogram_raw_data:
