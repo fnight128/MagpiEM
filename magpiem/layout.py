@@ -70,7 +70,12 @@ def create_param_table():
                 ]
             ),
             html.Tr(
-                html.Td(dbc.Button("Run Cleaning", id="button-full-clean"), colSpan=4),
+                html.Td(
+                    dbc.Button(
+                        "Run Cleaning", id="button-full-clean", style={"width": "100%"}
+                    ),
+                    colSpan=4,
+                ),
             ),
         ],
         style={"overflow": "hidden", "margin": "3px", "width": "100%"},
