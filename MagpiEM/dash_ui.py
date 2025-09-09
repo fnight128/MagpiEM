@@ -17,7 +17,7 @@ import diskcache
 from dash.long_callback import DiskcacheLongCallbackManager
 
 from .callbacks import register_callbacks
-from .cache import get_cache_functions
+from .plot_cache import get_cache_functions
 from .layout import create_main_layout
 
 # Constants

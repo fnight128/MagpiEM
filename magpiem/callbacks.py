@@ -39,7 +39,7 @@ from .plotting_helpers import (
     add_selected_points_trace,
     update_lattice_trace_colors,
 )
-from .cache import (
+from .plot_cache import (
     _get_or_create_cache_entry,
     _add_to_cache_and_evict,
     clear_cache,

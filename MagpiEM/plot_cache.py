@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Caching functions for the MagpiEM Dash application.
+Plot caching functions for the MagpiEM Dash application.
 """
 
 import plotly.graph_objects as go
