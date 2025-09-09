@@ -95,6 +95,19 @@ def convert_raw_data_to_cpp_format(tomogram_raw_data: list) -> tuple[list, int]:
     return flat_data, len(tomogram_raw_data)
 
 
+def invert_lattice_assignments(results: dict) -> dict:
+    """
+    Dict inversion to convert from dict(particle_index -> lattice_id) to dict(lattice_id -> [particle_indices])
+    """
+    lattice_assignments = {}
+    for i, lattice_id in enumerate(results):
+        lattice_id = int(lattice_id)
+        if lattice_id not in lattice_assignments:
+            lattice_assignments[lattice_id] = []
+        lattice_assignments[lattice_id].append(i)
+    return lattice_assignments
+
+
 def clean_tomo_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> dict:
     """
     Clean tomogram data using the C++ library, with fallback to python
@@ -147,15 +160,7 @@ def _clean_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> dict:
     # call with Python lists
     results = c_lib.clean_particles(flat_data, num_particles, params_list)
 
-    # Convert results to lattice assignments
-    lattice_assignments = {}
-    for i, lattice_id in enumerate(results):
-        lattice_id = int(lattice_id)
-        if lattice_id not in lattice_assignments:
-            lattice_assignments[lattice_id] = []
-        lattice_assignments[lattice_id].append(i)
-
-    return lattice_assignments
+    return invert_lattice_assignments(results)
 
 
 def _clean_with_python_fallback(tomogram_raw_data: list, clean_params: Cleaner) -> dict:
@@ -168,7 +173,9 @@ def _clean_with_python_fallback(tomogram_raw_data: list, clean_params: Cleaner) 
     # Format: [cc_value, [x, y, z], [u, v, w]]
     particle_data_list = []
     for pos, orient in tomogram_raw_data:
-        particle_data_list.append([1.0, pos, orient])
+        particle_data_list.append(
+            [10.0, pos, orient]
+        )  # High CC score to pass filtering
 
     particles = Particle.from_array(particle_data_list, temp_tomogram)
     temp_tomogram.assign_particles(particles)
@@ -176,11 +183,16 @@ def _clean_with_python_fallback(tomogram_raw_data: list, clean_params: Cleaner) 
     result_dict = temp_tomogram.autoclean()
 
     if result_dict is None:
+        logger.warning(
+            "No lattices found after cleaning - all particles may have been filtered out"
+        )
         return {}
 
     lattice_assignments = {}
     for lattice_id, particle_ids in result_dict.items():
         if lattice_id != "selected":
             lattice_assignments[int(lattice_id)] = particle_ids
+
+    logger.debug(f"Final lattice assignments: {lattice_assignments}")
 
     return lattice_assignments
