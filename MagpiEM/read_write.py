@@ -6,6 +6,7 @@ Created on Mon Nov  7 16:55:11 2022
 """
 
 import emfile
+import logging
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import scipy.io
@@ -13,10 +14,13 @@ from pathlib import Path
 from glob import glob
 from zipfile import ZipFile
 import starfile
+
 import eulerangles
 
 from .tomogram import Tomogram
 from .particle import Particle
+
+logger = logging.getLogger(__name__)
 
 
 def em_format(particle) -> list:
@@ -108,10 +112,10 @@ def write_emc_mat(
         mat_full = scipy.io.loadmat(inp_path, simplify_cells=True, mat_dtype=True)
         mat_geom = mat_full["subTomoMeta"]["cycle000"]["geometry"]
     except Exception as e:
-        print("Unable to open original matlab file, was it moved?")
+        logger.error("Unable to open original matlab file, was it moved?")
         raise e
 
-    print(f"Processing {len(keep_ids)} tomograms for saving")
+    logger.info(f"Processing {len(keep_ids)} tomograms for saving")
 
     tomograms_with_particles = set(keep_ids.keys())
 
@@ -119,10 +123,10 @@ def write_emc_mat(
 
     for tomo_id, particles in keep_ids.items():
         if len(particles) == 0:
-            print(f"Skipping {tomo_id} (no particles)")
+            logger.warning(f"Skipping {tomo_id} (no particles)")
             continue
 
-        print(f"Processing {tomo_id} with {len(particles)} particles")
+        logger.info(f"Processing {tomo_id} with {len(particles)} particles")
         table_rows = list()
         mat_table = mat_geom[tomo_id]
         for particle_id in particles:
@@ -157,7 +161,7 @@ def write_emc_mat(
         if "tomoName" in map_back:
             map_back["tomoName"] = filter_metadata_section(map_back["tomoName"])
 
-    print(f"Final geometry contains {len(new_geom)} tomograms")
+    logger.info(f"Final geometry contains {len(new_geom)} tomograms")
     scipy.io.savemat(out_path, mdict=mat_full)
 
 
@@ -270,7 +274,7 @@ def read_multiple_tomograms(
         if idx == num_images:
             break
         tomograms[gkey] = read_emc_tomogram(geom, gkey)
-        print("Tomo {}/{}: {}".format(idx + 1, total_tomos, gkey))
+        logger.debug("Tomo {}/{}: {}".format(idx + 1, total_tomos, gkey))
     return tomograms
 
 
@@ -311,10 +315,12 @@ def read_emc_mat(filename: str, cycle="cycle000", geom_key="geometry") -> dict |
         full_geom = scipy.io.loadmat(filename, simplify_cells=True)["subTomoMeta"][
             cycle
         ][geom_key]
-    except NotImplementedError:
+    except NotImplementedError as e:
         # Occurs if file is formatted for older versions of matlab
-        print(".mat file is from an old version of matlab. Please update the file.")
-        return None
+        logger.error(
+            ".mat file is from an old version of matlab. Please update the file."
+        )
+        raise e
 
     return full_geom
 
@@ -470,7 +476,7 @@ def read_multiple_tomograms_raw_data(
         if idx == num_images:
             break
         tomogram_data[gkey] = read_emc_tomogram_raw_data(geom, gkey)
-        print("Tomo {}/{}: {}".format(idx + 1, total_tomos, gkey))
+        logger.debug("Tomo {}/{}: {}".format(idx + 1, total_tomos, gkey))
     return tomogram_data
 
 

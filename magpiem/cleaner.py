@@ -5,9 +5,12 @@ Created on Mon Nov  7 16:54:48 2022
 @author: Frank
 """
 
+import logging
 import numpy as np
 from typing import Tuple, Any
 from .utilities import within
+
+logger = logging.getLogger(__name__)
 
 
 class Cleaner:
@@ -36,6 +39,7 @@ class Cleaner:
         self.ori_range = ori_range
         self.curv_range = curv_range
         self.flipped_ori_range = flipped_ori_range
+        logger.debug(f"Cleaner initialized: {self}")
 
     @staticmethod
     def from_user_params(
@@ -116,7 +120,9 @@ class Cleaner:
         assert target_dist != 0, "Target distance cannot be 0"
         if target_dist < 0:
             target_dist = abs(target_dist)
-            print("Target distance must be > 0, correcting to ", target_dist)
+            logger.warning(
+                "Target distance must be > 0, correcting to {}".format(target_dist)
+            )
         return (
             (
                 (target_dist - dist_tol) ** 2
@@ -148,12 +154,14 @@ class Cleaner:
 
         if not within(angle_ideal, (0, 180)):
             angle_ideal = angle_ideal % 180
-            print("Angle between adjacent particles must be between 0 and 180 degrees")
-            print("Corrected angle: ", angle_ideal)
+            logger.warning(
+                "Angle between adjacent particles must be between 0 and 180 degrees"
+            )
+            logger.warning("Corrected angle: {}".format(angle_ideal))
         elif not within(angle_tolerance, (0, 180)):
             angle_tolerance = angle_tolerance % 180
-            print("Angle tolerance must be between 0 and 180 degrees")
-            print("Corrected tolerance: ", angle_tolerance)
+            logger.warning("Angle tolerance must be between 0 and 180 degrees")
+            logger.warning("Corrected tolerance: {}".format(angle_tolerance))
         min_ang = angle_ideal - angle_tolerance
         max_ang = angle_ideal + angle_tolerance
 

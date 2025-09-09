@@ -4,12 +4,15 @@ Caching functions for the MagpiEM Dash application.
 """
 
 import plotly.graph_objects as go
+import logging
 
 from .plotting_helpers import (
     create_lattice_plot_from_raw_data,
     create_particle_plot_from_raw_data,
 )
-from .read_write import load_single_tomogram_raw_data
+from .read_write import load_single_tomogram_raw_data  #
+
+log = logging.getLogger(__name__)
 
 # Global cache configuration
 MAX_CACHE_SIZE = 5
@@ -53,7 +56,7 @@ def _get_or_create_cache_entry(
 
     # Use only tomogram name as cache key
     cache_key = tomogram_name
-    print(f"DEBUG: Looking for cache key: {cache_key}")
+    log.debug(f"Looking for cache key: {cache_key}")
 
     if cache_key in session_cache:
         cached_item = session_cache.pop(cache_key)
@@ -79,12 +82,12 @@ def _add_to_cache_and_evict(session_cache: dict, cache_key: str, item, max_size:
         Maximum cache size
     """
     session_cache[cache_key] = item
-    print(f"DEBUG: Added to cache with key: {cache_key}")
+    log.debug(f"Added to cache with key: {cache_key}")
 
     if len(session_cache) > max_size:
         oldest_key = next(iter(session_cache))
         session_cache.pop(oldest_key)
-        print(f"DEBUG: Evicted cache entry: {oldest_key}")
+        log.debug(f"Evicted cache entry: {oldest_key}")
 
 
 def get_cached_tomogram_data(
@@ -156,14 +159,14 @@ def get_cached_tomogram_figure(
     go.Figure | None
         Tomogram figure or None if loading failed
     """
-    print(f"DEBUG: get_cached_tomogram_figure called for {tomogram_name}")
-    print(f"DEBUG: cone_size={cone_size}, show_removed={show_removed}")
+    log.debug(f"get_cached_tomogram_figure called for {tomogram_name}")
+    log.debug(f"cone_size={cone_size}, show_removed={show_removed}")
 
     session_cache, cached_figure = _get_or_create_cache_entry(
         tomogram_name, session_key, cone_size, show_removed
     )
 
-    print(f"DEBUG: Cache hit: {cached_figure is not None}")
+    log.debug(f"Cache hit: {cached_figure is not None}")
 
     if cached_figure is not None:
         # Add lattice IDs to trace text for click detection
@@ -175,14 +178,14 @@ def get_cached_tomogram_figure(
                         trace.text = [lattice_id] * len(trace.x)
                 except (ValueError, IndexError, AttributeError):
                     pass
-        print("DEBUG: Returning cached figure")
+        log.debug("Returning cached figure")
         return cached_figure
 
     # Cached figure does not exist, needs to be created
-    print("DEBUG: Creating new figure")
+    log.debug("Creating new figure")
     raw_data = load_single_tomogram_raw_data(data_path, tomogram_name)
     if raw_data is None:
-        print("DEBUG: Failed to load raw data")
+        log.error("Failed to load raw data")
         return None
 
     # Make lattice plot if possible, otherwise simple plot
@@ -200,7 +203,7 @@ def get_cached_tomogram_figure(
             selected_lattices=None,
         )
 
-    print("DEBUG: Created new figure, adding to cache")
+    log.debug("Created new figure, adding to cache")
     cache_key = tomogram_name
     _add_to_cache_and_evict(session_cache, cache_key, figure, MAX_CACHE_SIZE)
 
@@ -249,11 +252,6 @@ def preload_tomograms(
         next_index = (current_index + i) % len(tomogram_names)
         next_tomo_name = tomogram_names[next_index]
 
-        # Skip preloading if no lattice data exists for this tomogram
-        if next_tomo_name not in lattice_data:
-            print(f"DEBUG: Skipping preload for {next_tomo_name} - no lattice data")
-            continue
-
         session_cache, cached_figure = _get_or_create_cache_entry(
             next_tomo_name, session_key, cone_size, show_removed
         )
@@ -269,7 +267,7 @@ def preload_tomograms(
                 )
 
             except Exception as e:
-                print(f"Pre-loading failed for {next_tomo_name}: {e}")
+                log.warning(f"Pre-loading failed for {next_tomo_name}: {e}")
                 continue
 
 
@@ -277,7 +275,7 @@ def clear_cache(session_key: str):
     """Clear all cached figures for a session."""
     if session_key in __preloaded_tomograms:
         __preloaded_tomograms[session_key].clear()
-        print(f"Cleared cache for session {session_key}")
+        log.info(f"Cleared cache for session {session_key}")
 
 
 def get_cache_functions():

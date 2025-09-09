@@ -6,6 +6,7 @@ Created on Mon Nov  7 16:54:48 2022
 """
 
 import math
+import logging
 from collections import defaultdict
 import numpy as np
 
@@ -13,6 +14,8 @@ from .cleaner import Cleaner
 from .particle import Particle
 from .utilities import within
 from .plotting_helpers import colour_range, create_lattice_plot_from_raw_data
+
+logger = logging.getLogger(__name__)
 
 WHITE = "#FFFFFF"
 GREY = "#646464"
@@ -284,7 +287,7 @@ class Tomogram:
             Dict
         """
         if len(self.lattices.keys()) < 2:
-            print("Skipping tomo {}, contains no lattices".format(self.name))
+            logger.warning("Skipping tomo {}, contains no lattices".format(self.name))
             return
         arr_dict = {}
         for ind, arr in self.lattices.items():
