@@ -5,7 +5,6 @@ Callback functions for the MagpiEM Dash application.
 
 import base64
 import datetime
-import glob
 import logging
 import os
 import uuid
@@ -615,17 +614,6 @@ def register_callbacks(app, cache_functions, temp_file_dir, cleaning_params_dir)
 
         num_img_dict = {0: 1, 1: 5, 2: -1}
         num_images = num_img_dict[num_images]
-
-        all_files = glob.glob(temp_file_dir + "*")
-        all_files = [
-            file for file in all_files if not file.endswith("_clean_params.yml")
-        ]
-        if all_files:
-            logger.info("Pre-existing temp files found, removing: %s", all_files)
-            for f in all_files:
-                pass
-                # Fix next
-                # os.remove(f)
 
         save_dash_upload(filename, contents, temp_file_dir)
 

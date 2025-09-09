@@ -19,6 +19,7 @@ from dash.long_callback import DiskcacheLongCallbackManager
 from .callbacks import register_callbacks
 from .plot_cache import get_cache_functions
 from .layout import create_main_layout
+from .utilities import setup_cleanup_handlers
 
 # Constants
 TEMP_FILE_DIR = "cache/"
@@ -76,9 +77,12 @@ def main(open_browser=True, log_level=logging.WARNING):
 
     if not os.path.exists(TEMP_FILE_DIR):
         os.makedirs(TEMP_FILE_DIR)
-    
+
     if not os.path.exists(CLEANING_PARAMS_DIR):
         os.makedirs(CLEANING_PARAMS_DIR)
+
+    # Set up cleanup handlers to clear cache on termination
+    setup_cleanup_handlers(TEMP_FILE_DIR)
 
     # Set up the layout
     app.layout = create_main_layout()
