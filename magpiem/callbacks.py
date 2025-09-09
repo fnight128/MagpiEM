@@ -702,7 +702,7 @@ def register_callbacks(app, cache_functions, temp_file_dir, cleaning_params_dir)
                 return prev_vals
         except (FileNotFoundError, yaml.YAMLError, KeyError):
             logger.info(
-                f"Couldn't find or read a previous cleaning file for {filename}."
+                f"Couldn't find or read a previous cleaning file for {filename} at {cleaning_params_dir}."
             )
             raise PreventUpdate
 
