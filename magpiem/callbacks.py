@@ -12,12 +12,14 @@ import uuid
 from pathlib import Path
 from time import time
 
+import diskcache
 import numpy as np
 import plotly.graph_objects as go
 import yaml
 from dash import State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Input, Output
+from dash.long_callback import DiskcacheLongCallbackManager
 
 from .cleaner import Cleaner
 from .particle import Particle
@@ -621,7 +623,9 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         if all_files:
             logger.info("Pre-existing temp files found, removing: %s", all_files)
             for f in all_files:
-                os.remove(f)
+                pass
+                # Fix next
+                # os.remove(f)
 
         save_dash_upload(filename, contents, temp_file_dir)
 
@@ -711,16 +715,18 @@ def register_callbacks(app, cache_functions, temp_file_dir):
     @app.callback(
         Output("progress-processing", "value"),
         Input("interval-processing", "n_intervals"),
+        State("store-cleaning-progress", "data"),
     )
-    def update_progress(_):
-        # This will be updated by the cleaning process
-        return 0
+    def update_progress(_, progress_data):
+        """Update progress bar from stored progress data."""
+        return progress_data if progress_data else 0
 
     @app.callback(
         Output("button-next-Tomogram", "disabled"),
         Output("collapse-clean", "is_open"),
         Output("collapse-save", "is_open"),
         Output("store-lattice-data", "data"),
+        Output("store-cleaning-progress", "data"),
         State("inp-dist-goal", "value"),
         State("inp-dist-tol", "value"),
         State("inp-ori-goal", "value"),
@@ -737,9 +743,21 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         Input("button-full-clean", "n_clicks"),
         Input("button-preview-clean", "n_clicks"),
         prevent_initial_call=True,
-        long_callback=True,
+        background=True,
+        # Disable buttons during cleaning
+        running=[
+            (Output("button-full-clean", "disabled"), True, False),
+            (Output("button-preview-clean", "disabled"), True, False),
+            (
+                Output("progress-processing", "style"),
+                {"visibility": "visible"},
+                {"visibility": "hidden"},
+            ),
+        ],
+        progress=Output("store-cleaning-progress", "data"),
     )
     def run_cleaning(
+        set_progress: callable,
         dist_goal: float,
         dist_tol: float,
         ori_goal: float,
@@ -757,13 +775,14 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         clicks2,
     ):
         if not clicks or clicks2:
-            return True, True, False, {}
+            return True, True, False, {}, 0
 
         if not tomogram_raw_data:
             logger.warning("No tomogram data available for cleaning")
-            return True, True, False, {}
+            return True, True, False, {}, 0
 
-        # Clear cache when cleaning starts since all cached figures will be invalid
+        # Clear cache when cleaning starts since all cached figures will need to be
+        # replotted with lattice data
         if session_key:
             clear_cache(session_key)
 
@@ -795,7 +814,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         full_geom = read_emc_mat(data_path)
         if full_geom is None:
             logger.error("Failed to load .mat file")
-            return True, True, False, {}
+            return True, True, False, {}, 0
 
         logger.info(f"Processing {total_tomos} tomograms...")
 
@@ -816,6 +835,9 @@ def register_callbacks(app, cache_functions, temp_file_dir):
             clean_total_time += time() - t0
             clean_count += 1
 
+            progress_percent = int((clean_count / total_tomos) * 100)
+            set_progress(progress_percent)
+
             # Only calculate time remaining every 10 tomograms to reduce overhead
             if clean_count % 10 == 0 or clean_count == total_tomos:
                 tomos_remaining = total_tomos - clean_count
@@ -825,7 +847,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
                     datetime.timedelta(seconds=secs_remaining)
                 ).split(".")[0]
                 logger.info(
-                    f"Progress: {clean_count}/{total_tomos} - Time remaining: {formatted_time_remaining}"
+                    f"Progress: {clean_count}/{total_tomos} ({progress_percent}%) - Time remaining: {formatted_time_remaining}"
                 )
 
         logger.info("Saving cleaning parameters")
@@ -850,7 +872,9 @@ def register_callbacks(app, cache_functions, temp_file_dir):
 
         with open(temp_file_dir + clean_yaml_name, "w") as yaml_file:
             yaml_file.write(yaml.safe_dump(cleaning_params_dict))
-        return False, False, True, lattice_data
+
+        set_progress(100)
+        return False, False, True, lattice_data, 100
 
     @app.callback(
         Output("store-cache-cleared", "data"),

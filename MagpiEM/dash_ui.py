@@ -13,13 +13,15 @@ import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import load_figure_template
 from dash_extensions.enrich import DashProxy, MultiplexerTransform
 from flask import Flask
+import diskcache
+from dash.long_callback import DiskcacheLongCallbackManager
 
 from .callbacks import register_callbacks
 from .cache import get_cache_functions
 from .layout import create_main_layout
 
 # Constants
-TEMP_FILE_DIR = "upload_cache/"
+TEMP_FILE_DIR = "cache/"
 
 
 def configure_logging(level=logging.WARNING):
@@ -53,12 +55,18 @@ def main(open_browser=True, log_level=logging.WARNING):
         # Help was requested or invalid arguments
         return
     server = Flask(__name__)
+
+    # Set up diskcache for background callbacks
+    cache = diskcache.Cache(f"./{TEMP_FILE_DIR}")
+    long_callback_manager = DiskcacheLongCallbackManager(cache)
+
     app = DashProxy(
         server=server,
         external_stylesheets=[dbc.themes.SOLAR],
         transforms=[MultiplexerTransform()],
         title="MagpiEM",
         update_title=None,  # Prevent "Updating..." title
+        long_callback_manager=long_callback_manager,
     )
     load_figure_template("SOLAR")
 

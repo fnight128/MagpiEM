@@ -166,3 +166,4 @@ cython_debug/
 *.csv
 *.dll
 /test/screenshots
+/cache
