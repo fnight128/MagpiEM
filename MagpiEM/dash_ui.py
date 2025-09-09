@@ -22,6 +22,7 @@ from .layout import create_main_layout
 
 # Constants
 TEMP_FILE_DIR = "cache/"
+CLEANING_PARAMS_DIR = "past_cleaning_params/"
 
 
 def configure_logging(level=logging.WARNING):
@@ -75,13 +76,16 @@ def main(open_browser=True, log_level=logging.WARNING):
 
     if not os.path.exists(TEMP_FILE_DIR):
         os.makedirs(TEMP_FILE_DIR)
+    
+    if not os.path.exists(CLEANING_PARAMS_DIR):
+        os.makedirs(CLEANING_PARAMS_DIR)
 
     # Set up the layout
     app.layout = create_main_layout()
 
     # Get cache functions and register callbacks
     cache_functions = get_cache_functions()
-    register_callbacks(app, cache_functions, TEMP_FILE_DIR)
+    register_callbacks(app, cache_functions, TEMP_FILE_DIR, CLEANING_PARAMS_DIR)
 
     if open_browser:
         webbrowser.open("http://localhost:8050/")

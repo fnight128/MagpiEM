@@ -54,7 +54,7 @@ TEMP_TRACE_NAME = "selected_particle_trace"
 logger = logging.getLogger(__name__)
 
 
-def register_callbacks(app, cache_functions, temp_file_dir):
+def register_callbacks(app, cache_functions, temp_file_dir, cleaning_params_dir):
     """Register all callbacks with the Dash app."""
 
     # Unpack cache functions
@@ -696,7 +696,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
             "allow flips",
         ]
         try:
-            with open(temp_file_dir + clean_yaml_name, "r") as prev_yaml:
+            with open(cleaning_params_dir + clean_yaml_name, "r") as prev_yaml:
                 prev_yaml = yaml.safe_load(prev_yaml)
                 prev_vals = [prev_yaml[key] for key in clean_keys]
                 return prev_vals
@@ -870,7 +870,7 @@ def register_callbacks(app, cache_functions, temp_file_dir):
         else:
             clean_yaml_name = "unknown_file_clean_params.yml"
 
-        with open(temp_file_dir + clean_yaml_name, "w") as yaml_file:
+        with open(cleaning_params_dir + clean_yaml_name, "w") as yaml_file:
             yaml_file.write(yaml.safe_dump(cleaning_params_dict))
 
         set_progress(100)
