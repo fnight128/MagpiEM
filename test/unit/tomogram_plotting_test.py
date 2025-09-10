@@ -86,8 +86,6 @@ def test_tomogram_plotting():
         assert fig is not None
         assert len(test_tomo.lattices) > 1
 
-        return test_tomo, fig
-
     except Exception as e:
         log_test_failure(test_name, e, logger)
         raise

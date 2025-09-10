@@ -12,7 +12,7 @@ from scipy.spatial.transform import Rotation as R
 import scipy.io
 from pathlib import Path
 from glob import glob
-import glob as glob_module
+import glob as glob
 import os
 import atexit
 import signal
@@ -291,7 +291,7 @@ def clear_cache_directory(cache_dir):
     logger.info("Clearing cache directory: %s", cache_dir)
 
     try:
-        cache_files = glob_module.glob(os.path.join(cache_dir, "*"))
+        cache_files = glob.glob(os.path.join(cache_dir, "*"))
 
         for file_path in cache_files:
             if os.path.isfile(file_path):
@@ -632,7 +632,6 @@ def write_relion_star(keep_ids: dict, out_path: str, inp_path: str):
     starfile.write(rln_dict, out_path)
 
 
-# Callback helper functions for file operations
 def process_uploaded_file(
     filename, contents, num_images, temp_file_dir, save_dash_upload, get_tomogram_names
 ):
