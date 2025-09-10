@@ -8,11 +8,11 @@ from pathlib import Path
 
 import numpy as np
 
-from .cleaner import Cleaner
+from .classes.cleaner import Cleaner
 
 # python fallbacks incase necessary
-from .tomogram import Tomogram
-from .particle import Particle
+from .classes.tomogram import Tomogram
+from .classes.particle import Particle
 
 logger = logging.getLogger(__name__)
 

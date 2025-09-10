@@ -12,13 +12,18 @@ from scipy.spatial.transform import Rotation as R
 import scipy.io
 from pathlib import Path
 from glob import glob
+import glob as glob_module
+import os
+import atexit
+import signal
+import sys
 from zipfile import ZipFile
 import starfile
 
 import eulerangles
 
-from .tomogram import Tomogram
-from .particle import Particle
+from ..processing.classes.tomogram import Tomogram
+from ..processing.classes.particle import Particle
 
 logger = logging.getLogger(__name__)
 
@@ -276,6 +281,63 @@ def read_multiple_tomograms(
         tomograms[gkey] = read_emc_tomogram(geom, gkey)
         logger.debug("Tomo {}/{}: {}".format(idx + 1, total_tomos, gkey))
     return tomograms
+
+
+def clear_cache_directory(cache_dir):
+    """Clear all files from the cache directory except cleaning parameters."""
+    if not os.path.exists(cache_dir):
+        return
+
+    logger.info("Clearing cache directory: %s", cache_dir)
+
+    try:
+        cache_files = glob_module.glob(os.path.join(cache_dir, "*"))
+
+        for file_path in cache_files:
+            if os.path.isfile(file_path):
+                try:
+                    # Skip dash diskcache - dash will handle them itself, and leads to errors if we interfere
+                    # cache.db may remain, but not large enough to matter. reset on next run regardless
+                    if (
+                        file_path.endswith(".db")
+                        or file_path.endswith(".db-shm")
+                        or file_path.endswith(".db-wal")
+                    ):
+                        continue
+
+                    os.remove(file_path)
+                    logger.debug("Removed cached file: %s", file_path)
+                except OSError as e:
+                    logger.warning("Could not remove cached file %s: %s", file_path, e)
+
+        logger.info("Cache directory cleared successfully")
+    except Exception as e:
+        logger.error("Error clearing cache directory: %s", e)
+
+
+def setup_cleanup_handlers(cache_dir):
+    """Set up signal handlers and atexit handlers to clear cache on termination."""
+    logger = logging.getLogger(__name__)
+
+    # "frame" necessary for signature
+    def cleanup_handler(signum=None, frame=None):
+        """Handle cleanup on termination."""
+        logger.info("Application terminating, clearing cache...")
+        clear_cache_directory(cache_dir)
+        # ensure proper termination
+        if signum:
+            sys.exit(0)
+
+    # run on normal exit
+    atexit.register(cleanup_handler)
+
+    # run on various termination signals
+    signal.signal(signal.SIGINT, cleanup_handler)  # Ctrl+C
+    signal.signal(signal.SIGTERM, cleanup_handler)  # Termination signal
+
+    # on windows, also SIGBREAK
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, cleanup_handler)
 
 
 def read_single_tomogram(filename: str, tomogram_name: str, **kwargs) -> Tomogram:

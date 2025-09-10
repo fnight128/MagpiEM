@@ -16,10 +16,10 @@ from flask import Flask
 import diskcache
 from dash.long_callback import DiskcacheLongCallbackManager
 
-from .callbacks import register_callbacks
-from .plot_cache import get_cache_functions
+from .callbacks_manager import register_callbacks
+from ..plotting.plot_cache import get_cache_functions
 from .layout import create_main_layout
-from .utilities import setup_cleanup_handlers
+from ..io.io_utils import setup_cleanup_handlers
 
 # Constants
 TEMP_FILE_DIR = "cache/"

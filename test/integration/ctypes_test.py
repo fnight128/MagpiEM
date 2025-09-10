@@ -3,6 +3,7 @@ import numpy as np
 import time
 import sys
 import pytest
+import logging
 from pathlib import Path
 
 test_root = Path(__file__).parent.parent
@@ -20,11 +21,11 @@ from test_utils import (
 
 setup_test_environment()
 
-from magpiem.read_write import read_emc_mat, read_single_tomogram
-from magpiem.tomogram import Tomogram
-from magpiem.particle import Particle
-from magpiem.cleaner import Cleaner
-from magpiem.cpp_integration import setup_cpp_library, clean_tomo_with_cpp
+from magpiem.io.io_utils import read_emc_mat, read_single_tomogram
+from magpiem.processing.classes.tomogram import Tomogram
+from magpiem.processing.classes.particle import Particle
+from magpiem.processing.classes.cleaner import Cleaner
+from magpiem.processing.cpp_integration import setup_cpp_library, clean_tomo_with_cpp
 
 logger = setup_test_logging()
 
@@ -795,8 +796,8 @@ def create_cone_plot_from_lattices(
     test_data: np.ndarray, lattice_assignments: list[int], title: str, filename: str
 ) -> None:
     """Create a cone plot from lattice assignments for debugging"""
-    from magpiem.tomogram import Tomogram
-    from magpiem.particle import Particle
+    from magpiem.processing.classes.tomogram import Tomogram
+    from magpiem.processing.classes.particle import Particle
 
     # Create tomogram and particles
     test_tomo = create_test_tomogram()

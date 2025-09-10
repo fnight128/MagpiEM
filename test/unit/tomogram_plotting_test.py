@@ -22,8 +22,8 @@ from test_utils import (
 
 setup_test_environment()
 
-from magpiem.read_write import read_single_tomogram
-from magpiem.cleaner import Cleaner
+from magpiem.io.io_utils import read_single_tomogram
+from magpiem.processing.classes.cleaner import Cleaner
 
 logger = setup_test_logging()
 

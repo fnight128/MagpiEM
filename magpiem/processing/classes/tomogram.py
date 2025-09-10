@@ -12,8 +12,8 @@ import numpy as np
 
 from .cleaner import Cleaner
 from .particle import Particle
-from .utilities import within
-from .plotting_helpers import colour_range, create_lattice_plot_from_raw_data
+from ...utils import within
+from ...plotting.plotting_utils import colour_range, create_lattice_plot_from_raw_data
 
 logger = logging.getLogger(__name__)
 

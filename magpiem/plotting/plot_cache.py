@@ -6,11 +6,11 @@ Plot caching functions for the MagpiEM Dash application.
 import plotly.graph_objects as go
 import logging
 
-from .plotting_helpers import (
+from .plotting_utils import (
     create_lattice_plot_from_raw_data,
     create_particle_plot_from_raw_data,
 )
-from .read_write import load_single_tomogram_raw_data  #
+from ..io.io_utils import load_single_tomogram_raw_data
 
 log = logging.getLogger(__name__)
 
