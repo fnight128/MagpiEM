@@ -1,92 +1,45 @@
 import ctypes
+import pathlib
 import numpy as np
 import time
 import sys
-import pytest
 import logging
-from pathlib import Path
 
-test_root = Path(__file__).parent.parent
-sys.path.insert(0, str(test_root))
-
-from test_utils import (
-    TestConfig,
-    setup_test_logging,
-    get_test_data_path,
-    log_test_start,
-    log_test_success,
-    log_test_failure,
-    setup_test_environment,
-)
-
-setup_test_environment()
+# Add the parent directory to the path to ensure we use the local magpiem module
+current_dir = pathlib.Path(__file__).parent.absolute()
+parent_dir = current_dir.parent.parent
+sys.path.insert(0, str(parent_dir))
 
 from magpiem.io.io_utils import read_emc_mat, read_single_tomogram
 from magpiem.processing.classes.tomogram import Tomogram
 from magpiem.processing.classes.particle import Particle
 from magpiem.processing.classes.cleaner import Cleaner
 from magpiem.processing.cpp_integration import setup_cpp_library, clean_tomo_with_cpp
+from test.test_utils import TestConfig, get_test_data_path
 
-logger = setup_test_logging()
+# Set up logging
+logger = logging.getLogger(__name__)
 
+# Updated paths for test folder location
 TEST_DATA_FILE = get_test_data_path(TestConfig.TEST_DATA_LARGE)
-TEST_TOMO_NAME = TestConfig.TEST_TOMO_LARGE
+TEST_TOMO_NAME = TestConfig.TEST_TOMO_STANDARD
+# appropriate values for test tomogram
 TEST_CLEANER_VALUES = TestConfig.TEST_CLEANER_VALUES
-
-
-@pytest.fixture
-def c_lib():
-    """Fixture to provide the C++ library."""
-    return setup_cpp_library()
-
-
-@pytest.fixture
-def test_data():
-    """Fixture to provide test particle data."""
-    return load_particle_data()
-
-
-@pytest.fixture
-def test_cleaner():
-    """Fixture to provide a test cleaner."""
-    return Cleaner.from_user_params(*TEST_CLEANER_VALUES)
-
-
-@pytest.fixture
-def test_params():
-    """Fixture to provide test parameters."""
-    test_cleaner = Cleaner.from_user_params(*TEST_CLEANER_VALUES)
-    min_dist, max_dist = test_cleaner.dist_range
-    min_ori, max_ori = test_cleaner.ori_range
-    min_curv, max_curv = test_cleaner.curv_range
-    min_lattice_size = test_cleaner.min_lattice_size
-    min_neighbours = test_cleaner.min_neighbours
-
-    return {
-        "min_dist": min_dist,
-        "max_dist": max_dist,
-        "min_ori": min_ori,
-        "max_ori": max_ori,
-        "min_curv": min_curv,
-        "max_curv": max_curv,
-        "min_lattice_size": min_lattice_size,
-        "min_neighbours": min_neighbours,
-    }
 
 
 def load_particle_data() -> np.ndarray:
     """Load particle data from the test file"""
     test_data = np.array(read_emc_mat(str(TEST_DATA_FILE))[TEST_TOMO_NAME], dtype=float)
     test_data = test_data[
-        :, [10, 11, 12, 22, 23, 24]
-    ]  # Extract position and orientation columns
+                :, [10, 11, 12, 22, 23, 24]
+                ]  # Extract position and orientation columns
     return test_data
 
 
 def load_test_data() -> (
-    tuple[
-        np.ndarray, Cleaner, tuple[float, float, float, float, float, float, int, int]
-    ]
+        tuple[
+            np.ndarray, Cleaner, tuple[float, float, float, float, float, float, int, int]
+        ]
 ):
     """Load test data and create Cleaner object"""
     test_cleaner = Cleaner.from_user_params(*TEST_CLEANER_VALUES)
@@ -137,12 +90,12 @@ def setup_test_tomogram() -> Tomogram:
 
 
 def run_cpp_test(
-    c_lib,
-    test_data: np.ndarray,
-    test_name: str,
-    python_reference: list[int],
-    test_func,
-    *args,
+        c_lib,
+        test_data: np.ndarray,
+        test_name: str,
+        python_reference: list[int],
+        test_func,
+        *args,
 ) -> tuple[list[int], float]:
     """Generic function to run C++ tests with common setup and validation"""
     logger.info(f"TEST {test_name}")
@@ -189,70 +142,46 @@ def create_test_function(cpp_func_name: str, setup_steps: list[str] = None) -> c
     return test_func
 
 
-def test_cpp_distance_only(c_lib, test_data, test_params):
+def test_cpp_distance_only(
+        c_lib,
+        test_data: np.ndarray,
+        min_dist: float,
+        max_dist: float,
+        python_reference: list[int],
+) -> tuple[list[int], float]:
     """Test C++ distance-only neighbour finding"""
-    test_name = "Distance-only neighbour finding"
-    log_test_start(test_name, logger)
 
-    try:
-        # Get Python reference results
-        test_cleaner = Cleaner.from_user_params(*TEST_CLEANER_VALUES)
-        test_tomo = read_single_tomogram(str(TEST_DATA_FILE), TEST_TOMO_NAME)
-        test_tomo.set_clean_params(test_cleaner)
-        test_tomo.find_particle_neighbours(test_cleaner.dist_range)
-        python_reference = [
-            len(particle.neighbours) for particle in test_tomo.all_particles
-        ]
+    def distance_test(c_lib, c_array, num_particles, results_array, min_dist, max_dist):
+        # Convert numpy array to Python list for the C++ extension
+        data_list = [float(val) for val in c_array]
+        results = c_lib.find_neighbours(data_list, num_particles, min_dist, max_dist)
+        # Copy results back to the results array
+        for i in range(num_particles):
+            results_array[i] = results[i]
 
-        def distance_test(
-            c_lib, c_array, num_particles, results_array, min_dist, max_dist
-        ):
-            # Convert numpy array to Python list for the C++ extension
-            data_list = [float(val) for val in c_array]
-            results = c_lib.find_neighbours(
-                data_list, num_particles, min_dist, max_dist
-            )
-            # Copy results back to the results array
-            for i in range(num_particles):
-                results_array[i] = results[i]
-
-        result = run_cpp_test(
-            c_lib,
-            test_data,
-            "1: Distance-only neighbour finding",
-            python_reference,
-            distance_test,
-            test_params["min_dist"],
-            test_params["max_dist"],
-        )
-
-        log_test_success(test_name, logger)
-        return result
-
-    except Exception as e:
-        log_test_failure(test_name, e, logger)
-        raise
+    return run_cpp_test(
+        c_lib,
+        test_data,
+        "1: Distance-only neighbour finding",
+        python_reference,
+        distance_test,
+        min_dist,
+        max_dist,
+    )
 
 
-def test_cpp_orientation_only(c_lib, test_data, test_params):
+def test_cpp_orientation_only(
+        c_lib,
+        test_data: np.ndarray,
+        min_dist: float,
+        max_dist: float,
+        min_ori: float,
+        max_ori: float,
+        python_reference: list[int],
+) -> tuple[list[int], float]:
     """Test C++ orientation filtering alone (after distance filtering)"""
-    test_name = "Orientation filtering"
-    log_test_start(test_name, logger)
 
-    try:
-        # Get Python reference results
-        test_cleaner = Cleaner.from_user_params(*TEST_CLEANER_VALUES)
-        test_tomo = read_single_tomogram(str(TEST_DATA_FILE), TEST_TOMO_NAME)
-        test_tomo.set_clean_params(test_cleaner)
-        test_tomo.find_particle_neighbours(test_cleaner.dist_range)
-        # Apply orientation filtering to each particle
-        for particle in test_tomo.all_particles:
-            particle.filter_neighbour_orientation(test_cleaner.ori_range, None)
-        python_reference = [
-            len(particle.neighbours) for particle in test_tomo.all_particles
-        ]
-
-        def orientation_test(
+    def orientation_test(
             c_lib,
             c_array,
             num_particles,
@@ -261,58 +190,42 @@ def test_cpp_orientation_only(c_lib, test_data, test_params):
             max_dist,
             min_ori,
             max_ori,
-        ):
-            # Convert numpy array to Python list for the C++ extension
-            data_list = [float(val) for val in c_array]
-            # find neighbours
-            c_lib.find_neighbours(data_list, num_particles, min_dist, max_dist)
-            # filter by orientation
-            results = c_lib.filter_by_orientation(
-                data_list, num_particles, min_ori, max_ori
-            )
-            # Copy results back
-            for i in range(num_particles):
-                results_array[i] = results[i]
+    ):
+        # Convert numpy array to Python list for the C++ extension
+        data_list = [float(val) for val in c_array]
+        # find neighbours
+        c_lib.find_neighbours(data_list, num_particles, min_dist, max_dist)
+        # filter by orientation
+        results = c_lib.filter_by_orientation(data_list, num_particles, min_ori, max_ori)
+        # Copy results back
+        for i in range(num_particles):
+            results_array[i] = results[i]
 
-        result = run_cpp_test(
-            c_lib,
-            test_data,
-            "2: Orientation filtering",
-            python_reference,
-            orientation_test,
-            test_params["min_dist"],
-            test_params["max_dist"],
-            test_params["min_ori"],
-            test_params["max_ori"],
-        )
-
-        log_test_success(test_name, logger)
-        return result
-
-    except Exception as e:
-        log_test_failure(test_name, e, logger)
-        raise
+    return run_cpp_test(
+        c_lib,
+        test_data,
+        "2: Orientation filtering",
+        python_reference,
+        orientation_test,
+        min_dist,
+        max_dist,
+        min_ori,
+        max_ori,
+    )
 
 
-def test_cpp_curvature_only(c_lib, test_data, test_params):
+def test_cpp_curvature_only(
+        c_lib,
+        test_data: np.ndarray,
+        min_dist: float,
+        max_dist: float,
+        min_curv: float,
+        max_curv: float,
+        python_reference: list[int],
+) -> tuple[list[int], float]:
     """Test C++ curvature filtering alone (after distance filtering)"""
-    test_name = "Curvature filtering"
-    log_test_start(test_name, logger)
 
-    try:
-        # Get Python reference results
-        test_cleaner = Cleaner.from_user_params(*TEST_CLEANER_VALUES)
-        test_tomo = read_single_tomogram(str(TEST_DATA_FILE), TEST_TOMO_NAME)
-        test_tomo.set_clean_params(test_cleaner)
-        test_tomo.find_particle_neighbours(test_cleaner.dist_range)
-        # Apply curvature filtering to each particle
-        for particle in test_tomo.all_particles:
-            particle.filter_curvature(test_cleaner.curv_range)
-        python_reference = [
-            len(particle.neighbours) for particle in test_tomo.all_particles
-        ]
-
-        def curvature_test(
+    def curvature_test(
             c_lib,
             c_array,
             num_particles,
@@ -321,86 +234,64 @@ def test_cpp_curvature_only(c_lib, test_data, test_params):
             max_dist,
             min_curv,
             max_curv,
-        ):
-            # Convert numpy array to Python list for the C++ extension
-            data_list = [float(val) for val in c_array]
-            # find neighbours
-            c_lib.find_neighbours(data_list, num_particles, min_dist, max_dist)
-            # filter by curvature
-            results = c_lib.filter_by_curvature(
-                data_list, num_particles, min_curv, max_curv
-            )
-            # Copy results back
-            for i in range(num_particles):
-                results_array[i] = results[i]
+    ):
+        # Convert numpy array to Python list for the C++ extension
+        data_list = [float(val) for val in c_array]
+        # find neighbours
+        c_lib.find_neighbours(data_list, num_particles, min_dist, max_dist)
+        # filter by curvature
+        results = c_lib.filter_by_curvature(data_list, num_particles, min_curv, max_curv)
+        # Copy results back
+        for i in range(num_particles):
+            results_array[i] = results[i]
 
-        result = run_cpp_test(
-            c_lib,
-            test_data,
-            "3: Curvature filtering",
-            python_reference,
-            curvature_test,
-            test_params["min_dist"],
-            test_params["max_dist"],
-            test_params["min_curv"],
-            test_params["max_curv"],
-        )
-
-        log_test_success(test_name, logger)
-        return result
-
-    except Exception as e:
-        log_test_failure(test_name, e, logger)
-        raise
+    return run_cpp_test(
+        c_lib,
+        test_data,
+        "3: Curvature filtering",
+        python_reference,
+        curvature_test,
+        min_dist,
+        max_dist,
+        min_curv,
+        max_curv,
+    )
 
 
-def test_cpp_full_pipeline(test_data, test_cleaner):
+def test_cpp_full_pipeline(
+        test_data: np.ndarray,
+        test_cleaner: Cleaner,
+        python_reference: list[int],
+) -> tuple[list[int], float]:
     """Test C++ full pipeline"""
-    test_name = "Full pipeline"
-    log_test_start(test_name, logger)
+    logger.info("TEST 4: Full pipeline")
 
-    try:
-        # Get Python reference results
-        test_tomo = read_single_tomogram(str(TEST_DATA_FILE), TEST_TOMO_NAME)
-        test_tomo.set_clean_params(test_cleaner)
-        test_tomo.autoclean()
-        python_reference = [
-            len(particle.neighbours) for particle in test_tomo.all_particles
-        ]
+    # Convert test_data to the format expected by cpp_integration
+    # test_data is numpy array, but cpp_integration expects list of [[[x,y,z], [rx,ry,rz]], ...]
+    tomogram_raw_data = []
+    for particle in test_data:
+        pos = particle[:3]  # x, y, z
+        orient = particle[3:]  # rx, ry, rz
+        tomogram_raw_data.append([pos, orient])
 
-        # Convert test_data to the format expected by cpp_integration
-        # test_data is numpy array, but cpp_integration expects list of [[[x,y,z], [rx,ry,rz]], ...]
-        tomogram_raw_data = []
-        for particle in test_data:
-            pos = particle[:3]  # x, y, z
-            orient = particle[3:]  # rx, ry, rz
-            tomogram_raw_data.append([pos, orient])
+    start_time = time.time()
+    lattice_assignments = clean_tomo_with_cpp(tomogram_raw_data, test_cleaner)
+    test_time = time.time() - start_time
 
-        start_time = time.time()
-        lattice_assignments = clean_tomo_with_cpp(tomogram_raw_data, test_cleaner)
-        test_time = time.time() - start_time
+    # Convert lattice assignments back to list format for comparison
+    counts_cpp = [0] * len(test_data)
+    for lattice_id, particle_indices in lattice_assignments.items():
+        for particle_idx in particle_indices:
+            counts_cpp[particle_idx] = lattice_id
 
-        # Convert lattice assignments back to list format for comparison
-        counts_cpp = [0] * len(test_data)
-        for lattice_id, particle_indices in lattice_assignments.items():
-            for particle_idx in particle_indices:
-                counts_cpp[particle_idx] = lattice_id
+    # Use lattice-specific verification
+    verify_lattice_assignments(python_reference, counts_cpp, "Full pipeline", test_data)
 
-        # Use lattice-specific verification
-        verify_lattice_assignments(
-            python_reference, counts_cpp, "Full pipeline", test_data
-        )
-
-        log_test_success(test_name, logger)
-        return counts_cpp, test_time
-
-    except Exception as e:
-        log_test_failure(test_name, e, logger)
-        raise
+    return counts_cpp, test_time
 
 
 def calculate_python_reference(
-    test_data: np.ndarray, test_cleaner: Cleaner
+        test_data: np.ndarray, test_cleaner: Cleaner
 ) -> tuple[dict[str, list[int]], float]:
     """Calculate Python reference results for all filtering stages"""
     logger.info("Calculating Python reference results...")
@@ -482,7 +373,7 @@ def calculate_python_reference(
 
 
 def verify_counts(
-    python_counts: list[int], cpp_counts: list[int], test_name: str
+        python_counts: list[int], cpp_counts: list[int], test_name: str
 ) -> None:
     """Verify that C++ results match Python reference"""
     differences = [
@@ -498,10 +389,10 @@ def verify_counts(
 
 
 def verify_lattice_assignments(
-    python_lattices: list[int],
-    cpp_lattices: list[int],
-    test_name: str,
-    test_data: np.ndarray = None,
+        python_lattices: list[int],
+        cpp_lattices: list[int],
+        test_name: str,
+        test_data: np.ndarray = None,
 ) -> None:
     """Verify that C++ lattice assignments group particles the same way as Python"""
     # Create mapping from particle index to lattice ID for both implementations
@@ -554,12 +445,18 @@ def verify_lattice_assignments(
                 "Python Lattice Assignments",
                 "python_lattices.html",
             )
-            # Save both plots for comparison
-            cpp_fig.write_html("cpp_lattices.html")
-            python_fig.write_html("python_lattices.html")
-            logger.info(
-                "      Saved debug plots: cpp_lattices.html, python_lattices.html"
-            )
+            test_tomo = setup_test_tomogram()
+            test_tomo.autoclean()
+            for lattice in test_tomo.lattices:
+                if lattice == 0:
+                    continue
+                logger.debug(f"Lattice {lattice}")
+                cpp_fig.add_trace(
+                    test_tomo.lattice_trace(
+                        lattice, cone_size=-1, colour="#000000", opacity=1.0
+                    )
+                )
+            cpp_fig.write_html("combined_lattices.html")
 
         # Find differences with meaningful comparisons
         python_only = python_group_sets - cpp_group_sets
@@ -572,7 +469,7 @@ def verify_lattice_assignments(
             if python_only:
                 logger.warning(f"      Python-only lattices ({len(python_only)}):")
                 for i, group in enumerate(list(python_only)[:3]):
-                    logger.warning(f"        Lattice {i+1}: {sorted(group)}")
+                    logger.warning(f"        Lattice {i + 1}: {sorted(group)}")
 
                     # Find closest C++ match for comparison
                     best_match = None
@@ -605,7 +502,7 @@ def verify_lattice_assignments(
             if cpp_only:
                 logger.warning(f"      C++-only lattices ({len(cpp_only)}):")
                 for i, group in enumerate(list(cpp_only)[:3]):
-                    logger.warning(f"        Lattice {i+1}: {sorted(group)}")
+                    logger.warning(f"        Lattice {i + 1}: {sorted(group)}")
 
                     # Find closest Python match for comparison
                     best_match = None
@@ -638,7 +535,7 @@ def verify_lattice_assignments(
 
 
 def verify_neighbour_relationships(
-    c_lib, test_data: np.ndarray, test_cleaner: Cleaner, test_name: str
+        c_lib, test_data: np.ndarray, test_cleaner: Cleaner, test_name: str
 ) -> None:
     """Verify that C++ and Python have identical neighbour relationships at each stage"""
     logger.info(f"TEST {test_name}: Neighbour relationship verification")
@@ -768,11 +665,11 @@ def verify_neighbour_relationships(
 
 
 def compare_results(
-    cpp_distance_time: float,
-    cpp_orientation_time: float,
-    cpp_curvature_time: float,
-    cpp_full_time: float,
-    python_time: float,
+        cpp_distance_time: float,
+        cpp_orientation_time: float,
+        cpp_curvature_time: float,
+        cpp_full_time: float,
+        python_time: float,
 ) -> None:
     """Display performance metrics"""
     speedup_distance = (
@@ -793,11 +690,9 @@ def compare_results(
 
 
 def create_cone_plot_from_lattices(
-    test_data: np.ndarray, lattice_assignments: list[int], title: str, filename: str
+        test_data: np.ndarray, lattice_assignments: list[int], title: str, filename: str
 ) -> None:
     """Create a cone plot from lattice assignments for debugging"""
-    from magpiem.processing.classes.tomogram import Tomogram
-    from magpiem.processing.classes.particle import Particle
 
     # Create tomogram and particles
     test_tomo = create_test_tomogram()
