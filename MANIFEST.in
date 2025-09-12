@@ -1,0 +1,8 @@
+include README.md
+include LICENSE
+include requirements.txt
+include magpiem/cpp/*.cpp
+include magpiem/cpp/*.hpp
+recursive-include magpiem *
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]

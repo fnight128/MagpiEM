@@ -1,9 +1,7 @@
-from .classes import Tomogram, Particle, Cleaner
-from .read_write import (
+from .processing.classes.tomogram import Tomogram
+from .processing.classes.particle import Particle
+from .processing.classes.cleaner import Cleaner
+from .io.io_utils import (
     read_emc_mat,
     write_emc_mat,
-    read_relion_star,
-    write_relion_star,
-    write_emfile,
-    zip_files_with_extension,
 )

@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0", "wheel", "numpy"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "magpiem"
@@ -34,9 +34,8 @@ dependencies = ["numpy",
 "starfile",
 "eulerangles"]
 
-
 [project.scripts]
-magpiem = "magpiem:dash_ui.main"
+magpiem = "magpiem.dash.dash_ui:main"
 
 [project.urls]
 "Homepage" = "https://github.com/fnight128/MagpiEM"

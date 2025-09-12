@@ -9,6 +9,7 @@ dash_bootstrap_components==1.4.1
 dash_bootstrap_templates==1.0.8
 dash_extensions==1.0.1
 dash_daq==0.5.0
+dash[diskcache]
 flask==2.3.2
 imodmodel
 emfile
