@@ -100,26 +100,19 @@ public:
         }
     }
 
-    // Generic filter function using a predicate with vectorised optimisations
+    // Generic filter function using a predicate that returns bool
     template<typename Predicate>
     void filter_neighbours_generic(float* data, int num_particles, const std::string& filter_name, 
-                                  float min_value, float max_value, int* results, Predicate predicate) {
-        log_message(LOG_INFO, "Filtering neighbours by %s for %d particles (%s: %.2f - %.2f)", 
-                   filter_name.c_str(), num_particles, filter_name.c_str(), min_value, max_value);
-        
+                                  int* results, Predicate predicate) {
         ensure_initialized(data, num_particles);
         
-        // Filter existing neighbours using the provided predicate
         for (int i = 0; i < num_particles; i++) {
             Particle& current = particles[i];
             temp_neighbours.clear();
             temp_neighbours.reserve(current.neighbours.size());
             
             for (Particle* neighbour : current.neighbours) {
-                float value = predicate(current, *neighbour);
-                
-                // Check if value is within range
-                if (value >= min_value && value <= max_value) {
+                if (predicate(current, *neighbour)) {
                     temp_neighbours.push_back(neighbour);
                 }
             }
@@ -129,21 +122,39 @@ public:
         }
     }
 
-    void filter_by_orientation(float* data, int num_particles, float min_orientation, float max_orientation, int* results) {
-        auto orientation_predicate = [](const Particle& current, const Particle& neighbour) -> float {
-            float dot_product = Particle::dot_product(current.orientation, neighbour.orientation);
-            return std::max(-1.0f, std::min(1.0f, dot_product));
-        };
+    void filter_by_orientation(float* data, int num_particles, float min_orientation, float max_orientation, bool allow_flips, int* results) {
+        log_message(LOG_INFO, "Filtering neighbours by orientation for %d particles (orientation: %.2f - %.2f%s)", 
+                   num_particles, min_orientation, max_orientation,
+                   allow_flips ? ", allow_flips: true" : "");
         
-        filter_neighbours_generic(data, num_particles, "orientation", min_orientation, max_orientation, results, orientation_predicate);
+        if (allow_flips) {
+            auto orientation_predicate_flips = [min_orientation, max_orientation](const Particle& current, const Particle& neighbour) -> bool {
+                float dot_product = Particle::dot_product(current.orientation, neighbour.orientation);
+                dot_product = std::max(-1.0f, std::min(1.0f, dot_product));
+                return (dot_product >= min_orientation && dot_product <= max_orientation) ||
+                       (dot_product >= -max_orientation && dot_product <= -min_orientation);
+            };
+            filter_neighbours_generic(data, num_particles, "orientation", results, orientation_predicate_flips);
+        } else {
+            auto orientation_predicate = [min_orientation, max_orientation](const Particle& current, const Particle& neighbour) -> bool {
+                float dot_product = Particle::dot_product(current.orientation, neighbour.orientation);
+                dot_product = std::max(-1.0f, std::min(1.0f, dot_product));
+                return dot_product >= min_orientation && dot_product <= max_orientation;
+            };
+            filter_neighbours_generic(data, num_particles, "orientation", results, orientation_predicate);
+        }
     }
 
     void filter_by_curvature(float* data, int num_particles, float min_curvature, float max_curvature, int* results) {
-        auto curvature_predicate = [](const Particle& current, const Particle& neighbour) -> float {
-            return current.curvature(neighbour);
+        log_message(LOG_INFO, "Filtering neighbours by curvature for %d particles (curvature: %.2f - %.2f)", 
+                   num_particles, min_curvature, max_curvature);
+        
+        auto curvature_predicate = [min_curvature, max_curvature](const Particle& current, const Particle& neighbour) -> bool {
+            float curvature_value = current.curvature(neighbour);
+            return curvature_value >= min_curvature && curvature_value <= max_curvature;
         };
         
-        filter_neighbours_generic(data, num_particles, "curvature", min_curvature, max_curvature, results, curvature_predicate);
+        filter_neighbours_generic(data, num_particles, "curvature", results, curvature_predicate);
     }
 
     void assign_lattices(float* data, int num_particles, unsigned int min_neighbours, unsigned int min_lattice_size, int* results) {
@@ -216,12 +227,13 @@ public:
         log_message(LOG_DEBUG, "  Orientation: %.2f - %.2f", params->min_orientation, params->max_orientation);
         log_message(LOG_DEBUG, "  Curvature: %.2f - %.2f", params->min_curvature, params->max_curvature);
         log_message(LOG_DEBUG, "  Min lattice size: %d, Min neighbours: %d", params->min_lattice_size, params->min_neighbours);
+        log_message(LOG_DEBUG, "  Allow flips: %s", params->allow_flips ? "true" : "false");
         
         // Reset state to ensure we process the new data and avoid leakage
         reset();
         
         find_neighbours(data, num_particles, params->min_distance, params->max_distance, results);
-        filter_by_orientation(data, num_particles, params->min_orientation, params->max_orientation, results);
+        filter_by_orientation(data, num_particles, params->min_orientation, params->max_orientation, params->allow_flips, results);
         filter_by_curvature(data, num_particles, params->min_curvature, params->max_curvature, results);
         assign_lattices(data, num_particles, params->min_neighbours, params->min_lattice_size, results);
     }
@@ -233,7 +245,7 @@ public:
         // Distance neighbours
         find_neighbours(data, num_particles, params->min_distance, params->max_distance, offsets /*reuse temp buffer*/);
         // Orientation filter
-        filter_by_orientation(data, num_particles, params->min_orientation, params->max_orientation, offsets);
+        filter_by_orientation(data, num_particles, params->min_orientation, params->max_orientation, params->allow_flips, offsets);
         // Curvature filter
         filter_by_curvature(data, num_particles, params->min_curvature, params->max_curvature, offsets);
 
@@ -268,8 +280,8 @@ void find_neighbours(float* data, int num_particles, float min_distance_squared,
     g_processor.find_neighbours(data, num_particles, min_distance_squared, max_distance_squared, results);
 }
 
-void filter_by_orientation(float* data, int num_particles, float min_orientation, float max_orientation, int* results) {
-    g_processor.filter_by_orientation(data, num_particles, min_orientation, max_orientation, results);
+void filter_by_orientation(float* data, int num_particles, float min_orientation, float max_orientation, bool allow_flips, int* results) {
+    g_processor.filter_by_orientation(data, num_particles, min_orientation, max_orientation, allow_flips, results);
 }
 
 void filter_by_curvature(float* data, int num_particles, float min_curvature, float max_curvature, int* results) {

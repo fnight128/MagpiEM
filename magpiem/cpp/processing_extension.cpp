@@ -52,10 +52,13 @@ static PyObject* py_filter_by_orientation(PyObject* self, PyObject* args) {
     PyObject* data_obj;
     int num_particles;
     float min_orientation, max_orientation;
+    int allow_flips_int = 0;
     
-    if (!PyArg_ParseTuple(args, "Oiff", &data_obj, &num_particles, &min_orientation, &max_orientation)) {
+    if (!PyArg_ParseTuple(args, "Oiff|i", &data_obj, &num_particles, &min_orientation, &max_orientation, &allow_flips_int)) {
         return NULL;
     }
+    
+    bool allow_flips = (allow_flips_int != 0);
     
     float* data = new float[num_particles * 6];
     for (int i = 0; i < num_particles * 6; i++) {
@@ -65,7 +68,7 @@ static PyObject* py_filter_by_orientation(PyObject* self, PyObject* args) {
     
     int* results = new int[num_particles];
     
-    filter_by_orientation(data, num_particles, min_orientation, max_orientation, results);
+    filter_by_orientation(data, num_particles, min_orientation, max_orientation, allow_flips, results);
     
     PyObject* results_list = PyList_New(num_particles);
     for (int i = 0; i < num_particles; i++) {
