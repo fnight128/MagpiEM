@@ -27,6 +27,8 @@ from ..processing.classes.particle import Particle
 
 logger = logging.getLogger(__name__)
 
+X_180_ROTATION_MATRIX = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
+
 
 def em_format(particle) -> list:
     """
@@ -93,8 +95,53 @@ def purge_blank_tomos(mat_dict: dict, blank_tomos: set) -> dict:
             purge_blank_tomos(value, blank_tomos)
 
 
+def flip_emc_particles(mat_geom: dict, particles_to_flip: dict) -> dict:
+    """
+    Invert the orientation of particles in the mat_geom dictionary
+
+    Modifies columns 13-15 (euler angles) and 16-24 (rotation matrix) for each particle
+
+    Parameters
+    ----------
+    mat_geom: dict
+        Dictionary of tomograms and their particles from .mat file
+    particles_to_flip: dict
+        Dictionary of particles to flip
+        in the format {tomo_id: [particle_id1, particle_id2, ...]}
+    Returns
+    -------
+    dict
+        Identical mat_geom with particles flipped
+    """
+
+    for tomo_id, particles in particles_to_flip.items():
+        for particle_id in particles:
+            rotation_matrix = np.array(mat_geom[tomo_id][particle_id][16:25]).reshape(
+                3, 3
+            )
+            new_rotation_matrix = X_180_ROTATION_MATRIX @ rotation_matrix
+
+            # Ensure rotation matrix still represents a proper rotation
+            # Test every time, as improper rotations could quietly cause
+            # severe issues during alignment and averaging
+            assert np.isclose(
+                np.linalg.det(new_rotation_matrix), 1.0, rtol=1e-05, atol=1e-05
+            ), f"Determinant of rotation matrix is not 1, got {np.linalg.det(new_rotation_matrix)}"
+
+            mat_geom[tomo_id][particle_id][16:25] = new_rotation_matrix.flatten()
+            euler_angles = R.from_matrix(new_rotation_matrix).as_euler(
+                "zxz", degrees=True
+            )
+            mat_geom[tomo_id][particle_id][13:16] = euler_angles
+    return mat_geom
+
+
 def write_emc_mat(
-    keep_ids: dict, out_path, inp_path, purge_blanks: bool = True
+    keep_ids: dict,
+    out_path,
+    inp_path,
+    purge_blanks: bool = True,
+    flip_particles: dict = None,
 ) -> None:
     """
     Write a new emClarity .mat database with only the particles defined
@@ -111,6 +158,9 @@ def write_emc_mat(
     purge_blanks : bool, optional
         Whether tomograms with no particles should be removed.
         Defaults to True
+    flip_particles : dict, optional
+        Dictionary of particles to flip in the format {tomo_id: [particle_id1, particle_id2, ...]}
+        Defaults to None (no particles flipped)
 
     """
     try:
@@ -119,6 +169,11 @@ def write_emc_mat(
     except Exception as e:
         logger.error("Unable to open original matlab file, was it moved?")
         raise e
+
+    # Apply particle flipping if specified
+    if flip_particles is not None:
+        logger.info("Applying particle flips...")
+        mat_geom = flip_emc_particles(mat_geom, flip_particles)
 
     logger.info(f"Processing {len(keep_ids)} tomograms for saving")
 
