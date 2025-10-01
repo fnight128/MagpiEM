@@ -153,6 +153,7 @@ def _clean_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> dict:
         clean_params.curv_range[1],  # max_curvature
         clean_params.min_lattice_size,
         clean_params.min_neighbours,
+        clean_params.allow_flips,
     ]
 
     c_lib = setup_cpp_library()

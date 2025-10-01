@@ -20,6 +20,7 @@ class Cleaner:
     dist_range: tuple
     ori_range: tuple
     curv_range: tuple
+    allow_flips: bool
     flipped_ori_range: tuple
 
     def __init__(
@@ -30,6 +31,7 @@ class Cleaner:
         dist_range: tuple[float],
         ori_range: tuple[float],
         curv_range: tuple[float],
+        allow_flips: bool,
         flipped_ori_range: tuple[float] | None,
     ):
         self.cc_threshold = cc_thresh
@@ -38,6 +40,7 @@ class Cleaner:
         self.dist_range = dist_range
         self.ori_range = ori_range
         self.curv_range = curv_range
+        self.allow_flips = allow_flips
         self.flipped_ori_range = flipped_ori_range
         logger.debug(f"Cleaner initialized: {self}")
 
@@ -68,6 +71,7 @@ class Cleaner:
             dist_range,
             ori_range,
             curv_range,
+            allow_flips,
             flipped_ori_range,
         )
 
