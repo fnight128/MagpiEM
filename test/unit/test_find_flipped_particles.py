@@ -34,7 +34,8 @@ import numpy as np
 
 logger = setup_test_logging()
 
-TEST_DATA_FILE = get_test_data_path("test_data_flipped.mat")
+TEST_DATA_FILE = get_test_data_path("small_lattice_flipped.mat")
+ORIGINAL_DATA_FILE = get_test_data_path("small_lattice_to_flip.mat")
 TEST_TOMO_NAME = TestConfig.TEST_TOMO_STANDARD
 TEST_CLEANER_VALUES = TestConfig.TEST_CLEANER_VALUES
 
@@ -89,26 +90,86 @@ def test_find_flipped_particles():
         logger.info(f"Assigned cleaning parameters: {test_cleaner}")
         logger.info(f"Allow flips: {test_cleaner.allow_flips}")
 
-        logger.info("Cleaning...")
-        lattice_data = test_tomo.autoclean()
+        # Run neighbour finding (required for flip detection)
+        logger.info("Running neighbour finding...")
+        test_tomo.find_particle_neighbours()
+        logger.info("Neighbour finding completed")
 
-        logger.info(f"Cleaning complete. Found {len(lattice_data)} lattices")
-        for lattice_id, particles in lattice_data.items():
-            if lattice_id == 0:
-                logger.debug(
-                    f"Lattice {lattice_id}: {len(particles)} unassigned particles"
-                )
-            else:
-                logger.debug(f"Lattice {lattice_id}: {len(particles)} particles")
+        # Manually assign all particles to lattice 1
+        for particle in test_tomo.all_particles:
+            particle.set_lattice(1)
+        test_tomo.lattices[1] = test_tomo.all_particles
+
+        logger.info(
+            f"Manually assigned {len(test_tomo.all_particles)} particles to lattice 1"
+        )
 
         logger.info("Finding flipped particles...")
         flipped_particles = test_tomo.find_flipped_particles()
 
         logger.info(f"Found {len(flipped_particles)} flipped particles")
-        for particle in flipped_particles:
-            logger.debug(f"Flipped particle ID: {particle.particle_id}")
 
-        # Create visualisation with flipped particles highlighted
+        # Debug: Check which particles are being identified as flipped
+        flipped_particle_ids = [p.particle_id for p in flipped_particles]
+        logger.info(f"Flipped particle IDs (first 10): {flipped_particle_ids[:10]}")
+
+        for particle in flipped_particles[:5]:  # Log first 5 for debugging
+            logger.debug(
+                f"Flipped particle ID: {particle.particle_id}, Lattice: {particle.lattice}, Direction: {getattr(particle, 'direction', 'None')}"
+            )
+
+        # Compare with original dataset to find actually flipped particles
+        logger.info(
+            "Comparing with original dataset to identify actually flipped particles..."
+        )
+
+        # original, unflipped tomogram
+        original_tomo = read_single_tomogram(str(ORIGINAL_DATA_FILE), TEST_TOMO_NAME)
+        if original_tomo:
+            # Create particle lookup by ID
+            orig_particles = {p.particle_id: p for p in original_tomo.all_particles}
+            flip_particles = {p.particle_id: p for p in test_tomo.all_particles}
+
+            actually_flipped = []
+            for particle_id in orig_particles:
+                if particle_id in flip_particles:
+                    orig_particle = orig_particles[particle_id]
+                    flip_particle = flip_particles[particle_id]
+
+                    # Use the dot_orientation method to compare orientations
+                    dot_prod = orig_particle.dot_orientation(flip_particle)
+                    if abs(dot_prod + 1) < 0.1:  # Close to -1 means 180° rotation
+                        actually_flipped.append(particle_id)
+
+            logger.info(
+                f"Found {len(actually_flipped)} actually flipped particles in dataset"
+            )
+
+            # Check overlap with our detected flipped particles
+            detected_ids = [p.particle_id for p in flipped_particles]
+            overlap = set(actually_flipped) & set(detected_ids)
+            logger.info(
+                f"Overlap between detected and truly flipped particles: {len(overlap)} particles"
+            )
+
+            assert (
+                len(actually_flipped) > 0
+            ), "No flipped particles found from original dataset, test is invalid"
+            overlap_percentage = len(overlap) / len(actually_flipped) * 100
+            logger.info(f"Overlap percentage: {overlap_percentage:.1f}%")
+
+            # Test should fail if overlap isn't perfect
+            assert len(overlap) == len(
+                actually_flipped
+            ), f"Expected perfect overlap but got {len(overlap)}/{len(actually_flipped)} particles"
+            assert set(detected_ids) == set(
+                actually_flipped
+            ), f"Detected particles {set(detected_ids)} don't match actually flipped particles {set(actually_flipped)}"
+        else:
+            logger.info(
+                "No actually flipped particles found - cannot calculate overlap percentage"
+            )
+
         logger.info("Visualising...")
 
         # Create the base lattice plot

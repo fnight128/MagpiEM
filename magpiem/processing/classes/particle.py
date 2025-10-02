@@ -292,7 +292,9 @@ class Particle:
         for neighbour in self.neighbours:
             if hasattr(neighbour, "direction") and neighbour.direction is not None:
                 continue
-            if self.dot_orientation(neighbour) in self.tomo.cleaning_params.ori_range:
+            if within(
+                self.dot_orientation(neighbour), self.tomo.cleaning_params.ori_range
+            ):
                 neighbour.direction = self.direction
             else:
                 neighbour.direction = -self.direction
