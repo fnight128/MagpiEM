@@ -165,7 +165,8 @@ static PyObject* py_clean_particles(PyObject* self, PyObject* args) {
         (float)PyFloat_AsDouble(PyList_GetItem(params_obj, 4)), // min_curvature
         (float)PyFloat_AsDouble(PyList_GetItem(params_obj, 5)), // max_curvature
         (unsigned int)PyLong_AsLong(PyList_GetItem(params_obj, 6)), // min_lattice_size
-        (unsigned int)PyLong_AsLong(PyList_GetItem(params_obj, 7))  // min_neighbours
+        (unsigned int)PyLong_AsLong(PyList_GetItem(params_obj, 7)), // min_neighbours
+        (bool)PyLong_AsLong(PyList_GetItem(params_obj, 8))  // allow_flips
     );
     
     int* results = new int[num_particles];
@@ -183,6 +184,17 @@ static PyObject* py_clean_particles(PyObject* self, PyObject* args) {
     return results_list;
 }
 
+static PyObject* py_set_log_level(PyObject* self, PyObject* args) {
+    int level;
+    
+    if (!PyArg_ParseTuple(args, "i", &level)) {
+        return NULL;
+    }
+    
+    set_log_level(level);
+    Py_RETURN_NONE;
+}
+
 // Method definitions
 static PyMethodDef processing_methods[] = {
     {"find_neighbours", py_find_neighbours, METH_VARARGS, "Find neighbours based on distance"},
@@ -190,6 +202,7 @@ static PyMethodDef processing_methods[] = {
     {"filter_by_curvature", py_filter_by_curvature, METH_VARARGS, "Filter neighbours by curvature"},
     {"assign_lattices", py_assign_lattices, METH_VARARGS, "Assign particles to lattices"},
     {"clean_particles", py_clean_particles, METH_VARARGS, "Run full particle cleaning pipeline"},
+    {"set_log_level", py_set_log_level, METH_VARARGS, "Set C++ log level"},
     {NULL, NULL, 0, NULL} // Sentinel
 };
 
