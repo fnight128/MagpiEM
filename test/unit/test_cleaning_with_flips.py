@@ -24,7 +24,11 @@ from test_utils import (
 )
 
 setup_test_environment()
-from magpiem.io.io_utils import read_single_tomogram, read_emc_tomogram_raw_data, read_emc_mat
+from magpiem.io.io_utils import (
+    read_single_tomogram,
+    read_emc_tomogram_raw_data,
+    read_emc_mat,
+)
 from magpiem.processing.classes.cleaner import Cleaner
 from magpiem.processing.cpp_integration import clean_tomo_with_cpp
 from magpiem.plotting.plotting_utils import create_lattice_plot_from_raw_data
@@ -45,33 +49,37 @@ def test_cleaning_with_flips():
         # Check if flipped data exists
         if not FLIPPED_DATA_FILE.exists():
             raise FileNotFoundError(f"Flipped test data not found: {FLIPPED_DATA_FILE}")
-        
+
         logger.info(f"Loading flipped test data from {FLIPPED_DATA_FILE}")
-        
+
         # Load the raw tomogram data for C++ processing
-        
+
         full_geom = read_emc_mat(str(FLIPPED_DATA_FILE))
         if full_geom is None:
             raise ValueError("Failed to load flipped mat file")
-        
-        tomo_raw_data = read_emc_tomogram_raw_data(full_geom[TEST_TOMO_NAME], TEST_TOMO_NAME)
+
+        tomo_raw_data = read_emc_tomogram_raw_data(
+            full_geom[TEST_TOMO_NAME], TEST_TOMO_NAME
+        )
         if tomo_raw_data is None:
             raise ValueError(f"Failed to extract data for tomogram: {TEST_TOMO_NAME}")
-        
+
         logger.info(f"Loaded raw data with {len(tomo_raw_data)} particles")
 
         test_cleaner = Cleaner.from_user_params(*TEST_CLEANER_VALUES, allow_flips=True)
-        
+
         logger.info(f"Cleaner allow_flips set to: {test_cleaner.allow_flips}")
         logger.info("Running C++ cleaning with flips enabled...")
-        
+
         lattice_data = clean_tomo_with_cpp(tomo_raw_data, test_cleaner)
-        
+
         logger.info(f"Cleaning completed. Found {len(lattice_data)} lattices")
-        
+
         for lattice_id, particles in lattice_data.items():
             if lattice_id == 0:
-                logger.debug(f"Lattice {lattice_id}: {len(particles)} unassigned particles")
+                logger.debug(
+                    f"Lattice {lattice_id}: {len(particles)} unassigned particles"
+                )
             else:
                 logger.debug(f"Lattice {lattice_id}: {len(particles)} particles")
 
@@ -91,7 +99,7 @@ def test_cleaning_with_flips():
         log_test_success(test_name, logger)
         logger.info(f"Cleaning with flips completed successfully")
         logger.info(f"Interactive plot saved as: {output_html}")
-        
+
         # Basic assertions
         assert fig is not None
         assert len(lattice_data) > 1
