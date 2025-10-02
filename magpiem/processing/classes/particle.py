@@ -281,6 +281,23 @@ class Particle:
     def get_neighbour_array(self, prop: str) -> np.ndarray:
         return Particle.get_property_array(self.neighbours, prop)
 
+    def find_flipped_neighbours(self) -> None:
+        """
+        Recursively assign all neighbours a direction based on their relative orientation
+        to the lattice as a whole.
+        Requires all neighbours to have been assigned.
+
+        Result will be stored in each particle's "direction" attribute
+        """
+        for neighbour in self.neighbours:
+            if hasattr(neighbour, "direction") and neighbour.direction is not None:
+                continue
+            if self.dot_orientation(neighbour) in self.tomo.cleaning_params.ori_range:
+                neighbour.direction = self.direction
+            else:
+                neighbour.direction = -self.direction
+            neighbour.find_flipped_neighbours()
+
     def to_dict(self) -> dict:
         """
         Serialise for JSON conversion
