@@ -55,6 +55,17 @@ def register_ui_callbacks(app, temp_file_dir):
             return cleaning_phase
 
     @app.callback(
+        Output("div-flip-particles", "style"),
+        Input("switch-allow-flips", "on"),
+        prevent_initial_call=True,
+    )
+    def update_flipping_switch(flipping_enabled):
+        if flipping_enabled:
+            return {"visibility": "visible"}
+        else:
+            return {"visibility": "hidden"}
+
+    @app.callback(
         Output("dropdown-tomo", "options"),
         Output("dropdown-tomo", "value"),
         Output("store-clicked-point", "data"),

@@ -236,17 +236,31 @@ def create_save_table():
     return html.Table(
         [
             html.Tr(
+                [
+                    html.Th("", style={"width": "70%"}),
+                    html.Th("", style={"width": "30%"}),
+                ]
+            ),
+            html.Tr(
                 html.Td(dbc.Button("Save Current Progress", id="button-save-progress"))
             ),
             html.Tr(
                 [
                     html.Td("Keep selected particles", id="label-keep-particles"),
-                    daq.BooleanSwitch(id="switch-keep-particles", on=True),
+                    html.Td(daq.BooleanSwitch(id="switch-keep-particles", on=True)),
                 ]
             ),
             html.Tr(
                 [
-                    html.Td("Save as:"),
+                    html.Td("Rotate flipped particles?", id="label-flip-particles"),
+                    html.Td(daq.BooleanSwitch(id="switch-flip-particles", on=False)),
+                ],
+                style={"visibility": "hidden"},
+                id="div-flip-particles",
+            ),
+            html.Tr(
+                [
+                    html.Td("Save as:", style={"vertical-align": "middle"}),
                     html.Td(
                         dbc.Input(id="input-save-filename", style={"width": "100px"})
                     ),
@@ -264,7 +278,12 @@ def create_save_table():
             html.Tr(html.Td(dbc.Button("Save Particles", id="button-save"))),
             dcc.Download(id="download-file"),
         ],
-        style={"overflow": "hidden", "margin": "3px", "width": "100%"},
+        style={
+            "overflow": "hidden",
+            "margin": "3px",
+            "width": "100%",
+            "table-layout": "fixed",
+        },
     )
 
 
