@@ -38,8 +38,8 @@ import numpy as np
 
 logger = setup_test_logging()
 
-TEST_DATA_FILE = get_test_data_path("small_lattice_flipped.mat")
-ORIGINAL_DATA_FILE = get_test_data_path("small_lattice_to_flip.mat")
+TEST_DATA_FILE = get_test_data_path("test_data_flipped.mat")
+ORIGINAL_DATA_FILE = get_test_data_path("test_data_single_lattice.mat")
 TEST_TOMO_NAME = TestConfig.TEST_TOMO_STANDARD
 TEST_CLEANER_VALUES = TestConfig.TEST_CLEANER_VALUES
 
@@ -146,33 +146,57 @@ def find_actually_flipped_particles(test_tomo):
     return actually_flipped, original_tomo
 
 
-def validate_python_flip_detection(flipped_particles, actually_flipped):
-    """Validate that Python flip detection found the correct particles."""
+def validate_flip_detection_results(detected_particle_ids, actually_flipped, implementation_name):
+    """
+    Common validation function for flip detection results from any implementation.
+    
+    Parameters
+    ----------
+    detected_particle_ids : list
+        List of particle IDs detected as flipped by the implementation
+    actually_flipped : list
+        List of particle IDs that are actually flipped (ground truth)
+    implementation_name : str
+        Name of the implementation being validated (for logging)
+    """
     # Check overlap with our detected flipped particles
-    detected_ids = [p.particle_id for p in flipped_particles]
-    overlap = set(actually_flipped) & set(detected_ids)
+    overlap = set(actually_flipped) & set(detected_particle_ids)
     logger.info(
-        f"Overlap between detected and truly flipped particles: {len(overlap)} particles"
+        f"{implementation_name} overlap between detected and truly flipped particles: {len(overlap)} particles"
     )
 
     assert (
         len(actually_flipped) > 0
     ), "No flipped particles found from original dataset, test is invalid"
     overlap_percentage = len(overlap) / len(actually_flipped) * 100
-    logger.info(f"Overlap percentage: {overlap_percentage:.1f}%")
+    logger.info(f"{implementation_name} overlap percentage: {overlap_percentage:.1f}%")
 
     # Test should fail if overlap isn't perfect
     assert len(overlap) == len(
         actually_flipped
-    ), f"Expected perfect overlap but got {len(overlap)}/{len(actually_flipped)} particles"
-    assert set(detected_ids) == set(
+    ), f"{implementation_name} expected perfect overlap but got {len(overlap)}/{len(actually_flipped)} particles"
+    assert set(detected_particle_ids) == set(
         actually_flipped
-    ), f"Detected particles {set(detected_ids)} don't match actually flipped particles {set(actually_flipped)}"
+    ), f"{implementation_name} detected particles {set(detected_particle_ids)} don't match actually flipped particles {set(actually_flipped)}"
 
 
-def test_cpp_implementation(test_tomo, test_cleaner, actually_flipped):
-    """Test the C++ debug implementation and validate results."""
-    logger.info("Testing C++ debug implementation...")
+def run_python_flip_detection(test_tomo):
+    """Run the Python flip detection implementation and return results."""
+    logger.info("Running Python flip detection...")
+    
+    # Run Python flip detection
+    flipped_particles = test_tomo.find_flipped_particles()
+    logger.info(f"Python found {len(flipped_particles)} flipped particles")
+    
+    # Convert to particle IDs
+    python_flipped_particle_ids = [p.particle_id for p in flipped_particles]
+    
+    return flipped_particles, python_flipped_particle_ids
+
+
+def run_cpp_flip_detection(test_tomo, test_cleaner):
+    """Run the C++ debug implementation and return results."""
+    logger.info("Running C++ debug implementation...")
 
     # Prepare raw data for C++ function
     raw_data = []
@@ -191,18 +215,6 @@ def test_cpp_implementation(test_tomo, test_cleaner, actually_flipped):
     debug_flipped_particle_ids = []
     for idx in debug_flipped_indices:
         debug_flipped_particle_ids.append(all_particles_list[idx].particle_id)
-
-    # Compare C++ debug results with actually flipped particles
-    if actually_flipped:
-        debug_overlap = set(debug_flipped_particle_ids) & set(actually_flipped)
-
-        # Test should fail if C++ debug overlap isn't perfect
-        assert len(debug_overlap) == len(
-            actually_flipped
-        ), f"Debug C++ expected perfect overlap but got {len(debug_overlap)}/{len(actually_flipped)} particles"
-        assert set(debug_flipped_particle_ids) == set(
-            actually_flipped
-        ), f"Debug C++ detected particles {set(debug_flipped_particle_ids)} don't match actually flipped particles {set(actually_flipped)}"
 
     return debug_flipped_indices, debug_flipped_particle_ids
 
@@ -242,9 +254,9 @@ def create_visualization(test_tomo, flipped_particles, debug_flipped_indices):
             python_flipped_trace = create_cone_traces(
                 positions=python_flipped_positions,
                 orientations=python_flipped_orientations,
-                cone_size=2.0,
+                cone_size=0.8,
                 colour="red",
-                opacity=0.9,
+                opacity=0.5,
                 lattice_id=-1,  # Dummy ID for flipped particles
             )
             python_flipped_trace.name = "Python Flipped Particles"
@@ -268,9 +280,9 @@ def create_visualization(test_tomo, flipped_particles, debug_flipped_indices):
             debug_flipped_trace = create_cone_traces(
                 positions=debug_flipped_positions,
                 orientations=debug_flipped_orientations,
-                cone_size=2.0,
+                cone_size=0.8,
                 colour="blue",
-                opacity=0.9,
+                opacity=0.5,
                 lattice_id=-2,  # Dummy ID for Debug C++ flipped particles
             )
             debug_flipped_trace.name = "Debug C++ Flipped Particles"
@@ -329,40 +341,37 @@ def test_find_flipped_particles():
         # Setup test data
         test_tomo, test_cleaner = setup_test_tomogram()
 
+        # Find actually flipped particles from original dataset
+        actually_flipped, original_tomo = find_actually_flipped_particles(test_tomo)
+
         # Run Python flip detection
-        logger.info("Finding flipped particles...")
-        flipped_particles = test_tomo.find_flipped_particles()
-        logger.info(f"Found {len(flipped_particles)} flipped particles")
-
+        flipped_particles, python_flipped_particle_ids = run_python_flip_detection(test_tomo)
+        
         # Debug: Check which particles are being identified as flipped
-        flipped_particle_ids = [p.particle_id for p in flipped_particles]
-        logger.info(f"Flipped particle IDs (first 10): {flipped_particle_ids[:10]}")
-
+        logger.info(f"Python flipped particle IDs (first 10): {python_flipped_particle_ids[:10]}")
         for particle in flipped_particles[:5]:  # Log first 5 for debugging
             logger.debug(
                 f"Flipped particle ID: {particle.particle_id}, Lattice: {particle.lattice}, Direction: {getattr(particle, 'direction', 'None')}"
             )
 
-        # Find actually flipped particles from original dataset
-        actually_flipped, original_tomo = find_actually_flipped_particles(test_tomo)
-
-        # Validate Python flip detection
-        if actually_flipped:
-            validate_python_flip_detection(flipped_particles, actually_flipped)
-
-        # Test C++ implementation
-        debug_flipped_indices, debug_flipped_particle_ids = test_cpp_implementation(
-            test_tomo, test_cleaner, actually_flipped
+        # Run C++ flip detection
+        debug_flipped_indices, debug_flipped_particle_ids = run_cpp_flip_detection(
+            test_tomo, test_cleaner
         )
 
-        # Compare Python and C++ results
-        python_flipped_ids = [p.particle_id for p in flipped_particles]
-        compare_python_cpp_results(python_flipped_ids, debug_flipped_particle_ids)
 
         # Create visualization
         fig, output_html = create_visualization(
             test_tomo, flipped_particles, debug_flipped_indices
         )
+
+                # Validate both implementations using common validation function
+        if actually_flipped:
+            validate_flip_detection_results(python_flipped_particle_ids, actually_flipped, "Python")
+            validate_flip_detection_results(debug_flipped_particle_ids, actually_flipped, "C++")
+
+        # Compare Python and C++ results
+        compare_python_cpp_results(python_flipped_particle_ids, debug_flipped_particle_ids)
 
         # Validate final results
         validate_test_results(
@@ -371,7 +380,7 @@ def test_find_flipped_particles():
             flipped_particles,
             len(test_tomo.all_particles),
             debug_flipped_indices,
-            python_flipped_ids,
+            python_flipped_particle_ids,
             debug_flipped_particle_ids,
         )
 
