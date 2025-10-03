@@ -52,11 +52,13 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
         Input("inp-cone-size", "value"),
         Input("button-set-cone-size", "n_clicks"),
         Input("switch-show-removed", "on"),
+        Input("switch-flip-particles", "on"),
         State("store-session-key", "data"),
         State("store-tomogram-data", "data"),
         State("store-lattice-data", "data"),
         State("store-selected-lattices", "data"),
         State("dropdown-tomo", "value"),
+        State("store-flips", "data"),
         prevent_initial_call=True,
     )
     def handle_plot_style_changes(
@@ -64,19 +66,22 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
         cone_size,
         cone_clicks,
         show_removed,
+        flip_particles,
         session_key,
         tomogram_raw_data,
         lattice_data,
         selected_lattices,
         selected_tomo_name,
+        flip_data,
     ):
         """Handle plot style changes and update cache accordingly."""
         logger.debug("handle_plot_style_changes called")
         logger.debug(
-            "make_cones=%s, cone_size=%s, show_removed=%s",
+            "make_cones=%s, cone_size=%s, show_removed=%s, flip_particles=%s",
             make_cones,
             cone_size,
             show_removed,
+            flip_particles,
         )
 
         if not session_key or not tomogram_raw_data or not selected_tomo_name:
@@ -101,6 +106,7 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
                 lattice_data,
                 cone_size,
                 show_removed,
+                flip_data,
             )
         except Exception as e:
             logger.debug("Failed to update cache: %s", e)
@@ -122,6 +128,8 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
         State("switch-cone-plot", "on"),
         State("inp-cone-size", "value"),
         State("switch-show-removed", "on"),
+        State("switch-flip-particles", "on"),
+        State("store-flips", "data"),
         prevent_initial_call=True,
     )
     def plot_tomo(
@@ -136,6 +144,8 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
         make_cones,
         cone_size,
         show_removed,
+        flip_particles,
+        flip_data,
     ):
         """Retrieve and plot cached tomo"""
         logger.debug("plot_tomo called with selected_tomo_name=%s", selected_tomo_name)
@@ -150,6 +160,7 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
             make_cones,
             cone_size,
             show_removed,
+            flip_data,
             get_cached_tomogram_figure,
             EMPTY_FIG,
         )
@@ -272,6 +283,8 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
         State("switch-cone-plot", "on"),
         State("inp-cone-size", "value"),
         State("switch-show-removed", "on"),
+        State("switch-flip-particles", "on"),
+        State("store-flips", "data"),
         prevent_initial_call=True,
     )
     def handle_lattice_data_cache_update(
@@ -283,6 +296,8 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
         make_cones,
         cone_size,
         show_removed,
+        flip_particles,
+        flip_data,
     ):
         """Update cache when lattice data is produced via cleaning"""
         if not session_key or not tomogram_raw_data or not selected_tomo_name:
@@ -304,6 +319,7 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
                 lattice_data,
                 cone_size,
                 show_removed,
+                flip_data,
             )
         except Exception as e:
             logger.warning(f"Failed to update cache with new lattice data: {e}")

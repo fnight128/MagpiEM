@@ -134,6 +134,7 @@ def get_cached_tomogram_figure(
     lattice_data: dict,
     cone_size: float = -1,
     show_removed: bool = False,
+    flipped_particle_indices: list = None,
 ) -> go.Figure | None:
     """
     Get tomogram figure from cache or create it if not cached.
@@ -193,6 +194,7 @@ def get_cached_tomogram_figure(
         figure = create_particle_plot_from_raw_data(
             raw_data,
             cone_size=cone_size,
+            flipped_particle_indices=flipped_particle_indices,
         )
     else:
         figure = create_lattice_plot_from_raw_data(
@@ -201,6 +203,7 @@ def get_cached_tomogram_figure(
             cone_size=cone_size,
             show_removed_particles=show_removed,
             selected_lattices=None,
+            flipped_particle_indices=flipped_particle_indices,
         )
 
     log.debug("Created new figure, adding to cache")
@@ -218,6 +221,7 @@ def preload_tomograms(
     lattice_data: dict,
     cone_size: float = -1,
     show_removed: bool = False,
+    flip_data: dict = None,
 ) -> None:
     """
     Pre-load the current and next few tomogram figures that the user is likely to view.
@@ -257,6 +261,11 @@ def preload_tomograms(
         )
         if cached_figure is None:
             try:
+                # Get flipped particle indices for this tomogram
+                flipped_particle_indices = (
+                    flip_data.get(next_tomo_name, []) if flip_data else []
+                )
+
                 figure = get_cached_tomogram_figure(
                     next_tomo_name,
                     data_path,
@@ -264,6 +273,7 @@ def preload_tomograms(
                     lattice_data,
                     cone_size,
                     show_removed,
+                    flipped_particle_indices,
                 )
 
             except Exception as e:
