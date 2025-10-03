@@ -146,10 +146,12 @@ def find_actually_flipped_particles(test_tomo):
     return actually_flipped, original_tomo
 
 
-def validate_flip_detection_results(detected_particle_ids, actually_flipped, implementation_name):
+def validate_flip_detection_results(
+    detected_particle_ids, actually_flipped, implementation_name
+):
     """
     Common validation function for flip detection results from any implementation.
-    
+
     Parameters
     ----------
     detected_particle_ids : list
@@ -183,14 +185,14 @@ def validate_flip_detection_results(detected_particle_ids, actually_flipped, imp
 def run_python_flip_detection(test_tomo):
     """Run the Python flip detection implementation and return results."""
     logger.info("Running Python flip detection...")
-    
+
     # Run Python flip detection
     flipped_particles = test_tomo.find_flipped_particles()
     logger.info(f"Python found {len(flipped_particles)} flipped particles")
-    
+
     # Convert to particle IDs
     python_flipped_particle_ids = [p.particle_id for p in flipped_particles]
-    
+
     return flipped_particles, python_flipped_particle_ids
 
 
@@ -345,10 +347,14 @@ def test_find_flipped_particles():
         actually_flipped, original_tomo = find_actually_flipped_particles(test_tomo)
 
         # Run Python flip detection
-        flipped_particles, python_flipped_particle_ids = run_python_flip_detection(test_tomo)
-        
+        flipped_particles, python_flipped_particle_ids = run_python_flip_detection(
+            test_tomo
+        )
+
         # Debug: Check which particles are being identified as flipped
-        logger.info(f"Python flipped particle IDs (first 10): {python_flipped_particle_ids[:10]}")
+        logger.info(
+            f"Python flipped particle IDs (first 10): {python_flipped_particle_ids[:10]}"
+        )
         for particle in flipped_particles[:5]:  # Log first 5 for debugging
             logger.debug(
                 f"Flipped particle ID: {particle.particle_id}, Lattice: {particle.lattice}, Direction: {getattr(particle, 'direction', 'None')}"
@@ -359,19 +365,24 @@ def test_find_flipped_particles():
             test_tomo, test_cleaner
         )
 
-
         # Create visualization
         fig, output_html = create_visualization(
             test_tomo, flipped_particles, debug_flipped_indices
         )
 
-                # Validate both implementations using common validation function
+        # Validate both implementations using common validation function
         if actually_flipped:
-            validate_flip_detection_results(python_flipped_particle_ids, actually_flipped, "Python")
-            validate_flip_detection_results(debug_flipped_particle_ids, actually_flipped, "C++")
+            validate_flip_detection_results(
+                python_flipped_particle_ids, actually_flipped, "Python"
+            )
+            validate_flip_detection_results(
+                debug_flipped_particle_ids, actually_flipped, "C++"
+            )
 
         # Compare Python and C++ results
-        compare_python_cpp_results(python_flipped_particle_ids, debug_flipped_particle_ids)
+        compare_python_cpp_results(
+            python_flipped_particle_ids, debug_flipped_particle_ids
+        )
 
         # Validate final results
         validate_test_results(

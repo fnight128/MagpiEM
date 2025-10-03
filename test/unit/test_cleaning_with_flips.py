@@ -30,7 +30,10 @@ from magpiem.io.io_utils import (
     read_emc_mat,
 )
 from magpiem.processing.classes.cleaner import Cleaner
-from magpiem.processing.cpp_integration import clean_tomo_with_cpp, clean_and_detect_flips_with_cpp
+from magpiem.processing.cpp_integration import (
+    clean_tomo_with_cpp,
+    clean_and_detect_flips_with_cpp,
+)
 from magpiem.plotting.plotting_utils import create_lattice_plot_from_raw_data
 
 logger = setup_test_logging()
@@ -69,7 +72,7 @@ def test_cleaning_with_flips():
         test_cleaner = Cleaner.from_user_params(*TEST_CLEANER_VALUES, allow_flips=True)
 
         logger.info(f"Cleaner allow_flips set to: {test_cleaner.allow_flips}")
-        
+
         # Run C++ cleaning with flips enabled
         logger.info("Running C++ cleaning with flips enabled...")
         cpp_lattice_data = clean_tomo_with_cpp(tomo_raw_data, test_cleaner)
@@ -77,49 +80,66 @@ def test_cleaning_with_flips():
 
         # Run C++ cleaning and flip detection
         logger.info("Running C++ cleaning and flip detection...")
-        cpp_flip_lattice_data, cpp_flipped_indices = clean_and_detect_flips_with_cpp(tomo_raw_data, test_cleaner)
-        logger.info(f"C++ flip detection completed. Found {len(cpp_flip_lattice_data)} lattices and {len(cpp_flipped_indices)} flipped particles")
+        cpp_flip_lattice_data, cpp_flipped_indices = clean_and_detect_flips_with_cpp(
+            tomo_raw_data, test_cleaner
+        )
+        logger.info(
+            f"C++ flip detection completed. Found {len(cpp_flip_lattice_data)} lattices and {len(cpp_flipped_indices)} flipped particles"
+        )
 
         # Run Python implementation for comparison
         logger.info("Running Python implementation for comparison...")
         test_tomo = read_single_tomogram(str(FLIPPED_DATA_FILE), TEST_TOMO_NAME)
         if test_tomo is None:
             raise ValueError(f"Failed to load tomogram: {TEST_TOMO_NAME}")
-        
+
         test_tomo.cleaning_params = test_cleaner
         test_tomo.find_particle_neighbours()
-        
+
         # Manually assign all particles to lattice 1 for Python comparison
         for particle in test_tomo.all_particles:
             particle.set_lattice(1)
         test_tomo.lattices[1] = test_tomo.all_particles
-        
+
         # Run Python cleaning
         test_tomo.clean_particles()
-        python_lattice_data = {lattice_id: list(particles) for lattice_id, particles in test_tomo.lattices.items()}
-        logger.info(f"Python cleaning completed. Found {len(python_lattice_data)} lattices")
-        
+        python_lattice_data = {
+            lattice_id: list(particles)
+            for lattice_id, particles in test_tomo.lattices.items()
+        }
+        logger.info(
+            f"Python cleaning completed. Found {len(python_lattice_data)} lattices"
+        )
+
         # Run Python flip detection
         python_flipped_particles = test_tomo.find_flipped_particles()
-        python_flipped_indices = [test_tomo.all_particles.index(p) for p in python_flipped_particles]
-        logger.info(f"Python flip detection completed. Found {len(python_flipped_indices)} flipped particles")
+        python_flipped_indices = [
+            test_tomo.all_particles.index(p) for p in python_flipped_particles
+        ]
+        logger.info(
+            f"Python flip detection completed. Found {len(python_flipped_indices)} flipped particles"
+        )
 
         # Log results for comparison
         for lattice_id, particles in cpp_lattice_data.items():
             if lattice_id == 0:
-                logger.debug(f"C++ Lattice {lattice_id}: {len(particles)} unassigned particles")
+                logger.debug(
+                    f"C++ Lattice {lattice_id}: {len(particles)} unassigned particles"
+                )
             else:
                 logger.debug(f"C++ Lattice {lattice_id}: {len(particles)} particles")
-                
+
         for lattice_id, particles in python_lattice_data.items():
             if lattice_id == 0:
-                logger.debug(f"Python Lattice {lattice_id}: {len(particles)} unassigned particles")
+                logger.debug(
+                    f"Python Lattice {lattice_id}: {len(particles)} unassigned particles"
+                )
             else:
                 logger.debug(f"Python Lattice {lattice_id}: {len(particles)} particles")
 
         # Generate comparison plots
         logger.info("Generating comparison plots...")
-        
+
         # C++ cleaning plot
         cpp_fig = create_lattice_plot_from_raw_data(
             tomogram_raw_data=tomo_raw_data,
@@ -130,7 +150,7 @@ def test_cleaning_with_flips():
         cpp_output_html = test_root / "logs" / "cleaning_with_flips_cpp_result.html"
         logger.info(f"Saving C++ interactive plot to {cpp_output_html}")
         cpp_fig.write_html(str(cpp_output_html))
-        
+
         # Python cleaning plot
         python_fig = create_lattice_plot_from_raw_data(
             tomogram_raw_data=tomo_raw_data,
@@ -138,10 +158,12 @@ def test_cleaning_with_flips():
             cone_size=10.0,
             show_removed_particles=False,
         )
-        python_output_html = test_root / "logs" / "cleaning_with_flips_python_result.html"
+        python_output_html = (
+            test_root / "logs" / "cleaning_with_flips_python_result.html"
+        )
         logger.info(f"Saving Python interactive plot to {python_output_html}")
         python_fig.write_html(str(python_output_html))
-        
+
         # Combined comparison plot
         combined_fig = create_lattice_plot_from_raw_data(
             tomogram_raw_data=tomo_raw_data,
@@ -149,7 +171,9 @@ def test_cleaning_with_flips():
             cone_size=10.0,
             show_removed_particles=False,
         )
-        combined_output_html = test_root / "logs" / "cleaning_with_flips_combined_result.html"
+        combined_output_html = (
+            test_root / "logs" / "cleaning_with_flips_combined_result.html"
+        )
         logger.info(f"Saving combined interactive plot to {combined_output_html}")
         combined_fig.write_html(str(combined_output_html))
 
@@ -158,11 +182,17 @@ def test_cleaning_with_flips():
         logger.info(f"C++ interactive plot saved as: {cpp_output_html}")
         logger.info(f"Python interactive plot saved as: {python_output_html}")
         logger.info(f"Combined interactive plot saved as: {combined_output_html}")
-        
+
         # Log comparison results
-        logger.info(f"C++ found {len(cpp_lattice_data)} lattices, {len(cpp_flipped_indices)} flipped particles")
-        logger.info(f"Python found {len(python_lattice_data)} lattices, {len(python_flipped_indices)} flipped particles")
-        logger.info(f"Flipped particles match: {set(cpp_flipped_indices) == set(python_flipped_indices)}")
+        logger.info(
+            f"C++ found {len(cpp_lattice_data)} lattices, {len(cpp_flipped_indices)} flipped particles"
+        )
+        logger.info(
+            f"Python found {len(python_lattice_data)} lattices, {len(python_flipped_indices)} flipped particles"
+        )
+        logger.info(
+            f"Flipped particles match: {set(cpp_flipped_indices) == set(python_flipped_indices)}"
+        )
 
         # Basic assertions
         assert cpp_fig is not None
