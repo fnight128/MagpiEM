@@ -9,7 +9,11 @@ from dash_extensions.enrich import Input, Output
 
 from .classes.cleaner import Cleaner, save_cleaning_parameters
 from .processing_utils import process_single_tomogram
-from .cpp_integration import clean_tomo_with_cpp, check_cpp_availability
+from .cpp_integration import (
+    clean_tomo_with_cpp,
+    check_cpp_availability,
+    clean_and_detect_flips_with_cpp,
+)
 from ..io.io_utils import read_emc_mat, read_emc_tomogram_raw_data
 from ..plotting.plot_cache import clear_cache
 
@@ -47,6 +51,7 @@ def register_processing_callbacks(app, temp_file_dir, cleaning_params_dir):
         Output("collapse-clean", "is_open"),
         Output("collapse-save", "is_open"),
         Output("store-lattice-data", "data"),
+        Output("store-flips", "data"),
         Output("store-cleaning-progress", "data"),
         State("inp-dist-goal", "value"),
         State("inp-dist-tol", "value"),
@@ -93,11 +98,11 @@ def register_processing_callbacks(app, temp_file_dir, cleaning_params_dir):
         clicks,
     ):
         if not clicks:
-            return True, True, False, {}, 0
+            return True, True, False, {}, {}, 0
 
         if not tomogram_raw_data:
             logger.warning("No tomogram data available for cleaning")
-            return True, True, False, {}, 0
+            return True, True, False, {}, {}, 0
 
         # Clear cache when cleaning starts since all cached figures will need to be
         # replotted with lattice data
@@ -127,17 +132,18 @@ def register_processing_callbacks(app, temp_file_dir, cleaning_params_dir):
         full_geom = read_emc_mat(data_path)
         if full_geom is None:
             logger.error("Failed to load .mat file")
-            return True, True, False, {}, 0
+            return True, True, False, {}, {}, 0
 
         logger.info(f"Processing {total_tomos} tomograms...")
 
         lattice_data = {}
+        flip_data = {}
         clean_count = 0
         clean_total_time = 0
 
         for tomo_name in tomo_names:
             clean_count += 1
-            lattice_result, processing_time = process_single_tomogram(
+            lattice_result, processing_time, flip_result = process_single_tomogram(
                 tomo_name,
                 full_geom,
                 clean_params,
@@ -147,11 +153,16 @@ def register_processing_callbacks(app, temp_file_dir, cleaning_params_dir):
                 clean_total_time,
                 read_emc_tomogram_raw_data,
                 clean_tomo_with_cpp,
+                clean_and_detect_flips_with_cpp,
             )
 
             if lattice_result is not None:
                 lattice_data[tomo_name] = lattice_result
                 clean_total_time += processing_time
+
+                # Store flip data if available
+                if flip_result is not None:
+                    flip_data.update(flip_result)
 
         logger.info("Saving cleaning parameters")
         save_cleaning_parameters(
@@ -170,4 +181,4 @@ def register_processing_callbacks(app, temp_file_dir, cleaning_params_dir):
         )
 
         set_progress(100)
-        return False, False, True, lattice_data, 100
+        return False, False, True, lattice_data, flip_data, 100

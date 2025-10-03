@@ -357,6 +357,7 @@ def create_store_components():
             dcc.Store(id="store-session-key", data=""),
             dcc.Store(id="store-cache-cleared", data=0),
             dcc.Store(id="store-cleaning-progress", data=0),
+            dcc.Store(id="store-flips"),
         ]
     )
 
