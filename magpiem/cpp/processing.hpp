@@ -147,8 +147,8 @@ struct Particle {
         return dot_product(displacement.data(), p.orientation);
     }
 
-    int get_neighbour_count() const {
-        return static_cast<int>(neighbours.size());
+    unsigned int get_neighbour_count() const {
+        return static_cast<unsigned int>(neighbours.size());
     }
 
     Particle* get_neighbour(int index) const {
@@ -186,6 +186,14 @@ void assign_lattices(float* data, int num_points, unsigned int min_neighbours, u
 // return neighbour lists in CSR form. Offsets has length num_points + 1. If
 // neighbours_out is nullptr, only offsets are filled (offsets[num_points] will be total entries).
 void get_cleaned_neighbours(float* data, int num_points, CleanParams* params, int* offsets, int* neighbours_out);
+// Combined cleaning and flip detection: returns lattice assignments and flipped particle flags
+void clean_and_detect_flips(float* data, int num_points, CleanParams* params, int* lattice_results, int* flipped_results);
+// Debug function for testing flip detection with manual lattice assignment
+void debug_flip_detection(float* data, int num_points, CleanParams* params, int* lattice_results, int* flipped_results);
+
+// Function to get access to processed particles (for flip detection)
+const std::vector<Particle>& get_processed_particles();
+
 void set_log_level(int level);
 #ifdef __cplusplus
 }

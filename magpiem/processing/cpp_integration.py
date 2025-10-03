@@ -108,6 +108,34 @@ def invert_lattice_assignments(results: dict) -> dict:
     return lattice_assignments
 
 
+def clean_and_detect_flips_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> tuple[dict, list]:
+    """
+    Clean tomogram data and detect flipped particles using the C++ library, with fallback to python
+
+    Parameters
+    ----------
+    tomogram_raw_data : list
+        Raw particle data in format [[[x,y,z], [rx,ry,rz]], ...]
+    clean_params : Cleaner
+        Cleaning parameters
+
+    Returns
+    -------
+    tuple[dict, list]
+        Dictionary with lattice_id -> [particle_indices] mappings and list of flipped particle indices
+    """
+    if not tomogram_raw_data:
+        return {}, []
+
+    try:
+        # Try to use C++ implementation first
+        return _clean_and_detect_flips_with_cpp(tomogram_raw_data, clean_params)
+    except ImportError as e:
+        logger.warning(f"C++ library not available: {e}")
+        logger.info("Falling back to Python implementation using Tomogram class")
+        return _clean_and_detect_flips_with_python_fallback(tomogram_raw_data, clean_params)
+
+
 def clean_tomo_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> dict:
     """
     Clean tomogram data using the C++ library, with fallback to python
@@ -134,6 +162,122 @@ def clean_tomo_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> dict:
         logger.warning(f"C++ library not available: {e}")
         logger.info("Falling back to Python implementation using Tomogram class")
         return _clean_with_python_fallback(tomogram_raw_data, clean_params)
+
+
+def _clean_and_detect_flips_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> tuple[dict, list]:
+    """Clean and detect flips using C++ library implementation."""
+    logger.debug(f"Python wrapper called with {len(tomogram_raw_data)} particles")
+    flat_data, num_particles = convert_raw_data_to_cpp_format(tomogram_raw_data)
+    logger.debug(f"Converted to {num_particles} particles")
+
+    if num_particles == 0:
+        return {}, []
+
+    # Convert parameters to Python list format expected by the extension
+    params_list = [
+        clean_params.dist_range[0],  # min_distance
+        clean_params.dist_range[1],  # max_distance
+        clean_params.ori_range[0],  # min_orientation
+        clean_params.ori_range[1],  # max_orientation
+        clean_params.curv_range[0],  # min_curvature
+        clean_params.curv_range[1],  # max_curvature
+        clean_params.min_lattice_size,
+        clean_params.min_neighbours,
+        clean_params.allow_flips,
+    ]
+    logger.debug(f"Parameters: {params_list}")
+
+    c_lib = setup_cpp_library()
+    logger.debug("Calling C++ clean_and_detect_flips function")
+
+    lattice_results, flipped_results = c_lib.clean_and_detect_flips(flat_data, num_particles, params_list)
+    logger.debug(f"C++ returned {len(flipped_results)} results, {sum(flipped_results)} flipped")
+    logger.debug(f"Lattice results: {lattice_results}")
+    logger.debug(f"Flipped results: {flipped_results}")
+
+    # Convert lattice results to dictionary format
+    lattice_assignments = invert_lattice_assignments(lattice_results)
+
+    # Convert flipped results to list of particle indices
+    flipped_particles = [i for i, is_flipped in enumerate(flipped_results) if is_flipped]
+
+    return lattice_assignments, flipped_particles
+
+
+def debug_flip_detection_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> tuple[dict, list]:
+    """
+    Debug flip detection using C++ library with manual lattice assignment.
+    
+    Parameters
+    ----------
+    tomogram_raw_data : list
+        Raw particle data in format [[[x,y,z], [rx,ry,rz]], ...]
+    clean_params : Cleaner
+        Cleaning parameters
+
+    Returns
+    -------
+    tuple[dict, list]
+        Dictionary with lattice_id -> [particle_indices] mappings and list of flipped particle indices
+    """
+    if not tomogram_raw_data or not clean_params:
+        raise ValueError("Empty data provided")
+
+    try:
+        return _debug_flip_detection_with_cpp(tomogram_raw_data, clean_params)
+    except ImportError as e:
+        logger.error(f"C++ library not available: {e}")
+        logger.info("Falling back to Python implementation using Tomogram class")
+        return _clean_and_detect_flips_with_python_fallback(tomogram_raw_data, clean_params)
+
+
+def _debug_flip_detection_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> tuple[dict, list]:
+    """Debug flip detection using C++ library implementation."""
+    flat_data, num_particles = convert_raw_data_to_cpp_format(tomogram_raw_data)
+
+    if num_particles == 0:
+        return {}, []
+
+    # Convert parameters to Python list format expected by the extension
+    params_list = [
+        clean_params.dist_range[0],  # min_distance
+        clean_params.dist_range[1],  # max_distance
+        clean_params.ori_range[0],  # min_orientation
+        clean_params.ori_range[1],  # max_orientation
+        clean_params.curv_range[0],  # min_curvature
+        clean_params.curv_range[1],  # max_curvature
+        clean_params.min_lattice_size,
+        clean_params.min_neighbours,
+        clean_params.allow_flips,
+    ]
+
+    c_lib = setup_cpp_library()
+
+    lattice_results, flipped_results = c_lib.debug_flip_detection(flat_data, num_particles, params_list)
+
+    # Convert lattice results to dictionary format
+    lattice_assignments = invert_lattice_assignments(lattice_results)
+
+    # Convert flipped results to list of particle indices
+    flipped_particles = [i for i, is_flipped in enumerate(flipped_results) if is_flipped]
+
+    return lattice_assignments, flipped_particles
+
+
+def _clean_and_detect_flips_with_python_fallback(tomogram_raw_data: list, clean_params: Cleaner) -> tuple[dict, list]:
+    """Fallback to Python implementation for cleaning and flip detection."""
+    # Create a temporary tomogram for processing
+    temp_tomo = Tomogram("temp")
+    temp_tomo.all_particles = Particle.from_array(tomogram_raw_data, temp_tomo)
+    temp_tomo.cleaning_params = clean_params
+
+    lattice_data = temp_tomo.autoclean()
+    flipped_particles = temp_tomo.find_flipped_particles()
+    
+    # Convert flipped particles to indices
+    flipped_indices = [p.particle_id for p in flipped_particles]
+
+    return lattice_data, flipped_indices
 
 
 def _clean_with_cpp(tomogram_raw_data: list, clean_params: Cleaner) -> dict:
