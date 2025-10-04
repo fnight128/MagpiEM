@@ -189,7 +189,7 @@ void get_cleaned_neighbours(float* data, int num_points, CleanParams* params, in
 // Combined cleaning and flip detection: returns lattice assignments and flipped particle flags
 void clean_and_detect_flips(float* data, int num_points, CleanParams* params, int* lattice_results, int* flipped_results);
 // Debug function for testing flip detection with manual lattice assignment
-void debug_flip_detection(float* data, int num_points, CleanParams* params, int* lattice_results, int* flipped_results);
+void debug_flip_detection(float* data, int num_points, CleanParams* params, int* lattice_results, int* flipped_results) noexcept(false);
 
 // Function to get access to processed particles (for flip detection)
 const std::vector<Particle>& get_processed_particles();

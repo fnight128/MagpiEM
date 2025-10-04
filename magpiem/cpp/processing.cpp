@@ -18,6 +18,11 @@ enum LogLevel {
 
 static LogLevel g_log_level = LOG_WARNING;
 
+// Forward declaration for template function
+template<typename ParticlePtrType>
+void perform_flip_detection(const std::vector<Particle>& particles, const std::map<unsigned int, std::vector<ParticlePtrType>>& lattice_groups, 
+                           const CleanParams* params, int* flipped_results);
+
 void log_message(LogLevel level, const char* format, ...) {
     if (level < g_log_level) {
         return; 
@@ -335,7 +340,7 @@ void clean_and_detect_flips(float* data, int num_particles, CleanParams* params,
 }
 
 // Debug function for testing flip detection with manual lattice assignment
-void debug_flip_detection(float* data, int num_particles, CleanParams* params, int* lattice_results, int* flipped_results) {
+void debug_flip_detection(float* data, int num_particles, CleanParams* params, int* lattice_results, int* flipped_results) noexcept(false) {
     log_message(LOG_INFO, "Running debug flip detection on %d particles", num_particles);
     
     // Initialize all particles as not flipped and assign to lattice 1
