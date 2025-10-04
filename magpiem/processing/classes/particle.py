@@ -5,6 +5,8 @@ Created on Mon Nov  7 16:54:48 2022
 @author: Frank
 """
 
+from __future__ import annotations
+
 import numpy as np
 from ...utils import normalise, within, clamp
 
@@ -38,9 +40,9 @@ class Particle:
     position: np.ndarray
     orientation: np.ndarray
 
-    tomo: "Tomogram"
+    tomo: Tomogram  # noqa: F821
     lattice: int = 0
-    neighbours: set["Particle"]
+    neighbours: set[Particle]
 
     def __init__(self, p_id, cc, position, orientation, tomo):
         self.particle_id = p_id
@@ -215,8 +217,8 @@ class Particle:
 
     @staticmethod
     def from_array(
-        plist: list[list], tomo: "Tomogram", ids: list[int] = None
-    ) -> set["Particle"]:
+        plist: list[list], tomo: Tomogram, ids: list[int] = None  # noqa: F821
+    ) -> set[Particle]:
         """
         Produce a set of particles from parameters
 
@@ -309,11 +311,12 @@ class Particle:
             "position": tuple(self.position),
             "orientation": tuple(self.orientation),
             "lattice": self.lattice,
-            # "tomogram" and "neighbours" fields do not need to be stored. Can be reassigned when reading if necessary.
+            # "tomogram" and "neighbours" fields do not need to be stored.
+            # Can be reassigned when reading if necessary.
         }
 
     @staticmethod
-    def from_dict(particle_dict: dict, tomogram: "Tomogram") -> "Particle":
+    def from_dict(particle_dict: dict, tomogram: Tomogram) -> Particle:  # noqa: F821
         """
         Deserialise from JSON dict
         """

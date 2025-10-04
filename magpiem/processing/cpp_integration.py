@@ -94,7 +94,8 @@ def convert_raw_data_to_cpp_format(tomogram_raw_data: list) -> tuple[list, int]:
 
 def invert_lattice_assignments(results: dict) -> dict:
     """
-    Dict inversion to convert from dict(particle_index -> lattice_id) to dict(lattice_id -> [particle_indices])
+    Dict inversion to convert from dict(particle_index -> lattice_id) to
+    dict(lattice_id -> [particle_indices])
     """
     lattice_assignments = {}
     for i, lattice_id in enumerate(results):
@@ -109,7 +110,8 @@ def clean_and_detect_flips_with_cpp(
     tomogram_raw_data: list, clean_params: Cleaner
 ) -> tuple[dict, list]:
     """
-    Clean tomogram data and detect flipped particles using the C++ library, with fallback to python
+    Clean tomogram data and detect flipped particles using the C++ library,
+    with fallback to python
 
     Parameters
     ----------
@@ -121,7 +123,8 @@ def clean_and_detect_flips_with_cpp(
     Returns
     -------
     tuple[dict, list]
-        Dictionary with lattice_id -> [particle_indices] mappings and list of flipped particle indices
+        Dictionary with lattice_id -> [particle_indices] mappings and list
+        of flipped particle indices
     """
     if not tomogram_raw_data:
         return {}, []
@@ -229,7 +232,8 @@ def debug_flip_detection_with_cpp(
     Returns
     -------
     tuple[dict, list]
-        Dictionary with lattice_id -> [particle_indices] mappings and list of flipped particle indices
+        Dictionary with lattice_id -> [particle_indices] mappings and
+        list of flipped particle indices
     """
     if not tomogram_raw_data or not clean_params:
         raise ValueError("Empty data provided")

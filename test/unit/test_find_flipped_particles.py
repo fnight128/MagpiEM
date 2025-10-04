@@ -6,6 +6,7 @@ Loads flipped data, cleans, and finds flipped particles, plotting results.
 """
 
 import sys
+import numpy as np
 from pathlib import Path
 
 # Add test utilities to path
@@ -32,7 +33,6 @@ from magpiem.processing.cpp_integration import (  # noqa: E402
 from magpiem.plotting.plotting_utils import (  # noqa: E402
     create_cone_traces,
 )
-import numpy as np
 
 logger = setup_test_logging()
 
@@ -162,7 +162,8 @@ def validate_flip_detection_results(
     # Check overlap with our detected flipped particles
     overlap = set(actually_flipped) & set(detected_particle_ids)
     logger.info(
-        f"{implementation_name} overlap between detected and truly flipped particles: {len(overlap)} particles"
+        f"{implementation_name} overlap between detected and truly flipped "
+        f"particles: {len(overlap)} particles"
     )
 
     assert (
@@ -172,12 +173,14 @@ def validate_flip_detection_results(
     logger.info(f"{implementation_name} overlap percentage: {overlap_percentage:.1f}%")
 
     # Test should fail if overlap isn't perfect
-    assert len(overlap) == len(
-        actually_flipped
-    ), f"{implementation_name} expected perfect overlap but got {len(overlap)}/{len(actually_flipped)} particles"
-    assert set(detected_particle_ids) == set(
-        actually_flipped
-    ), f"{implementation_name} detected particles {set(detected_particle_ids)} don't match actually flipped particles {set(actually_flipped)}"
+    assert len(overlap) == len(actually_flipped), (
+        f"{implementation_name} expected perfect overlap but got "
+        f"{len(overlap)}/{len(actually_flipped)} particles"
+    )
+    assert set(detected_particle_ids) == set(actually_flipped), (
+        f"{implementation_name} detected particles {set(detected_particle_ids)} "
+        f"don't match actually flipped particles {set(actually_flipped)}"
+    )
 
 
 def run_python_flip_detection(test_tomo):
@@ -222,9 +225,10 @@ def run_cpp_flip_detection(test_tomo, test_cleaner):
 def compare_python_cpp_results(python_flipped_ids, debug_flipped_particle_ids):
     """Compare Python and C++ results to ensure they match."""
     # Python and C++ debug should give identical results
-    assert set(python_flipped_ids) == set(
-        debug_flipped_particle_ids
-    ), f"Python and Debug C++ results don't match: Python={set(python_flipped_ids)}, Debug C++={set(debug_flipped_particle_ids)}"
+    assert set(python_flipped_ids) == set(debug_flipped_particle_ids), (
+        f"Python and Debug C++ results don't match: "
+        f"Python={set(python_flipped_ids)}, Debug C++={set(debug_flipped_particle_ids)}"
+    )
 
 
 def create_visualization(test_tomo, flipped_particles, debug_flipped_indices):
@@ -318,16 +322,18 @@ def validate_test_results(
         (flipped_count / total_particles * 100) if total_particles > 0 else 0
     )
 
-    logger.info(f"Test completed successfully")
+    logger.info("Test completed successfully")
     logger.info(f"Total particles: {total_particles}")
     logger.info(
         f"Python flipped particles: {flipped_count} ({flipped_percentage:.1f}%)"
     )
     logger.info(
-        f"Debug C++ flipped particles: {len(debug_flipped_indices)} ({len(debug_flipped_indices)/total_particles*100:.1f}%)"
+        f"Debug C++ flipped particles: {len(debug_flipped_indices)} "
+        f"({len(debug_flipped_indices)/total_particles*100:.1f}%)"
     )
     logger.info(
-        f"Python and Debug C++ results match: {set(python_flipped_ids) == set(debug_flipped_particle_ids)}"
+        f"Python and Debug C++ results match: "
+        f"{set(python_flipped_ids) == set(debug_flipped_particle_ids)}"
     )
     logger.info(f"Interactive plot saved as: {output_html}")
 
@@ -355,7 +361,9 @@ def test_find_flipped_particles():
         )
         for particle in flipped_particles[:5]:  # Log first 5 for debugging
             logger.debug(
-                f"Flipped particle ID: {particle.particle_id}, Lattice: {particle.lattice}, Direction: {getattr(particle, 'direction', 'None')}"
+                f"Flipped particle ID: {particle.particle_id}, "
+                f"Lattice: {particle.lattice}, "
+                f"Direction: {getattr(particle, 'direction', 'None')}"
             )
 
         # Run C++ flip detection

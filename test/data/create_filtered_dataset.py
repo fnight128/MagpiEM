@@ -13,8 +13,8 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from magpiem.io.io_utils import read_emc_tomogram_raw_data
-import scipy.io
+from magpiem.io.io_utils import read_emc_tomogram_raw_data  # noqa: E402
+import scipy.io  # noqa: E402
 
 # Configuration
 DATA_FILE = project_root / "test" / "data" / "test_data.mat"
@@ -104,13 +104,13 @@ def main():
     print(f"Saving filtered dataset to {OUTPUT_FILE}")
     scipy.io.savemat(str(OUTPUT_FILE), mdict=new_mat_full)
 
-    print(f"✓ Filtered dataset saved successfully!")
+    print("Filtered dataset saved successfully!")
     print(f"  - Original particles: {len(tomo_raw_data)}")
     print(f"  - Filtered particles: {len(filtered_data)}")
     print(f"  - Reduction: {(1 - len(filtered_data)/len(tomo_raw_data))*100:.1f}%")
 
     positions = np.array([particle[0] for particle in filtered_data])
-    print(f"  - Position range:")
+    print("  - Position range:")
     print(f"    X: {positions[:, 0].min():.1f} to {positions[:, 0].max():.1f}")
     print(f"    Y: {positions[:, 1].min():.1f} to {positions[:, 1].max():.1f}")
     print(f"    Z: {positions[:, 2].min():.1f} to {positions[:, 2].max():.1f}")

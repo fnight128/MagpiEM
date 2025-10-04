@@ -45,7 +45,6 @@ def register_ui_callbacks(app, temp_file_dir):
     def open_cards(_, tomogram_raw_data, lattice_data):
         upload_phase = True, False, False, False
         cleaning_phase = False, True, True, False
-        saving_phase = False, False, True, True
         if not tomogram_raw_data:
             return upload_phase
         elif not lattice_data:

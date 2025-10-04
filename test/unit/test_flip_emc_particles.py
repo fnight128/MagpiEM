@@ -73,10 +73,12 @@ def test_flip_emc_particles():
             )
 
         logger.info(
-            f"Total particles: {total_particles}, flipping {flipped_count} ({flipped_count/total_particles*100:.1f}%)"
+            f"Total particles: {total_particles}, flipping {flipped_count} "
+            f"({flipped_count/total_particles*100:.1f}%)"
         )
 
-        # Create keep_ids dict for all particles (since we want to keep all particles, just with some flipped)
+        # Create keep_ids dict for all particles (since we want to keep all
+        # particles, just with some flipped)
         keep_ids = {}
         for tomo_id, particles in mat_geom.items():
             keep_ids[tomo_id] = list(range(len(particles)))
@@ -99,14 +101,17 @@ def test_flip_emc_particles():
 
         # Ensure no particles were lost
         for tomo_id, particles in flipped_mat_geom.items():
-            assert len(particles) == len(
-                flipped_mat_geom[tomo_id]
-            ), f"Number of particles in {tomo_id} is not the same as in the original file. Original: {len(mat_geom[tomo_id])}, Flipped: {len(flipped_mat_geom[tomo_id])}"
+            assert len(particles) == len(flipped_mat_geom[tomo_id]), (
+                f"Number of particles in {tomo_id} is not the same as in the "
+                f"original file. Original: {len(mat_geom[tomo_id])}, "
+                f"Flipped: {len(flipped_mat_geom[tomo_id])}"
+            )
 
         log_test_success(test_name, logger)
         logger.info(f"Flipped data saved to: {output_file}")
         logger.info(
-            f"Successfully flipped {flipped_count} particles across {len(particles_to_flip)} tomograms"
+            f"Successfully flipped {flipped_count} particles across "
+            f"{len(particles_to_flip)} tomograms"
         )
 
     except Exception as e:

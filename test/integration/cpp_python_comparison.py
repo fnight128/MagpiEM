@@ -13,7 +13,7 @@ sys.path.insert(0, str(parent_dir))
 from magpiem.io.io_utils import read_emc_mat, read_single_tomogram  # noqa: E402
 from magpiem.processing.classes.tomogram import Tomogram  # noqa: E402
 from magpiem.processing.classes.cleaner import Cleaner  # noqa: E402
-from magpiem.processing.cpp_integration import (
+from magpiem.processing.cpp_integration import (  # noqa: E402
     setup_cpp_library,
     clean_tomo_with_cpp,
 )  # noqa: E402
@@ -386,12 +386,12 @@ def verify_counts(
         (i, p, c) for i, (p, c) in enumerate(zip(python_counts, cpp_counts)) if p != c
     ]
     if differences:
-        logger.error(f"  ✗ {test_name}: {len(differences)} differences found")
+        logger.error(f"  FAIL {test_name}: {len(differences)} differences found")
         for i, p, c in differences[:3]:
             logger.error(f"      Particle {i}: Python={p}, C++={c}")
         raise Exception(f"{test_name} failed")
     else:
-        logger.info(f"  ✓ {test_name}")
+        logger.info(f"  PASS {test_name}")
 
 
 def verify_lattice_assignments(
@@ -429,14 +429,14 @@ def verify_lattice_assignments(
     )
 
     if python_group_sets == cpp_group_sets:
-        logger.info(f"  ✓ {test_name}")
+        logger.info(f"PASSED:  {test_name}")
     else:
-        logger.warning(f"  ✗ {test_name}: Lattice groupings differ")
+        logger.warning(f"FAILED:  {test_name}: Lattice groupings differ")
         logger.warning(
-            f"      Python: {len(python_group_sets)} lattices, {len(python_unassigned)} unassigned"
+            f"   Python: {len(python_group_sets)} lattices, {len(python_unassigned)} unassigned"
         )
         logger.warning(
-            f"      C++: {len(cpp_group_sets)} lattices, {len(cpp_unassigned)} unassigned"
+            f"   C++: {len(cpp_group_sets)} lattices, {len(cpp_unassigned)} unassigned"
         )
 
         # Generate cone plots for debugging if test_data is provided
@@ -444,12 +444,6 @@ def verify_lattice_assignments(
             logger.debug("      Generating cone plots for debugging...")
             cpp_fig = create_cone_plot_from_lattices(
                 test_data, cpp_lattices, "C++ Lattice Assignments", "cpp_lattices.html"
-            )
-            python_fig = create_cone_plot_from_lattices(
-                test_data,
-                python_lattices,
-                "Python Lattice Assignments",
-                "python_lattices.html",
             )
             test_tomo = setup_test_tomogram()
             test_tomo.autoclean()
@@ -488,7 +482,8 @@ def verify_lattice_assignments(
 
                     if best_match:
                         logger.warning(
-                            f"          Closest C++ match: {sorted(best_match)} (overlap: {best_overlap}/{len(group)})"
+                            f"          Closest C++ match: {sorted(best_match)} "
+                            f"(overlap: {best_overlap}/{len(group)})"
                         )
                         # Show the actual differences
                         python_only_particles = group - best_match
@@ -521,18 +516,21 @@ def verify_lattice_assignments(
 
                     if best_match:
                         logger.warning(
-                            f"          Closest Python match: {sorted(best_match)} (overlap: {best_overlap}/{len(group)})"
+                            f"          Closest Python match: {sorted(best_match)} \
+                                (overlap: {best_overlap}/{len(group)})"
                         )
                         # Show the actual differences
                         cpp_only_particles = group - best_match
                         python_only_particles = best_match - group
                         if cpp_only_particles:
                             logger.warning(
-                                f"          C++ extra particles: {sorted(cpp_only_particles)}"
+                                f"          C++ extra particles: \
+                                    {sorted(cpp_only_particles)}"
                             )
                         if python_only_particles:
                             logger.warning(
-                                f"          Python extra particles: {sorted(python_only_particles)}"
+                                f"          Python extra particles: \
+                                    {sorted(python_only_particles)}"
                             )
                     else:
                         logger.warning("          No similar Python group found")
@@ -580,10 +578,6 @@ def verify_neighbour_relationships(
     flat_data = [val for particle in test_data for val in particle]
     c_array = (ctypes.c_float * len(flat_data))(*flat_data)
     results_array = (ctypes.c_int * len(test_data))()
-
-    # We need to extract the actual neighbour relationships from C++
-    # Since the C++ functions only return neighbour counts, we need to modify them to return neighbour IDs
-    # For now, let's compare what we can and identify the issue
 
     logger.info("  Comparing neighbour relationships...")
 
@@ -638,7 +632,8 @@ def verify_neighbour_relationships(
 
     if distance_diffs:
         logger.error(
-            f"  ✗ Distance stage: {len(distance_diffs)} particles have different neighbour counts"
+            f"  FAIL Distance stage: {len(distance_diffs)} particles have "
+            f"different neighbour counts"
         )
         for i, python_count, cpp_count in distance_diffs[:5]:
             logger.error(
@@ -648,7 +643,8 @@ def verify_neighbour_relationships(
 
     if orientation_diffs:
         logger.error(
-            f"  ✗ Orientation stage: {len(orientation_diffs)} particles have different neighbour counts"
+            f"   Orientation stage: {len(orientation_diffs)} \
+                particles have different neighbour counts"
         )
         for i, python_count, cpp_count in orientation_diffs[:5]:
             logger.error(
@@ -658,7 +654,8 @@ def verify_neighbour_relationships(
 
     if curvature_diffs:
         logger.error(
-            f"  ✗ Curvature stage: {len(curvature_diffs)} particles have different neighbour counts"
+            f"  FAIL Curvature stage: {len(curvature_diffs)} particles have "
+            f"different neighbour counts"
         )
         for i, python_count, cpp_count in curvature_diffs[:5]:
             logger.error(
@@ -666,8 +663,10 @@ def verify_neighbour_relationships(
             )
         raise Exception(f"{test_name} failed at curvature stage")
 
-    logger.info("  ✓ All neighbour counts match between Python and C++")
-    logger.info("  ✓ The differences are indeed only in the lattice assignment phase")
+    logger.info("  PASS All neighbour counts match between Python and C++")
+    logger.info(
+        "  PASS The differences are indeed only in the lattice assignment phase"
+    )
 
 
 def compare_results(
@@ -691,7 +690,11 @@ def compare_results(
 
     logger.info("\nPERFORMANCE RESULTS:")
     logger.info(
-        f"Python: {python_time:.4f}s | C++ Distance: {cpp_distance_time:.4f}s ({speedup_distance:.1f}x) | Orientation: {cpp_orientation_time:.4f}s ({speedup_orientation:.1f}x) | Curvature: {cpp_curvature_time:.4f}s ({speedup_curvature:.1f}x) | Full: {cpp_full_time:.4f}s ({speedup_full:.1f}x)"
+        f"Python: {python_time:.4f}s \
+            | C++ Distance: {cpp_distance_time:.4f}s ({speedup_distance:.1f}x) \
+            | Orientation: {cpp_orientation_time:.4f}s ({speedup_orientation:.1f}x) \
+            | Curvature: {cpp_curvature_time:.4f}s ({speedup_curvature:.1f}x) \
+            | Full: {cpp_full_time:.4f}s ({speedup_full:.1f}x)"
     )
 
 
@@ -771,7 +774,7 @@ def main() -> None:
         python_time,
     )
 
-    logger.info("\n✓ All tests completed successfully!")
+    logger.info("\nPASS All tests completed successfully!")
 
 
 if __name__ == "__main__":

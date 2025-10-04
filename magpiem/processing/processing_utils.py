@@ -59,7 +59,8 @@ def process_single_tomogram(
             datetime.timedelta(seconds=secs_remaining)
         ).split(".")[0]
         logger.info(
-            f"Progress: {clean_count}/{total_tomos} ({progress_percent}%) - Time remaining: {formatted_time_remaining}"
+            f"Progress: {clean_count}/{total_tomos} ({progress_percent}%) - "
+            f"Time remaining: {formatted_time_remaining}"
         )
 
     return lattice_data, processing_time, flip_data

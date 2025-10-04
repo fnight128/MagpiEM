@@ -47,7 +47,6 @@ def _get_or_create_cache_entry(
     tuple
         (session_cache, cached_item) where cached_item is None if not in cache
     """
-    global MAX_CACHE_SIZE, __preloaded_tomograms
 
     if session_key not in __preloaded_tomograms:
         __preloaded_tomograms[session_key] = {}
@@ -244,8 +243,6 @@ def preload_tomograms(
     show_removed : bool, optional
         Whether to show removed particles
     """
-    global PRELOAD_COUNT
-
     if not tomogram_names or current_tomo_name not in tomogram_names:
         return
 
@@ -265,8 +262,8 @@ def preload_tomograms(
                 flipped_particle_indices = (
                     flip_data.get(next_tomo_name, []) if flip_data else []
                 )
-
-                figure = get_cached_tomogram_figure(
+                # trigger caching of figure
+                get_cached_tomogram_figure(
                     next_tomo_name,
                     data_path,
                     session_key,

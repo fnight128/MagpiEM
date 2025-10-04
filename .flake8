@@ -16,4 +16,5 @@ exclude =
     htmlcov,
     .nyc_output,
     node_modules
-max-line-length = 88
+max-line-length = 100
+ignore = W503

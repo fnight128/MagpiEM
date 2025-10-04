@@ -9,6 +9,7 @@ import math
 import logging
 from collections import defaultdict
 import numpy as np
+import plotly.graph_objects as go
 
 from .cleaner import Cleaner
 from .particle import Particle
@@ -45,7 +46,8 @@ class Tomogram:
 
     def __hash__(self):
         """
-        Hash the tomogram by its name. Files cannot contain multiple tomograms with the same name, so should be stable
+        Hash the tomogram by its name. Files cannot contain multiple tomograms
+        with the same name, so should be stable
         """
         return self.name
 
@@ -226,8 +228,6 @@ class Tomogram:
         }
 
         self.find_particle_neighbours()
-        for particle in self.all_particles:
-            neighbours = particle.neighbours
 
         for particle in self.all_particles:
             particle.filter_neighbour_orientation(
@@ -380,7 +380,7 @@ class Tomogram:
                 particle.set_lattice(0)
         self.selected_lattices = set(prog_dict["selected"])
 
-    def plot_all_lattices(self, **kwargs) -> "go.Figure":
+    def plot_all_lattices(self, **kwargs) -> go.Figure:
         """
         Returns a figure of all lattices in a tomogram using plotting_helpers
 

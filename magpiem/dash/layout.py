@@ -462,11 +462,16 @@ def create_main_layout():
             ),
             dcc.ConfirmDialog(
                 id="confirm-validation-failed",
-                message='Failed to produce a valid output file. Use "Save current progress" to save the current state, and try restarting the application. Please report this issue if it persists.',
+                message='Failed to produce a valid output file. Use "Save current progress" \
+                    to save the current state, and try restarting the application. Please \
+                    report this issue if it persists.',
             ),
             dcc.ConfirmDialog(
                 id="confirm-cpp-unavailable",
-                message="C++ library has not been installed correctly. The application will use a (much) slower Python fallback for cleaning operations. For better performance, please reinstall the package, and check for any warnings during installation.",
+                message="C++ library has not been installed correctly. The application will \
+                    use a (much) slower Python fallback for cleaning operations. For better \
+                    performance, please reinstall the package, and check for any warnings \
+                    during installation.",
                 displayed=False,
             ),
         ],

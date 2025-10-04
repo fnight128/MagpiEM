@@ -56,7 +56,8 @@ def test_tomogram_plotting():
         logger.info("Running automatic cleaning...")
         test_tomo.autoclean()
         logger.info(
-            f"Cleaning completed. Found {len(test_tomo.lattices) - 1} lattices (excluding lattice 0)"
+            f"Cleaning completed. Found {len(test_tomo.lattices) - 1} lattices "
+            f"(excluding lattice 0)"
         )
 
         for lattice_id, particles in test_tomo.lattices.items():
