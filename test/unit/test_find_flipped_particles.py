@@ -27,11 +27,9 @@ setup_test_environment()
 from magpiem.io.io_utils import read_single_tomogram  # noqa: E402
 from magpiem.processing.classes.cleaner import Cleaner  # noqa: E402
 from magpiem.processing.cpp_integration import (  # noqa: E402
-    clean_and_detect_flips_with_cpp,
     debug_flip_detection_with_cpp,
 )
 from magpiem.plotting.plotting_utils import (  # noqa: E402
-    create_lattice_plot_from_raw_data,
     create_cone_traces,
 )
 import numpy as np

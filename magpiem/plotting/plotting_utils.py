@@ -5,7 +5,6 @@ Helper functions for plotting tomogram data without requiring Tomogram objects.
 
 import numpy as np
 import plotly.graph_objects as go
-import pandas as pd
 import colorsys
 from typing import List, Dict, Tuple, Optional
 

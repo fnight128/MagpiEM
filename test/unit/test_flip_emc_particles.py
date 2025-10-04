@@ -8,7 +8,6 @@ applies the flip_emc_particles function, and saves the result to test_data_flipp
 
 import sys
 import random
-import numpy as np
 from pathlib import Path
 
 # Add test utilities to path

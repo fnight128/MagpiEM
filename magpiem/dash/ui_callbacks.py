@@ -4,8 +4,7 @@ UI state management and navigation callbacks for MagpiEM.
 """
 
 import logging
-import yaml
-from dash import State, ctx, dcc
+from dash import State, ctx
 from dash_extensions.enrich import Input, Output
 
 logger = logging.getLogger(__name__)

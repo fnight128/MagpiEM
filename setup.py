@@ -3,12 +3,9 @@
 Setup script for MagpiEM with automatic C++ compilation
 """
 
-import os
-import sys
 import platform
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
-import numpy as np
 
 
 class get_numpy_include(object):

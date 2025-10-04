@@ -13,7 +13,7 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from magpiem.io.io_utils import read_emc_mat, read_emc_tomogram_raw_data
+from magpiem.io.io_utils import read_emc_tomogram_raw_data
 import scipy.io
 
 # Configuration

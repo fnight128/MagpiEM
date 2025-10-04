@@ -4,7 +4,7 @@ Data processing and cleaning callbacks for MagpiEM.
 """
 
 import logging
-from dash import State, dcc
+from dash import State
 from dash_extensions.enrich import Input, Output
 
 from .classes.cleaner import Cleaner, save_cleaning_parameters

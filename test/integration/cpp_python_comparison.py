@@ -13,7 +13,10 @@ sys.path.insert(0, str(parent_dir))
 from magpiem.io.io_utils import read_emc_mat, read_single_tomogram  # noqa: E402
 from magpiem.processing.classes.tomogram import Tomogram  # noqa: E402
 from magpiem.processing.classes.cleaner import Cleaner  # noqa: E402
-from magpiem.processing.cpp_integration import setup_cpp_library, clean_tomo_with_cpp  # noqa: E402
+from magpiem.processing.cpp_integration import (
+    setup_cpp_library,
+    clean_tomo_with_cpp,
+)  # noqa: E402
 from test.test_utils import TestConfig, get_test_data_path  # noqa: E402
 
 # Set up logging

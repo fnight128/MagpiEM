@@ -7,7 +7,6 @@ that can be used across all test files to ensure consistency.
 """
 
 import logging
-import os
 import sys
 import tempfile
 import warnings

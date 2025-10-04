@@ -16,7 +16,6 @@ sys.path.insert(0, str(test_root))
 from test_utils import (  # noqa: E402
     TestConfig,
     setup_test_logging,
-    get_test_data_path,
     log_test_start,
     log_test_success,
     log_test_failure,
@@ -34,7 +33,9 @@ from magpiem.processing.cpp_integration import (  # noqa: E402
     clean_tomo_with_cpp,
     clean_and_detect_flips_with_cpp,
 )
-from magpiem.plotting.plotting_utils import create_lattice_plot_from_raw_data  # noqa: E402
+from magpiem.plotting.plotting_utils import (
+    create_lattice_plot_from_raw_data,
+)  # noqa: E402
 
 logger = setup_test_logging()
 

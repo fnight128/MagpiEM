@@ -4,9 +4,6 @@ C++ integration functions for the MagpiEM application.
 """
 
 import logging
-from pathlib import Path
-
-import numpy as np
 
 from .classes.cleaner import Cleaner
 

@@ -13,7 +13,7 @@ import numpy as np
 from .cleaner import Cleaner
 from .particle import Particle
 from ...utils import within
-from ...plotting.plotting_utils import colour_range, create_lattice_plot_from_raw_data
+from ...plotting.plotting_utils import create_lattice_plot_from_raw_data
 
 logger = logging.getLogger(__name__)
 

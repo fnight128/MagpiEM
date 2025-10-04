@@ -5,13 +5,7 @@ Created on Mon Nov  7 16:54:48 2022
 @author: Frank
 """
 
-import atexit
-import glob
 import logging
-import os
-import signal
-import sys
-import time
 
 import numpy as np
 

@@ -6,7 +6,6 @@ Main Dash application for MagpiEM.
 import argparse
 import logging
 import os
-import sys
 import webbrowser
 
 import dash_bootstrap_components as dbc

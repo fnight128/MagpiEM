@@ -4,7 +4,7 @@ Plotting and visualization callbacks for MagpiEM.
 """
 
 import logging
-from dash import State, ctx, dcc, html
+from dash import State, html
 from dash_extensions.enrich import Input, Output
 
 from ..processing.classes.particle import Particle
