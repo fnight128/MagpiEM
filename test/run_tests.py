@@ -16,7 +16,7 @@ from pathlib import Path
 test_root = Path(__file__).parent
 sys.path.insert(0, str(test_root))
 
-from test_utils import setup_test_logging, setup_test_environment
+from test_utils import setup_test_logging, setup_test_environment  # noqa: E402
 
 
 def run_pytest_tests(test_path: str, logger) -> bool:

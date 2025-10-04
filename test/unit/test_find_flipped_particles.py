@@ -12,7 +12,7 @@ from pathlib import Path
 test_root = Path(__file__).parent.parent
 sys.path.insert(0, str(test_root))
 
-from test_utils import (
+from test_utils import (  # noqa: E402
     TestConfig,
     setup_test_logging,
     get_test_data_path,
@@ -24,13 +24,13 @@ from test_utils import (
 
 setup_test_environment()
 
-from magpiem.io.io_utils import read_single_tomogram
-from magpiem.processing.classes.cleaner import Cleaner
-from magpiem.processing.cpp_integration import (
+from magpiem.io.io_utils import read_single_tomogram  # noqa: E402
+from magpiem.processing.classes.cleaner import Cleaner  # noqa: E402
+from magpiem.processing.cpp_integration import (  # noqa: E402
     clean_and_detect_flips_with_cpp,
     debug_flip_detection_with_cpp,
 )
-from magpiem.plotting.plotting_utils import (
+from magpiem.plotting.plotting_utils import (  # noqa: E402
     create_lattice_plot_from_raw_data,
     create_cone_traces,
 )

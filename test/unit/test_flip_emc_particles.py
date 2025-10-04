@@ -15,7 +15,7 @@ from pathlib import Path
 test_root = Path(__file__).parent.parent
 sys.path.insert(0, str(test_root))
 
-from test_utils import (
+from test_utils import (  # noqa: E402
     TestConfig,
     setup_test_logging,
     get_test_data_path,
@@ -27,7 +27,7 @@ from test_utils import (
 
 setup_test_environment()
 
-from magpiem.io.io_utils import read_emc_mat, write_emc_mat
+from magpiem.io.io_utils import read_emc_mat, write_emc_mat  # noqa: E402
 
 logger = setup_test_logging()
 
