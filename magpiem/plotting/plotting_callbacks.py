@@ -98,6 +98,8 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
         try:
             data_path = tomogram_raw_data["__data_path__"]
             logger.debug("Preloading tomograms with new style")
+            # Only pass flip_data if flip_particles is enabled
+            effective_flip_data = flip_data if flip_particles else None
             preload_tomograms(
                 selected_tomo_name,
                 tomogram_raw_data["__tomogram_names__"],
@@ -106,7 +108,7 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
                 lattice_data,
                 cone_size,
                 show_removed,
-                flip_data,
+                effective_flip_data,
             )
         except Exception as e:
             logger.debug("Failed to update cache: %s", e)
@@ -152,6 +154,8 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
         logger.debug("make_cones=%s, cone_size=%s", make_cones, cone_size)
         logger.debug("cache_cleared=%s", cache_cleared)
 
+        # Only pass flip_data if flip_particles is enabled
+        effective_flip_data = flip_data if flip_particles else None
         fig = get_tomogram_figure(
             selected_tomo_name,
             tomogram_raw_data,
@@ -160,7 +164,7 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
             make_cones,
             cone_size,
             show_removed,
-            flip_data,
+            effective_flip_data,
             get_cached_tomogram_figure,
             EMPTY_FIG,
         )
@@ -311,6 +315,8 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
 
         try:
             data_path = tomogram_raw_data["__data_path__"]
+            # Only pass flip_data if flip_particles is enabled
+            effective_flip_data = flip_data if flip_particles else None
             preload_tomograms(
                 selected_tomo_name,
                 tomogram_raw_data["__tomogram_names__"],
@@ -319,7 +325,7 @@ def register_plotting_callbacks(app, cache_functions, temp_file_dir):
                 lattice_data,
                 cone_size,
                 show_removed,
-                flip_data,
+                effective_flip_data,
             )
         except Exception as e:
             logger.warning(f"Failed to update cache with new lattice data: {e}")
