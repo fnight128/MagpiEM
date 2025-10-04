@@ -1,0 +1,19 @@
+[flake8]
+exclude = 
+    .venv,
+    venv,
+    env,
+    build,
+    dist,
+    __pycache__,
+    .git,
+    .tox,
+    .eggs,
+    *.egg,
+    .pytest_cache,
+    .mypy_cache,
+    .coverage,
+    htmlcov,
+    .nyc_output,
+    node_modules
+max-line-length = 88
