@@ -4,6 +4,7 @@ File saving and export callbacks for MagpiEM.
 """
 
 import logging
+import yaml
 from dash import State, dcc
 from dash_extensions.enrich import Input, Output
 
@@ -31,6 +32,8 @@ def register_save_callbacks(app, temp_file_dir):
         State("checklist-save-additional", "value"),
         State("store-selected-lattices", "data"),
         State("store-lattice-data", "data"),
+        State("switch-flip-particles", "on"),
+        State("store-flips", "data"),
         Input("button-save", "n_clicks"),
         prevent_initial_call=True,
         long_callback=True,
@@ -42,6 +45,8 @@ def register_save_callbacks(app, temp_file_dir):
         save_additional,
         selected_lattices,
         lattice_data,
+        flip_particles,
+        flip_data,
         _,
     ):
         # Validate inputs
@@ -53,11 +58,16 @@ def register_save_callbacks(app, temp_file_dir):
             return None, False
 
         # Extract particle IDs for saving
+        logger.info(f"Lattice data in save callback: {lattice_data}")
+        logger.info(f"Selected lattices in save callback: {selected_lattices}")
+        logger.info(f"Keep selected in save callback: {keep_selected}")
         saving_ids = extract_particle_ids_for_saving(
             lattice_data, selected_lattices, keep_selected
         )
 
         # Save file and validate if necessary
+        # Only pass flip_data if flip_particles is enabled
+        effective_flip_data = flip_data if flip_particles else None
         save_success, validation_error = save_file_by_type(
             saving_ids,
             output_name,
@@ -66,6 +76,7 @@ def register_save_callbacks(app, temp_file_dir):
             write_emc_mat,
             write_relion_star,
             validate_mat_files,
+            effective_flip_data,
         )
         if not save_success:
             return None, True

@@ -115,6 +115,9 @@ def flip_emc_particles(mat_geom: dict, particles_to_flip: dict) -> dict:
     """
 
     for tomo_id, particles in particles_to_flip.items():
+        if tomo_id not in mat_geom:
+            logger.error(f"Tomogram {tomo_id} not found in mat_geom for flipping")
+            continue
         for particle_id in particles:
             rotation_matrix = np.array(mat_geom[tomo_id][particle_id][16:25]).reshape(
                 3, 3
@@ -173,9 +176,15 @@ def write_emc_mat(
     # Apply particle flipping if specified
     if flip_particles is not None:
         logger.info("Applying particle flips...")
+        logger.debug(f"Flip data keys: {list(flip_particles.keys())}")
+        logger.debug(
+            f"Flip data values: {[(k, len(v)) for k, v in flip_particles.items()]}"
+        )
         mat_geom = flip_emc_particles(mat_geom, flip_particles)
 
     logger.info(f"Processing {len(keep_ids)} tomograms for saving")
+    logger.debug(f"Tomograms in keep_ids: {list(keep_ids.keys())}")
+    logger.debug(f"Tomograms in mat_geom: {list(mat_geom.keys())}")
 
     tomograms_with_particles = set(keep_ids.keys())
 
@@ -187,6 +196,11 @@ def write_emc_mat(
             continue
 
         logger.info(f"Processing {tomo_id} with {len(particles)} particles")
+        if tomo_id not in mat_geom:
+            logger.error(
+                f"Tomogram {tomo_id} not found in file after cleaning. Was the file modified or moved?"
+            )
+            continue
         table_rows = list()
         mat_table = mat_geom[tomo_id]
         for particle_id in particles:
@@ -750,6 +764,7 @@ def validate_save_inputs(output_name, input_name, lattice_data):
 
 def extract_particle_ids_for_saving(lattice_data, selected_lattices, keep_selected):
     """Extract particle IDs based on selection criteria."""
+    logger.debug(f"Lattice data keys: {list(lattice_data.keys())}")
     saving_ids = {}
     for tomo_name, tomo_lattice_data in lattice_data.items():
         if not tomo_lattice_data:
@@ -777,6 +792,7 @@ def extract_particle_ids_for_saving(lattice_data, selected_lattices, keep_select
         if particle_ids:
             saving_ids[tomo_name] = particle_ids
 
+    logger.debug(f"Final saving_ids keys: {list(saving_ids.keys())}")
     return saving_ids
 
 
@@ -788,6 +804,7 @@ def save_file_by_type(
     write_emc_mat,
     write_relion_star,
     validate_mat_files,
+    flip_data=None,
 ):
     """Save file based on input file type and validate if necessary."""
     if ".mat" in input_name:
@@ -795,6 +812,7 @@ def save_file_by_type(
             saving_ids,
             temp_file_dir + output_name,
             temp_file_dir + input_name,
+            flip_particles=flip_data,
         )
 
         # Validate .mat files
