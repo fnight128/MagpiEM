@@ -243,7 +243,7 @@ def log_test_start(test_name: str, logger: Optional[logging.Logger] = None) -> N
     if logger is None:
         logger = logging.getLogger()
 
-    logger.info(f"🧪 Starting test: {test_name}")
+    logger.info(f"Starting test: {test_name}")
 
 
 def log_test_success(test_name: str, logger: Optional[logging.Logger] = None) -> None:
@@ -260,7 +260,7 @@ def log_test_success(test_name: str, logger: Optional[logging.Logger] = None) ->
     if logger is None:
         logger = logging.getLogger()
 
-    logger.info(f"✅ Test completed successfully: {test_name}")
+    logger.info(f"PASSED Test: {test_name}")
 
 
 def log_test_failure(
@@ -281,4 +281,4 @@ def log_test_failure(
     if logger is None:
         logger = logging.getLogger()
 
-    logger.error(f"❌ Test failed: {test_name} - {error}")
+    logger.error(f"FAILED Test: {test_name} - {error}")

@@ -20,15 +20,18 @@ struct CleanParams {
     float max_curvature;
     unsigned int min_lattice_size;
     unsigned int min_neighbours;
+    bool allow_flips;
     
     CleanParams(float min_dist, float max_dist,
                 float min_ori, float max_ori,
                 float min_curv, float max_curv,
-                unsigned int min_lattice_size = 10, unsigned int min_neigh = 3)
+                unsigned int min_lattice_size = 10, unsigned int min_neigh = 3,
+                bool allow_flips = false)
         : min_distance(min_dist), max_distance(max_dist),
           min_orientation(min_ori), max_orientation(max_ori),
           min_curvature(min_curv), max_curvature(max_curv),
-          min_lattice_size(min_lattice_size), min_neighbours(min_neigh) {}
+          min_lattice_size(min_lattice_size), min_neighbours(min_neigh),
+          allow_flips(allow_flips) {}
 };
 
 struct Particle {
@@ -144,8 +147,8 @@ struct Particle {
         return dot_product(displacement.data(), p.orientation);
     }
 
-    int get_neighbour_count() const {
-        return static_cast<int>(neighbours.size());
+    unsigned int get_neighbour_count() const {
+        return static_cast<unsigned int>(neighbours.size());
     }
 
     Particle* get_neighbour(int index) const {
@@ -176,13 +179,21 @@ extern "C" {
 #endif
 void clean_particles(float* data, int num_points, CleanParams* params, int* results);
 void find_neighbours(float* data, int num_points, float min_distance, float max_distance, int* results);
-void filter_by_orientation(float* data, int num_points, float min_orientation, float max_orientation, int* results);
+void filter_by_orientation(float* data, int num_points, float min_orientation, float max_orientation, bool allow_flips, int* results);
 void filter_by_curvature(float* data, int num_points, float min_curvature, float max_curvature, int* results);
 void assign_lattices(float* data, int num_points, unsigned int min_neighbours, unsigned int min_lattice_size, int* results);
 // Debug/testing utility: perform distance + orientation + curvature filtering and
 // return neighbour lists in CSR form. Offsets has length num_points + 1. If
 // neighbours_out is nullptr, only offsets are filled (offsets[num_points] will be total entries).
 void get_cleaned_neighbours(float* data, int num_points, CleanParams* params, int* offsets, int* neighbours_out);
+// Combined cleaning and flip detection: returns lattice assignments and flipped particle flags
+void clean_and_detect_flips(float* data, int num_points, CleanParams* params, int* lattice_results, int* flipped_results);
+// Debug function for testing flip detection with manual lattice assignment
+void debug_flip_detection(float* data, int num_points, CleanParams* params, int* lattice_results, int* flipped_results) noexcept(false);
+
+// Function to get access to processed particles (for flip detection)
+const std::vector<Particle>& get_processed_particles();
+
 void set_log_level(int level);
 #ifdef __cplusplus
 }

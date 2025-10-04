@@ -18,6 +18,11 @@ enum LogLevel {
 
 static LogLevel g_log_level = LOG_WARNING;
 
+// Forward declaration for template function
+template<typename ParticlePtrType>
+void perform_flip_detection(const std::vector<Particle>& particles, const std::map<unsigned int, std::vector<ParticlePtrType>>& lattice_groups, 
+                           const CleanParams* params, int* flipped_results);
+
 void log_message(LogLevel level, const char* format, ...) {
     if (level < g_log_level) {
         return; 
@@ -100,26 +105,19 @@ public:
         }
     }
 
-    // Generic filter function using a predicate with vectorised optimisations
+    // Generic filter function using a predicate that returns bool
     template<typename Predicate>
     void filter_neighbours_generic(float* data, int num_particles, const std::string& filter_name, 
-                                  float min_value, float max_value, int* results, Predicate predicate) {
-        log_message(LOG_INFO, "Filtering neighbours by %s for %d particles (%s: %.2f - %.2f)", 
-                   filter_name.c_str(), num_particles, filter_name.c_str(), min_value, max_value);
-        
+                                  int* results, Predicate predicate) {
         ensure_initialized(data, num_particles);
         
-        // Filter existing neighbours using the provided predicate
         for (int i = 0; i < num_particles; i++) {
             Particle& current = particles[i];
             temp_neighbours.clear();
             temp_neighbours.reserve(current.neighbours.size());
             
             for (Particle* neighbour : current.neighbours) {
-                float value = predicate(current, *neighbour);
-                
-                // Check if value is within range
-                if (value >= min_value && value <= max_value) {
+                if (predicate(current, *neighbour)) {
                     temp_neighbours.push_back(neighbour);
                 }
             }
@@ -129,21 +127,39 @@ public:
         }
     }
 
-    void filter_by_orientation(float* data, int num_particles, float min_orientation, float max_orientation, int* results) {
-        auto orientation_predicate = [](const Particle& current, const Particle& neighbour) -> float {
-            float dot_product = Particle::dot_product(current.orientation, neighbour.orientation);
-            return std::max(-1.0f, std::min(1.0f, dot_product));
-        };
+    void filter_by_orientation(float* data, int num_particles, float min_orientation, float max_orientation, bool allow_flips, int* results) {
+        log_message(LOG_INFO, "Filtering neighbours by orientation for %d particles (orientation: %.2f - %.2f%s)", 
+                   num_particles, min_orientation, max_orientation,
+                   allow_flips ? ", allow_flips: true" : "");
         
-        filter_neighbours_generic(data, num_particles, "orientation", min_orientation, max_orientation, results, orientation_predicate);
+        if (allow_flips) {
+            auto orientation_predicate_flips = [min_orientation, max_orientation](const Particle& current, const Particle& neighbour) -> bool {
+                float dot_product = Particle::dot_product(current.orientation, neighbour.orientation);
+                dot_product = std::max(-1.0f, std::min(1.0f, dot_product));
+                return (dot_product >= min_orientation && dot_product <= max_orientation) ||
+                       (dot_product >= -max_orientation && dot_product <= -min_orientation);
+            };
+            filter_neighbours_generic(data, num_particles, "orientation", results, orientation_predicate_flips);
+        } else {
+            auto orientation_predicate = [min_orientation, max_orientation](const Particle& current, const Particle& neighbour) -> bool {
+                float dot_product = Particle::dot_product(current.orientation, neighbour.orientation);
+                dot_product = std::max(-1.0f, std::min(1.0f, dot_product));
+                return dot_product >= min_orientation && dot_product <= max_orientation;
+            };
+            filter_neighbours_generic(data, num_particles, "orientation", results, orientation_predicate);
+        }
     }
 
     void filter_by_curvature(float* data, int num_particles, float min_curvature, float max_curvature, int* results) {
-        auto curvature_predicate = [](const Particle& current, const Particle& neighbour) -> float {
-            return current.curvature(neighbour);
+        log_message(LOG_INFO, "Filtering neighbours by curvature for %d particles (curvature: %.2f - %.2f)", 
+                   num_particles, min_curvature, max_curvature);
+        
+        auto curvature_predicate = [min_curvature, max_curvature](const Particle& current, const Particle& neighbour) -> bool {
+            float curvature_value = current.curvature(neighbour);
+            return curvature_value >= min_curvature && curvature_value <= max_curvature;
         };
         
-        filter_neighbours_generic(data, num_particles, "curvature", min_curvature, max_curvature, results, curvature_predicate);
+        filter_neighbours_generic(data, num_particles, "curvature", results, curvature_predicate);
     }
 
     void assign_lattices(float* data, int num_particles, unsigned int min_neighbours, unsigned int min_lattice_size, int* results) {
@@ -216,12 +232,13 @@ public:
         log_message(LOG_DEBUG, "  Orientation: %.2f - %.2f", params->min_orientation, params->max_orientation);
         log_message(LOG_DEBUG, "  Curvature: %.2f - %.2f", params->min_curvature, params->max_curvature);
         log_message(LOG_DEBUG, "  Min lattice size: %d, Min neighbours: %d", params->min_lattice_size, params->min_neighbours);
+        log_message(LOG_DEBUG, "  Allow flips: %s", params->allow_flips ? "true" : "false");
         
         // Reset state to ensure we process the new data and avoid leakage
         reset();
         
         find_neighbours(data, num_particles, params->min_distance, params->max_distance, results);
-        filter_by_orientation(data, num_particles, params->min_orientation, params->max_orientation, results);
+        filter_by_orientation(data, num_particles, params->min_orientation, params->max_orientation, params->allow_flips, results);
         filter_by_curvature(data, num_particles, params->min_curvature, params->max_curvature, results);
         assign_lattices(data, num_particles, params->min_neighbours, params->min_lattice_size, results);
     }
@@ -233,7 +250,7 @@ public:
         // Distance neighbours
         find_neighbours(data, num_particles, params->min_distance, params->max_distance, offsets /*reuse temp buffer*/);
         // Orientation filter
-        filter_by_orientation(data, num_particles, params->min_orientation, params->max_orientation, offsets);
+        filter_by_orientation(data, num_particles, params->min_orientation, params->max_orientation, params->allow_flips, offsets);
         // Curvature filter
         filter_by_curvature(data, num_particles, params->min_curvature, params->max_curvature, offsets);
 
@@ -258,6 +275,11 @@ public:
             }
         }
     }
+
+    // Get access to the processed particles (for flip detection)
+    const std::vector<Particle>& get_particles() const {
+        return particles;
+    }
 };
 
 // Global instance for the particle processor
@@ -268,8 +290,8 @@ void find_neighbours(float* data, int num_particles, float min_distance_squared,
     g_processor.find_neighbours(data, num_particles, min_distance_squared, max_distance_squared, results);
 }
 
-void filter_by_orientation(float* data, int num_particles, float min_orientation, float max_orientation, int* results) {
-    g_processor.filter_by_orientation(data, num_particles, min_orientation, max_orientation, results);
+void filter_by_orientation(float* data, int num_particles, float min_orientation, float max_orientation, bool allow_flips, int* results) {
+    g_processor.filter_by_orientation(data, num_particles, min_orientation, max_orientation, allow_flips, results);
 }
 
 void filter_by_curvature(float* data, int num_particles, float min_curvature, float max_curvature, int* results) {
@@ -284,6 +306,131 @@ void clean_particles(float* data, int num_particles, CleanParams* params, int* r
     g_processor.clean_particles(data, num_particles, params, results);
 }
 
+void clean_and_detect_flips(float* data, int num_particles, CleanParams* params, int* lattice_results, int* flipped_results) {
+    log_message(LOG_INFO, "Running combined cleaning and flip detection on %d particles", num_particles);
+    
+    // First run the normal cleaning pipeline - this is the key part!
+    g_processor.clean_particles(data, num_particles, params, lattice_results);
+    
+    // Initialize all particles as not flipped
+    for (int i = 0; i < num_particles; i++) {
+        flipped_results[i] = 0;
+    }
+    
+    // Only run flip detection if allow_flips is enabled
+    if (!params->allow_flips) {
+        log_message(LOG_WARNING, "Flip detection was called, but flips were not allowed in cleaning params. This is likely incorrect.");
+        return;
+    }
+    
+    // processed particles already have assigned neighbours and lattices 
+    const std::vector<Particle>& particles = get_processed_particles();
+    
+    std::map<unsigned int, std::vector<const Particle*>> lattice_groups;
+    for (const auto& particle : particles) {
+        if (particle.lattice > 0) {
+            lattice_groups[particle.lattice].push_back(&particle);
+        }
+    }
+    
+    log_message(LOG_DEBUG, "Processing %zu lattice groups for flip detection", lattice_groups.size());
+    perform_flip_detection(particles, lattice_groups, params, flipped_results);
+    
+    log_message(LOG_INFO, "Flip detection completed");
+}
+
+// Debug function for testing flip detection with manual lattice assignment
+void debug_flip_detection(float* data, int num_particles, CleanParams* params, int* lattice_results, int* flipped_results) noexcept(false) {
+    log_message(LOG_INFO, "Running debug flip detection on %d particles", num_particles);
+    
+    // Initialize all particles as not flipped and assign to lattice 1
+    for (int i = 0; i < num_particles; i++) {
+        flipped_results[i] = 0;
+        lattice_results[i] = 1; // All particles go to lattice 1
+    }
+    
+    // Only run flip detection if allow_flips is enabled
+    if (!params->allow_flips) {
+        throw std::invalid_argument( "Attempted to test flip detection with flip detection disabled in cleaning params (allow_flips=False).");
+        return;
+    }
+    
+    // Find neighbours. No additional cleaning to ensure all particles included in debugging
+    g_processor.find_neighbours(data, num_particles, params->min_distance, params->max_distance, lattice_results);
+    
+    // Get the particles with their neighbours already set
+    const std::vector<Particle>& particles = get_processed_particles();
+    
+    // Group all particles into lattice 1 for testing
+    std::map<unsigned int, std::vector<const Particle*>> lattice_groups;
+    for (const auto& particle : particles) {
+        lattice_groups[1].push_back(&particle);
+    }
+    
+    perform_flip_detection(particles, lattice_groups, params, flipped_results);
+    
+    log_message(LOG_INFO, "Debug flip detection completed");
+}
+
+template<typename ParticlePtrType>
+void perform_flip_detection(const std::vector<Particle>& particles, const std::map<unsigned int, std::vector<ParticlePtrType>>& lattice_groups, 
+                           const CleanParams* params, int* flipped_results) {
+    for (auto& [lattice_id, lattice_particles] : lattice_groups) {
+        if (lattice_particles.size() < 3) {
+            continue; // Need at least 3 particles
+        }
+        
+        // Use a map to store direction assignments (1 or -1)
+        std::map<ParticlePtrType, int> directions;
+        
+        // Start with first particle and assign arbitrarydirection
+        ParticlePtrType random_particle = lattice_particles[0];
+        directions[random_particle] = 1;
+        
+        // Recursively assign directions using BFS
+        std::vector<ParticlePtrType> to_process = {random_particle};
+        while (!to_process.empty()) {
+            ParticlePtrType current = to_process.back();
+            to_process.pop_back();
+            
+            for (ParticlePtrType neighbour : current->neighbours) {
+                if (directions.find(neighbour) == directions.end()) {
+                    float dot_prod = Particle::dot_product(current->orientation, neighbour->orientation);
+                    if (dot_prod >= params->min_orientation && dot_prod <= params->max_orientation) {
+                        // Aligned orientation: same direction
+                        directions[neighbour] = directions[current];
+                    } else {
+                        // Not aligned: opposite direction
+                        directions[neighbour] = -directions[current];
+                    }
+                    to_process.push_back(neighbour);
+                }
+            }
+        }
+        
+        // Count parallel vs antiparallel particles
+        int parallel_count = 0;
+        int antiparallel_count = 0;
+        for (ParticlePtrType particle : lattice_particles) {
+            if (directions[particle] > 0) {
+                parallel_count++;
+            } else {
+                antiparallel_count++;
+            }
+        }
+        
+        // Mark the minority group as flipped
+        bool mark_parallel_as_flipped = (parallel_count < antiparallel_count);
+        for (ParticlePtrType particle : lattice_particles) {
+            bool is_parallel = (directions[particle] > 0);
+            int particle_index = static_cast<int>(particle - &particles[0]);
+            if ((mark_parallel_as_flipped && is_parallel) || (!mark_parallel_as_flipped && !is_parallel)) {
+                flipped_results[particle_index] = 1;
+            }
+        }
+    }
+}
+
 void get_cleaned_neighbours(float* data, int num_particles, CleanParams* params, int* offsets, int* neighbours_out) {
     g_processor.get_cleaned_neighbours(data, num_particles, params, offsets, neighbours_out);
 }
@@ -291,4 +438,9 @@ void get_cleaned_neighbours(float* data, int num_particles, CleanParams* params,
 // Function to reset the processor state (useful for testing)
 void reset_particles() {
     g_processor.reset();
+}
+
+// Access processed particles
+const std::vector<Particle>& get_processed_particles() {
+    return g_processor.get_particles();
 }

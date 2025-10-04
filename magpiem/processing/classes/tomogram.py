@@ -256,6 +256,58 @@ class Tomogram:
             self.delete_lattice(lattice_key)
         return self.write_progress_dict()
 
+    def find_flipped_particles(self) -> list["Particle"]:
+        """
+        Find all particles in the tomogram with flipped orientations relative to their lattice.
+        Tomogram must have assigned cleaning parameters and be cleaned first.
+
+        Returns
+        -------
+            List of flipped particles
+        """
+        assert len(self.lattices) > 0, "Tomogram must be cleaned first"
+
+        flipped_particles = []
+
+        for lattice_id, particles in self.lattices.items():
+            # Skip unassigned particles
+            if lattice_id == 0:
+                continue
+
+            # Cannot produce any meaningful results with less than 3 particles
+            if len(particles) < 3:
+                continue
+
+            # Add direction attribute for later assignment
+            for particle in particles:
+                if not hasattr(particle, "direction"):
+                    particle.direction = None
+
+            # Assign arbitrary direction to random particle to begin calculation
+            # Other particles will be assigned relative to this particle. +1/-1 has
+            # no intrinsic meaning itself, only the grouping of which particles have
+            # the same/different
+            random_particle = next(iter(particles))
+            random_particle.direction = 1
+
+            # Recursively loop through all particles in lattice
+            random_particle.find_flipped_neighbours()
+
+            # Determine which direction is most common -> assign all opposed particles as flipped
+            parallel_particles = {
+                particle
+                for particle in particles
+                if hasattr(particle, "direction") and particle.direction == 1
+            }
+            antiparallel_particles = particles.difference(parallel_particles)
+
+            if len(parallel_particles) > len(antiparallel_particles):
+                flipped_particles.extend(antiparallel_particles)
+            else:
+                flipped_particles.extend(parallel_particles)
+
+        return flipped_particles
+
     def toggle_selected(self, n: int) -> None:
         """
         Toggle whether lattice n is manually selected or not

@@ -51,6 +51,7 @@ def create_particle_plot_from_raw_data(
     showing_removed_particles: bool = False,
     colour: str = "red",
     opacity: float = 1.0,
+    flipped_particle_indices: list = None,
 ) -> go.Figure:
     """
     Create a particle plot from raw tomogram data without requiring a Tomogram object.
@@ -70,6 +71,9 @@ def create_particle_plot_from_raw_data(
         Colour for particles/cones. Defaults to "red".
     opacity : float, optional
         Opacity for particles/cones (0.0 to 1.0). Defaults to 1.0.
+    flipped_particle_indices : list, optional
+        List of particle indices that should have their orientations flipped.
+        If None, no particles are flipped. Defaults to None.
 
     Returns
     -------
@@ -81,6 +85,15 @@ def create_particle_plot_from_raw_data(
 
     positions = np.array([particle[0] for particle in tomogram_raw_data])
     orientations = np.array([particle[1] for particle in tomogram_raw_data])
+
+    # Flip orientations if requested
+    if flipped_particle_indices:
+        for idx in flipped_particle_indices:
+            if idx < len(orientations):
+                # for plotting purposes, invert orientation with a simple reflection
+                # note that this is NOT equivalent to the 180 degree rotation
+                # used for fixing the actual saved data (as this is not a proper rotation)
+                orientations[idx] = -orientations[idx]
 
     # Create base figure with standard formatting
     fig = simple_figure()
@@ -113,6 +126,7 @@ def create_lattice_plot_from_raw_data(
     cone_size: float = 1.0,
     show_removed_particles: bool = False,
     selected_lattices: Optional[set] = {},
+    flipped_particle_indices: list = None,
 ) -> go.Figure:
     """
     Create a particle plot with separate traces for each lattice.
@@ -131,6 +145,9 @@ def create_lattice_plot_from_raw_data(
     selected_lattices : Optional[set], optional
         Set of lattice IDs that are selected. Selected lattices will be plotted in white.
         Defaults to None.
+    flipped_particle_indices : list, optional
+        List of particle indices that should have their orientations flipped.
+        If None, no particles are flipped. Defaults to None.
 
     Returns
     -------
@@ -187,6 +204,12 @@ def create_lattice_plot_from_raw_data(
         if cone_size > 0:
             positions = np.array([p[0] for p in lattice_particles])
             orientations = np.array([p[1] for p in lattice_particles])
+
+            # Flip orientations for flipped particles if requested
+            if flipped_particle_indices:
+                for i, particle_idx in enumerate(particle_ids):
+                    if particle_idx in flipped_particle_indices:
+                        orientations[i] = -orientations[i]
 
             positions_with_fix, orientations_with_fix = append_cone_fix_to_lattice(
                 positions, orientations, cone_fix_positions, cone_fix_orientations
@@ -544,6 +567,7 @@ def get_tomogram_figure(
     make_cones,
     cone_size,
     show_removed,
+    flip_data,
     get_cached_tomogram_figure,
     EMPTY_FIG,
 ):
@@ -566,6 +590,11 @@ def get_tomogram_figure(
     actual_cone_size = cone_size if make_cones else -1
     logger.debug("actual_cone_size=%s", actual_cone_size)
 
+    # Get flipped particle indices for this tomogram
+    flipped_particle_indices = (
+        flip_data.get(selected_tomo_name, []) if flip_data else []
+    )
+
     fig = get_cached_tomogram_figure(
         selected_tomo_name,
         data_path,
@@ -573,6 +602,7 @@ def get_tomogram_figure(
         lattice_data,
         actual_cone_size,
         show_removed,
+        flipped_particle_indices,
     )
 
     logger.debug("Got figure from cache: %s", fig is not None)
