@@ -16,3 +16,4 @@ emfile
 pyyaml
 starfile
 eulerangles
+black
