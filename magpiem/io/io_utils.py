@@ -11,7 +11,6 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import scipy.io
 from pathlib import Path
-from glob import glob
 import glob as glob
 import os
 import atexit
@@ -198,7 +197,8 @@ def write_emc_mat(
         logger.info(f"Processing {tomo_id} with {len(particles)} particles")
         if tomo_id not in mat_geom:
             logger.error(
-                f"Tomogram {tomo_id} not found in file after cleaning. Was the file modified or moved?"
+                f"Tomogram {tomo_id} not found in file after cleaning. "
+                f"Was the file modified or moved?"
             )
             continue
         table_rows = list()
@@ -365,8 +365,10 @@ def clear_cache_directory(cache_dir):
         for file_path in cache_files:
             if os.path.isfile(file_path):
                 try:
-                    # Skip dash diskcache - dash will handle them itself, and leads to errors if we interfere
-                    # cache.db may remain, but not large enough to matter. reset on next run regardless
+                    # Skip dash diskcache - dash will handle them itself,
+                    # and leads to errors if we interfere
+                    # cache.db may remain, but not large enough to matter.
+                    # reset on next run regardless
                     if (
                         file_path.endswith(".db")
                         or file_path.endswith(".db-shm")

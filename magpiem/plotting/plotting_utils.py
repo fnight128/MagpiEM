@@ -5,7 +5,6 @@ Helper functions for plotting tomogram data without requiring Tomogram objects.
 
 import numpy as np
 import plotly.graph_objects as go
-import pandas as pd
 import colorsys
 from typing import List, Dict, Tuple, Optional
 
@@ -527,7 +526,8 @@ def create_cone_traces(
     positions : np.ndarray
         Array of particle positions [N, 3] (should include cone fix points if needed)
     orientations : np.ndarray
-        Array of particle orientations [N, 3] (should be normalised, and should include cone fix orientations if needed)
+        Array of particle orientations [N, 3] (should be normalised, and should
+        include cone fix orientations if needed)
     cone_size : float
         Size of cones to plot
     colour : str, optional

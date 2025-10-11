@@ -7,7 +7,6 @@ Created on Mon Nov  7 16:54:48 2022
 
 import logging
 import numpy as np
-from typing import Tuple, Any
 from ...utils import within
 
 logger = logging.getLogger(__name__)
@@ -102,9 +101,10 @@ class Cleaner:
             np.round(np.degrees(np.arccos(ang)), decimals=1)
             for ang in [*self.ori_range, *self.curv_range]
         ]
-        return "Allowed distances: {}-{}. Allowed orientations:{}-{}. Allowed curvatures:{}-{}.".format(
-            *dist_range, *angle_ranges
-        )
+        return (
+            "Allowed distances: {}-{}. Allowed orientations:{}-{}. "
+            "Allowed curvatures:{}-{}."
+        ).format(*dist_range, *angle_ranges)
 
     @staticmethod
     def dist_range(target_dist: float, dist_tol: float) -> tuple[float, float]:

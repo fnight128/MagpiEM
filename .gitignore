@@ -158,6 +158,8 @@ cython_debug/
 *.mod
 
 *.yml
+*.yaml
+!.pre-commit-config.yaml
 *.html
 
 #PyCharm

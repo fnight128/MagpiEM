@@ -9,8 +9,7 @@ import numpy as np
 import os
 import sys
 import logging
-from pathlib import Path
-from typing import Dict, Any, List, Tuple, Set
+from typing import Dict, Any, List
 
 log = logging.getLogger(__name__)
 
@@ -105,7 +104,8 @@ def compare_arrays(val1: Any, val2: Any, path: str, key: str) -> List[str]:
             ):
                 if len(val1[i]) != len(val2[i]):
                     differences.append(
-                        f"{path}.{key}[{i}]: Different sub-array lengths - {len(val1[i])} vs {len(val2[i])}"
+                        f"{path}.{key}[{i}]: Different sub-array lengths - "
+                        f"{len(val1[i])} vs {len(val2[i])}"
                     )
             elif val1[i] != val2[i]:
                 differences.append(
@@ -140,7 +140,7 @@ def compare_mat_structures(
         val1 = mat1[key]
         val2 = mat2[key]
 
-        if type(val1) != type(val2):
+        if type(val1) is not type(val2):
             differences.append(
                 f"{path}.{key}: Different types - {type(val1)} vs {type(val2)}"
             )
@@ -200,13 +200,13 @@ def compare_particle_data_structure(
             )
         else:
             for i, (val1, val2) in enumerate(zip(particle1, particle2)):
-                if type(val1) != type(val2):
+                if type(val1) is not type(val2):
                     differences.append(
                         f"Particle field {i}: Different types - {type(val1)} vs {type(val2)}"
                     )
     else:
         # Handle scalar particle data
-        if type(particle1) != type(particle2):
+        if type(particle1) is not type(particle2):
             differences.append(
                 f"Particle data: Different types - {type(particle1)} vs {type(particle2)}"
             )
@@ -229,7 +229,8 @@ def log_geometry_info(geom_info: Dict[str, Any], file_num: int):
     log.info(f"  Total particles: {geom_info.get('total_particles', 'N/A')}")
     if "tomogram_details" in geom_info:
         log.info(
-            f"  First {TOMOGRAMS_TO_DISPLAY} tomograms: {list(geom_info['tomogram_details'].items())[:TOMOGRAMS_TO_DISPLAY]}"
+            f"  First {TOMOGRAMS_TO_DISPLAY} tomograms: "
+            f"{list(geom_info['tomogram_details'].items())[:TOMOGRAMS_TO_DISPLAY]}"
         )
     log.info("")
 

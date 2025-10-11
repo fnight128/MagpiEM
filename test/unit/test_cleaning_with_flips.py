@@ -13,10 +13,9 @@ from pathlib import Path
 test_root = Path(__file__).parent.parent
 sys.path.insert(0, str(test_root))
 
-from test_utils import (
+from test_utils import (  # noqa: E402
     TestConfig,
     setup_test_logging,
-    get_test_data_path,
     log_test_start,
     log_test_success,
     log_test_failure,
@@ -24,17 +23,19 @@ from test_utils import (
 )
 
 setup_test_environment()
-from magpiem.io.io_utils import (
+from magpiem.io.io_utils import (  # noqa: E402
     read_single_tomogram,
     read_emc_tomogram_raw_data,
     read_emc_mat,
 )
-from magpiem.processing.classes.cleaner import Cleaner
-from magpiem.processing.cpp_integration import (
+from magpiem.processing.classes.cleaner import Cleaner  # noqa: E402
+from magpiem.processing.cpp_integration import (  # noqa: E402
     clean_tomo_with_cpp,
     clean_and_detect_flips_with_cpp,
 )
-from magpiem.plotting.plotting_utils import create_lattice_plot_from_raw_data
+from magpiem.plotting.plotting_utils import (  # noqa: E402
+    create_lattice_plot_from_raw_data,
+)
 
 logger = setup_test_logging()
 
@@ -84,7 +85,8 @@ def test_cleaning_with_flips():
             tomo_raw_data, test_cleaner
         )
         logger.info(
-            f"C++ flip detection completed. Found {len(cpp_flip_lattice_data)} lattices and {len(cpp_flipped_indices)} flipped particles"
+            f"C++ flip detection completed. Found {len(cpp_flip_lattice_data)} "
+            f"lattices and {len(cpp_flipped_indices)} flipped particles"
         )
 
         # Run Python implementation for comparison
@@ -117,7 +119,8 @@ def test_cleaning_with_flips():
             test_tomo.all_particles.index(p) for p in python_flipped_particles
         ]
         logger.info(
-            f"Python flip detection completed. Found {len(python_flipped_indices)} flipped particles"
+            f"Python flip detection completed. Found "
+            f"{len(python_flipped_indices)} flipped particles"
         )
 
         # Log results for comparison
@@ -178,17 +181,19 @@ def test_cleaning_with_flips():
         combined_fig.write_html(str(combined_output_html))
 
         log_test_success(test_name, logger)
-        logger.info(f"Cleaning with flips completed successfully")
+        logger.info("Cleaning with flips completed successfully")
         logger.info(f"C++ interactive plot saved as: {cpp_output_html}")
         logger.info(f"Python interactive plot saved as: {python_output_html}")
         logger.info(f"Combined interactive plot saved as: {combined_output_html}")
 
         # Log comparison results
         logger.info(
-            f"C++ found {len(cpp_lattice_data)} lattices, {len(cpp_flipped_indices)} flipped particles"
+            f"C++ found {len(cpp_lattice_data)} lattices, "
+            f"{len(cpp_flipped_indices)} flipped particles"
         )
         logger.info(
-            f"Python found {len(python_lattice_data)} lattices, {len(python_flipped_indices)} flipped particles"
+            f"Python found {len(python_lattice_data)} lattices, "
+            f"{len(python_flipped_indices)} flipped particles"
         )
         logger.info(
             f"Flipped particles match: {set(cpp_flipped_indices) == set(python_flipped_indices)}"

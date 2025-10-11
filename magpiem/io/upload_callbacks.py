@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 
 import yaml
-from dash import State, ctx, dcc, html
+from dash import State, ctx, html
 from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Input, Output
 
@@ -162,7 +162,8 @@ def register_upload_callbacks(app, temp_file_dir, cleaning_params_dir):
                 return prev_vals
         except (FileNotFoundError, yaml.YAMLError, KeyError):
             logger.info(
-                f"Couldn't find or read a previous cleaning file for {filename} at {cleaning_params_dir}."
+                f"Couldn't find or read a previous cleaning file for {filename} "
+                f"at {cleaning_params_dir}."
             )
             raise PreventUpdate
 
@@ -203,7 +204,8 @@ def register_upload_callbacks(app, temp_file_dir, cleaning_params_dir):
                 return [
                     "Keys do not match up between previous session and .mat file.",
                     html.Br(),
-                    "Previous session only contains {0} keys, did you save the session with only {0} Tomogram(s) "
+                    "Previous session only contains {0} keys, "
+                    "did you save the session with only {0} Tomogram(s) "
                     "loaded?".format(len(prev_keys)),
                 ]
             geom_missing = list(prev_keys.difference(geom_keys))

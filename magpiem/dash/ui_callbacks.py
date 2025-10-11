@@ -4,8 +4,7 @@ UI state management and navigation callbacks for MagpiEM.
 """
 
 import logging
-import yaml
-from dash import State, ctx, dcc
+from dash import State, ctx
 from dash_extensions.enrich import Input, Output
 
 logger = logging.getLogger(__name__)
@@ -46,7 +45,6 @@ def register_ui_callbacks(app, temp_file_dir):
     def open_cards(_, tomogram_raw_data, lattice_data):
         upload_phase = True, False, False, False
         cleaning_phase = False, True, True, False
-        saving_phase = False, False, True, True
         if not tomogram_raw_data:
             return upload_phase
         elif not lattice_data:

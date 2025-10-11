@@ -10,7 +10,7 @@ from pathlib import Path
 test_root = Path(__file__).parent.parent
 sys.path.insert(0, str(test_root))
 
-from test_utils import (
+from test_utils import (  # noqa: E402
     TestConfig,
     setup_test_logging,
     get_test_data_path,
@@ -22,8 +22,8 @@ from test_utils import (
 
 setup_test_environment()
 
-from magpiem.io.io_utils import read_single_tomogram
-from magpiem.processing.classes.cleaner import Cleaner
+from magpiem.io.io_utils import read_single_tomogram  # noqa: E402
+from magpiem.processing.classes.cleaner import Cleaner  # noqa: E402
 
 logger = setup_test_logging()
 
@@ -56,7 +56,8 @@ def test_tomogram_plotting():
         logger.info("Running automatic cleaning...")
         test_tomo.autoclean()
         logger.info(
-            f"Cleaning completed. Found {len(test_tomo.lattices) - 1} lattices (excluding lattice 0)"
+            f"Cleaning completed. Found {len(test_tomo.lattices) - 1} lattices "
+            f"(excluding lattice 0)"
         )
 
         for lattice_id, particles in test_tomo.lattices.items():
