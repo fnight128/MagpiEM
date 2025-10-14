@@ -52,7 +52,10 @@ processing_extension = Extension(
 
 if __name__ == "__main__":
     setup(
-        packages=find_packages(include=["magpiem", "magpiem.*"]),
+        packages=find_packages(
+            include=["magpiem", "magpiem.*"],
+            exclude=["magpiem.cpp", "magpiem.cpp.*"],
+        ),
         ext_modules=[processing_extension],
         cmdclass={"build_ext": BuildExt},
         zip_safe=False,  # Required for C++ extensions

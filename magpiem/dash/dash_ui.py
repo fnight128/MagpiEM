@@ -92,7 +92,16 @@ def main(open_browser=True, log_level=logging.WARNING):
 
     if open_browser:
         webbrowser.open("http://localhost:8050/")
-    app.run_server(debug=True, use_reloader=False)
+
+    # If containerised, bind to 0.0.0.0, otherwise bind to 127.0.0.1
+    if os.environ.get("DOCKER_CONTAINER") == "true":
+        logging.info("Running in Docker container - binding to 0.0.0.0:8050")
+        host = "0.0.0.0"
+    else:
+        logging.info("Running natively - binding to 127.0.0.1:8050")
+        host = "127.0.0.1"
+
+    app.run_server(debug=True, use_reloader=False, host=host, port=8050)
 
 
 def parse_arguments():

@@ -329,7 +329,7 @@ def validate_test_results(
     )
     logger.info(
         f"Debug C++ flipped particles: {len(debug_flipped_indices)} "
-        f"({len(debug_flipped_indices)/total_particles*100:.1f}%)"
+        f"({len(debug_flipped_indices) / total_particles * 100:.1f}%)"
     )
     logger.info(
         f"Python and Debug C++ results match: "

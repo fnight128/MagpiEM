@@ -107,7 +107,7 @@ def main():
     print("Filtered dataset saved successfully!")
     print(f"  - Original particles: {len(tomo_raw_data)}")
     print(f"  - Filtered particles: {len(filtered_data)}")
-    print(f"  - Reduction: {(1 - len(filtered_data)/len(tomo_raw_data))*100:.1f}%")
+    print(f"  - Reduction: {(1 - len(filtered_data) / len(tomo_raw_data)) * 100:.1f}%")
 
     positions = np.array([particle[0] for particle in filtered_data])
     print("  - Position range:")
