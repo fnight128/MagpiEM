@@ -1,0 +1,19 @@
+services:
+  magpiem:
+    build: .
+    ports:
+      - "8050:8050"
+    volumes:
+      # Mount directories for persistent data and uploads
+      - ./cache:/app/cache
+      - ./past_cleaning_params:/app/past_cleaning_params
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8050/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
