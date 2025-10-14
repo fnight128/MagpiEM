@@ -1,4 +1,4 @@
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -20,7 +20,7 @@ COPY MANIFEST.in ./
 
 RUN pip install --no-cache-dir .
 
-FROM python:3.11-slim as runtime
+FROM python:3.11-slim AS runtime
 
 RUN apt-get update && apt-get install -y \
     curl \
