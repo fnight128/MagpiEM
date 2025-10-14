@@ -121,7 +121,7 @@ def test_cleaning_with_flips():
         # Run Python flip detection
         python_flipped_particles = test_tomo.find_flipped_particles()
         python_flipped_indices = [
-            test_tomo.all_particles.index(p) for p in python_flipped_particles
+            particle.particle_id for particle in python_flipped_particles
         ]
         logger.info(
             f"Python flip detection completed. Found "
@@ -159,10 +159,17 @@ def test_cleaning_with_flips():
         logger.info(f"Saving C++ interactive plot to {cpp_output_html}")
         cpp_fig.write_html(str(cpp_output_html))
 
+        # Convert Particle objects to indices for plotting
+        python_lattice_data_indices = {}
+        for lattice_id, particles in python_lattice_data.items():
+            python_lattice_data_indices[lattice_id] = [
+                particle.particle_id for particle in particles
+            ]
+
         # Python cleaning plot
         python_fig = create_lattice_plot_from_raw_data(
             tomogram_raw_data=tomo_raw_data,
-            lattice_data=python_lattice_data,
+            lattice_data=python_lattice_data_indices,
             cone_size=10.0,
             show_removed_particles=False,
         )
@@ -204,12 +211,14 @@ def test_cleaning_with_flips():
             f"Flipped particles match: {set(cpp_flipped_indices) == set(python_flipped_indices)}"
         )
 
+        # All particles should be assigned to lattice 1 as flips are allowed
+        assert len(cpp_lattice_data) == 1
+        assert len(python_lattice_data) == 1
+
         # Basic assertions
         assert cpp_fig is not None
         assert python_fig is not None
         assert combined_fig is not None
-        assert len(cpp_lattice_data) > 1
-        assert len(python_lattice_data) > 1
         assert cpp_output_html.exists()
         assert python_output_html.exists()
         assert combined_output_html.exists()
