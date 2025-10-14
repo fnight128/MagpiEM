@@ -160,6 +160,7 @@ cython_debug/
 *.yml
 *.yaml
 !.pre-commit-config.yaml
+!docker-compose.yml
 *.html
 
 #PyCharm
