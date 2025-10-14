@@ -6,14 +6,9 @@ Loads test_data_flipped.mat and runs cleaning with allow_flips enabled,
 saving the result as an HTML file for inspection.
 """
 
-import sys
 from pathlib import Path
 
-# Add test utilities to path
-test_root = Path(__file__).parent.parent
-sys.path.insert(0, str(test_root))
-
-from test_utils import (  # noqa: E402
+from ..test_utils import (
     TestConfig,
     setup_test_logging,
     log_test_start,
@@ -25,6 +20,10 @@ from test_utils import (  # noqa: E402
 )
 
 setup_test_environment()
+
+# Get test root for file paths
+test_root = Path(__file__).parent.parent
+
 from magpiem.io.io_utils import (  # noqa: E402
     read_single_tomogram,
     read_emc_tomogram_raw_data,

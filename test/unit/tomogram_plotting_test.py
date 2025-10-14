@@ -3,14 +3,9 @@
 Simple test to ensure Tomogram class is able to instantiate, run cleaning, and produce a plot
 """
 
-import sys
 from pathlib import Path
 
-# Add test utilities to path
-test_root = Path(__file__).parent.parent
-sys.path.insert(0, str(test_root))
-
-from test_utils import (  # noqa: E402
+from ..test_utils import (
     TestConfig,
     setup_test_logging,
     get_test_data_path,

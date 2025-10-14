@@ -17,11 +17,11 @@ from magpiem.processing.cpp_integration import (  # noqa: E402
     setup_cpp_library,
     clean_tomo_with_cpp,
 )  # noqa: E402
-from test.test_utils import (  # noqa: E402
-    TestConfig,  # noqa: E402
-    get_test_data_path,  # noqa: E402
-    ensure_test_data_generated,  # noqa: E402
-)  # noqa: E402
+from ..test_utils import (  # noqa: E402
+    TestConfig,
+    get_test_data_path,
+    ensure_test_data_generated,
+)
 
 logger = logging.getLogger(__name__)
 
