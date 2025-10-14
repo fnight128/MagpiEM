@@ -7,11 +7,37 @@ The software is not suitable for proteins which do not form any kind of regular 
 Please note that the software is still very actively in development, and you may run into errors. Please report any issues here or by email.
 
 ## Installation
+
 MagpiEM is currently designed to be run locally on your desktop, rather than on a high-performance computation cluster. 
 
-Open a python terminal (e.g. [anaconda](https://www.anaconda.com/)), with python 3.10 or above, and run
+### Option 1: Containerised Installation
 
-    pip install MagpiEM
+1. Install Docker on your system:
+   - Windows / mac: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+   - Linux: [Docker Engine](https://docs.docker.com/engine/install/)
+
+2. Clone the repository to an easily accessible directory and build the container:
+   ```bash
+   git clone https://github.com/fnight128/MagpiEM.git
+   cd MagpiEM
+   docker-compose up --build
+   ```
+
+3. Open your preferred web browser and connect to `http://localhost:8050`
+
+Next time you wish to run the application, navigate back to the MagpiEM directory and run
+   ```bash
+   docker-compose up
+   ```
+
+Note that if using this method, your browser will not be opened automatically, due to the nature of the container.
+
+### Option 2: Install with pip
+
+Open a python terminal (e.g. [anaconda](https://www.anaconda.com/)), with python 3.10 or above, and run
+   ```bash
+   pip install MagpiEM
+   ```
 
 This should install the software and all dependencies. **The package includes a C++ component that will be automatically compiled during installation.** This process requires a C++ compiler to be available on your system:
 
@@ -19,21 +45,17 @@ This should install the software and all dependencies. **The package includes a 
 - **macOS**: Xcode Command Line Tools (install with `xcode-select --install`)
 - **Linux**: GCC or Clang (usually pre-installed)
 
-If you encounter compilation issues, please ensure you have the appropriate development tools installed for your operating system.
+If you encounter compilation issues, please ensure you have the appropriate development tools installed for your operating system. If you run into issues with this method, containerised installation (option 1) is generally more robust.
 
-Note: to update the package in future, run
+To start the software, run:
+   ```bash
+   magpiem
+   ```
+This will start the software and connect to it in your default browser.
 
-    pip install MagpiEM --upgrade
 
 ## Usage
-MagpiEM is currently started in the terminal and will open a dash-based GUI in your default browser. After you’re finished, make sure to stop the script in the terminal (e.g. with Ctrl-C or by closing the terminal), do not just close the browser tab as the software may continue running and holding memory.
 
-To start the software, type 
-
-    magpiem
-
- in your python terminal. This will open the GUI in your default browser.
- 
 Upload the file containing your particle data.
 
 You may choose to read a small number of tomograms initially, to test the software on a small dataset and find good parameters.
