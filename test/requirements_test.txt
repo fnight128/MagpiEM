@@ -3,3 +3,5 @@ webdriver-manager
 pytest
 pytest-html
 requests
+playwright
+pytest-playwright
