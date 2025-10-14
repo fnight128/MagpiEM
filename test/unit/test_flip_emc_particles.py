@@ -74,7 +74,7 @@ def test_flip_emc_particles():
 
         logger.info(
             f"Total particles: {total_particles}, flipping {flipped_count} "
-            f"({flipped_count/total_particles*100:.1f}%)"
+            f"({flipped_count / total_particles * 100:.1f}%)"
         )
 
         # Create keep_ids dict for all particles (since we want to keep all
