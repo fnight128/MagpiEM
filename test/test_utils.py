@@ -24,17 +24,21 @@ class TestConfig:
     """Configuration class for test settings."""
 
     # Test data files
-    TEST_DATA_MINISCULE = "test_data_miniscule.mat"
     TEST_DATA_STANDARD = "test_data.mat"
-    TEST_DATA_LARGE = "WT_CA_2nd.mat"
+    TEST_DATA_SMALL = "test_data_small.mat"
+    TEST_DATA_SMALL_FLIPPED = "test_data_small_flipped.mat"
+
+    TEST_DATA_COORDINATES = "small_lattice_coordinates.csv"
 
     # Test tomogram names
-    TEST_TOMO_MINISCULE = "test_tomo"
     TEST_TOMO_STANDARD = "wt2nd_4004_2"
-    TEST_TOMO_LARGE = "wt2nd_4004_6"
 
     # Standard test parameters for cleaning
     TEST_CLEANER_VALUES = [2.0, 3, 10, 60.0, 40.0, 10.0, 20.0, 90.0, 20.0]
+
+    # Lenient test parameters for other testing
+    # Allow particles even with no neighbours
+    TEST_CLEANER_VALUES_LENIENT = [2.0, 0, 1, 60.0, 40.0, 10.0, 20.0, 90.0, 20.0]
 
     # Dash UI test parameters
     TEST_DASH_PARAMETERS = {
@@ -282,3 +286,46 @@ def log_test_failure(
         logger = logging.getLogger()
 
     logger.error(f"FAILED Test: {test_name} - {error}")
+
+
+def ensure_test_data_generated() -> None:
+    """
+    Ensure that required test data files are generated before running tests.
+    """
+    logger = logging.getLogger(__name__)
+
+    small_data_path = get_test_data_path(TestConfig.TEST_DATA_SMALL)
+    flipped_data_path = get_test_data_path(TestConfig.TEST_DATA_SMALL_FLIPPED)
+
+    if not small_data_path.exists() or not flipped_data_path.exists():
+        logger.info("Required test data files not found, generating...")
+        import sys
+        from pathlib import Path
+
+        data_dir = Path(__file__).parent / "data"
+        sys.path.insert(0, str(data_dir))
+
+        try:
+            from generate_small_lattice import main as generate_test_data
+
+            generate_test_data()
+            logger.info("Test data generation completed successfully")
+        except Exception as e:
+            logger.error(f"Failed to generate test data: {e}")
+            raise RuntimeError(f"Test data generation failed: {e}")
+        finally:
+            # Clean up the path modification
+            if str(data_dir) in sys.path:
+                sys.path.remove(str(data_dir))
+
+    # Verify files
+    if not small_data_path.exists():
+        raise FileNotFoundError(
+            f"Test data file not found after generation: {small_data_path}"
+        )
+    if not flipped_data_path.exists():
+        raise FileNotFoundError(
+            f"Flipped test data file not found after generation: {flipped_data_path}"
+        )
+
+    logger.debug("Test data files are available")

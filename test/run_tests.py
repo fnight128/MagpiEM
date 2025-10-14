@@ -53,25 +53,25 @@ def run_pytest_tests(test_path: str, logger) -> bool:
 
 def run_unit_tests(logger):
     """Run unit tests."""
-    logger.info("🧪 Running unit tests...")
+    logger.info("Running unit tests...")
     return run_pytest_tests(test_root / "unit", logger)
 
 
 def run_integration_tests(logger):
     """Run integration tests."""
-    logger.info("🔗 Running integration tests...")
+    logger.info("Running integration tests...")
     return run_pytest_tests(test_root / "integration", logger)
 
 
 def run_e2e_tests(logger):
     """Run end-to-end tests."""
-    logger.info("🌐 Running end-to-end tests...")
+    logger.info("Running end-to-end tests...")
     return run_pytest_tests(test_root / "e2e", logger)
 
 
 def run_all_tests(logger):
     """Run all tests."""
-    logger.info("🚀 Running all tests...")
+    logger.info("Running all tests...")
     return run_pytest_tests(test_root, logger)
 
 
@@ -104,7 +104,7 @@ def main():
     log_level = getattr(logging, args.log_level.upper())
     logger = setup_test_logging(level=log_level, log_file=args.log_file)
 
-    logger.info(f"🧪 Starting MagpiEM test suite - Category: {args.category}")
+    logger.info(f"Starting MagpiEM test suite - Category: {args.category}")
 
     # Run tests based on category
     if args.category == "unit":
@@ -117,9 +117,9 @@ def main():
         success = run_all_tests(logger)
 
     if success:
-        logger.info("✅ All tests passed!")
+        logger.info("All tests passed!")
     else:
-        logger.error("❌ Some tests failed")
+        logger.error("Some tests failed")
 
     # Exit with appropriate code
     sys.exit(0 if success else 1)

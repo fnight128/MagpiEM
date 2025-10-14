@@ -20,6 +20,8 @@ from test_utils import (  # noqa: E402
     log_test_success,
     log_test_failure,
     setup_test_environment,
+    ensure_test_data_generated,
+    get_test_data_path,
 )
 
 setup_test_environment()
@@ -39,7 +41,10 @@ from magpiem.plotting.plotting_utils import (  # noqa: E402
 
 logger = setup_test_logging()
 
-FLIPPED_DATA_FILE = test_root / "data" / "test_data_flipped.mat"
+# Ensure test data is generated before running tests
+ensure_test_data_generated()
+
+FLIPPED_DATA_FILE = get_test_data_path(TestConfig.TEST_DATA_SMALL_FLIPPED)
 TEST_TOMO_NAME = TestConfig.TEST_TOMO_STANDARD
 TEST_CLEANER_VALUES = TestConfig.TEST_CLEANER_VALUES
 
@@ -104,7 +109,7 @@ def test_cleaning_with_flips():
         test_tomo.lattices[1] = test_tomo.all_particles
 
         # Run Python cleaning
-        test_tomo.clean_particles()
+        test_tomo.autoclean()
         python_lattice_data = {
             lattice_id: list(particles)
             for lattice_id, particles in test_tomo.lattices.items()
@@ -216,4 +221,4 @@ def test_cleaning_with_flips():
 
 if __name__ == "__main__":
     test_cleaning_with_flips()
-    print("Test completed successfully!")
+    logger.info("Test completed successfully!")

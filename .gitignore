@@ -153,6 +153,7 @@ cython_debug/
 
 # Cryo-EM Inputs/Outputs
 *.mat
+!/test/data/test_data.mat
 *.em
 *.star
 *.mod
@@ -168,5 +169,6 @@ cython_debug/
 *.zip
 *.csv
 *.dll
+
 /test/screenshots
 /cache

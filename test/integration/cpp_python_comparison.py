@@ -17,13 +17,18 @@ from magpiem.processing.cpp_integration import (  # noqa: E402
     setup_cpp_library,
     clean_tomo_with_cpp,
 )  # noqa: E402
-from test.test_utils import TestConfig, get_test_data_path  # noqa: E402
+from test.test_utils import (  # noqa: E402
+    TestConfig,  # noqa: E402
+    get_test_data_path,  # noqa: E402
+    ensure_test_data_generated,  # noqa: E402
+)  # noqa: E402
 
-# Set up logging
 logger = logging.getLogger(__name__)
 
+ensure_test_data_generated()
+
 # Updated paths for test folder location
-TEST_DATA_FILE = get_test_data_path(TestConfig.TEST_DATA_LARGE)
+TEST_DATA_FILE = get_test_data_path(TestConfig.TEST_DATA_STANDARD)
 TEST_TOMO_NAME = TestConfig.TEST_TOMO_STANDARD
 # appropriate values for test tomogram
 TEST_CLEANER_VALUES = TestConfig.TEST_CLEANER_VALUES

@@ -21,6 +21,7 @@ from test_utils import (  # noqa: E402
     log_test_success,
     log_test_failure,
     setup_test_environment,
+    ensure_test_data_generated,
 )
 
 setup_test_environment()
@@ -36,8 +37,11 @@ from magpiem.plotting.plotting_utils import (  # noqa: E402
 
 logger = setup_test_logging()
 
-TEST_DATA_FILE = get_test_data_path("test_data_flipped.mat")
-ORIGINAL_DATA_FILE = get_test_data_path("test_data_single_lattice.mat")
+# Ensure test data is generated before running tests
+ensure_test_data_generated()
+
+TEST_DATA_FILE = get_test_data_path(TestConfig.TEST_DATA_SMALL_FLIPPED)
+ORIGINAL_DATA_FILE = get_test_data_path(TestConfig.TEST_DATA_SMALL)
 TEST_TOMO_NAME = TestConfig.TEST_TOMO_STANDARD
 TEST_CLEANER_VALUES = TestConfig.TEST_CLEANER_VALUES
 
@@ -410,4 +414,4 @@ def test_find_flipped_particles():
 
 if __name__ == "__main__":
     test_find_flipped_particles()
-    print("Test completed successfully!")
+    logger.info("Test completed successfully!")
