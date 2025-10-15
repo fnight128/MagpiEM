@@ -38,7 +38,7 @@ class TestConfig:
 
     # Lenient test parameters for other testing
     # Allow particles even with no neighbours
-    TEST_CLEANER_VALUES_LENIENT = [2.0, 0, 1, 60.0, 40.0, 10.0, 20.0, 90.0, 20.0]
+    TEST_CLEANER_VALUES_LENIENT = [0.0, 0, 0, 60.0, 20.0, 00.0, 50.0, 90.0, 30.0]
 
     # Dash UI test parameters
     TEST_DASH_PARAMETERS = {

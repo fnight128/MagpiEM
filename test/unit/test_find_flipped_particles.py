@@ -210,13 +210,10 @@ def run_cpp_flip_detection(test_tomo, test_cleaner):
         raw_data, test_cleaner
     )
 
-    logger.info(f"Debug C++ found {len(cpp_flipped_indices)} flipped particles")
+    logger.info(f"C++ found {len(cpp_flipped_indices)} flipped particles")
+    logger.info(f"C++ flipped indices: {cpp_flipped_indices}")
 
-    # Convert C++ indices to particle IDs
-    all_particles_list = list(test_tomo.all_particles)
-    cpp_flipped_particle_ids = []
-    for idx in cpp_flipped_indices:
-        cpp_flipped_particle_ids.append(all_particles_list[idx].particle_id)
+    cpp_flipped_particle_ids = cpp_flipped_indices.copy()
 
     return cpp_flipped_indices, cpp_flipped_particle_ids
 
