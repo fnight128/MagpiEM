@@ -22,7 +22,7 @@ from magpiem.io.io_utils import read_emc_mat, write_emc_mat  # noqa: E402
 
 # Import test utilities
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from test_utils import TestConfig, get_test_data_path  # noqa: E402
+from test_utils import TestConfig  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
