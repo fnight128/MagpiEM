@@ -22,6 +22,12 @@ from test_utils import setup_test_logging, setup_test_environment  # noqa: E402
 def run_pytest_tests(test_path: str, logger) -> bool:
     """Run pytest on a specific test path."""
     try:
+        import logging
+
+        # Get the current log level
+        log_level = logging.getLogger().level
+        log_level_name = logging.getLevelName(log_level)
+
         # Build pytest command
         cmd = [
             sys.executable,
@@ -31,6 +37,11 @@ def run_pytest_tests(test_path: str, logger) -> bool:
             "-v",  # Verbose output
             "--tb=short",  # Short traceback format
             "--strict-markers",  # Strict marker checking
+            "-s",  # Don't capture output (so print statements show)
+            "--log-cli-level",
+            log_level_name,  # Set pytest log level
+            "--log-cli-format",
+            "%(asctime)s %(name)s %(levelname)s: %(message)s",
         ]
 
         logger.info(f"Running: {' '.join(cmd)}")
