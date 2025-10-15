@@ -158,10 +158,6 @@ cython_debug/
 *.star
 *.mod
 
-*.yml
-*.yaml
-!.pre-commit-config.yaml
-!docker-compose.yml
 *.html
 
 #PyCharm
@@ -172,3 +168,4 @@ cython_debug/
 
 /test/screenshots
 /cache
+/past_cleaning_params

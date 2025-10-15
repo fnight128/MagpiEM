@@ -285,21 +285,37 @@ def _get_all_particle_indices(
 
 def main():
     """Main function to generate .mat files"""
-    input_file = get_test_data_path(TestConfig.TEST_DATA_STANDARD)
-    coordinates_file = get_test_data_path(TestConfig.TEST_DATA_COORDINATES)
-    # Output files don't exist yet, so construct paths directly
-    output_file = Path(__file__).parent / TestConfig.TEST_DATA_SMALL
-    flipped_output_file = Path(__file__).parent / TestConfig.TEST_DATA_SMALL_FLIPPED
+    # Set up logging
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
+
+    # Get the directory containing this script
+    script_dir = Path(__file__).parent
+
+    # Define file paths relative to the script directory
+    input_file = script_dir / TestConfig.TEST_DATA_STANDARD
+    coordinates_file = script_dir / TestConfig.TEST_DATA_COORDINATES
+    output_file = script_dir / TestConfig.TEST_DATA_SMALL
+    flipped_output_file = script_dir / TestConfig.TEST_DATA_SMALL_FLIPPED
 
     logger.info("Generating test datasets...")
+    logger.info(f"Script directory: {script_dir}")
+    logger.info(f"Current working directory: {Path.cwd()}")
+    logger.info(f"Input file: {input_file}")
+    logger.info(f"Coordinates file: {coordinates_file}")
+    logger.info(f"Output file: {output_file}")
+    logger.info(f"Flipped output file: {flipped_output_file}")
 
     if not input_file.exists():
-        logger.error(f"{input_file} not found")
-        return
+        logger.error(f"Input file not found: {input_file}")
+        logger.error(f"Files in script directory: {list(script_dir.iterdir())}")
+        raise FileNotFoundError(f"Input file not found: {input_file}")
 
     if not coordinates_file.exists():
-        logger.error(f"{coordinates_file} not found")
-        return
+        logger.error(f"Coordinates file not found: {coordinates_file}")
+        logger.error(f"Files in script directory: {list(script_dir.iterdir())}")
+        raise FileNotFoundError(f"Coordinates file not found: {coordinates_file}")
 
     # Set seed for reproducible testing
     random.seed(RANDOM_SEED)
