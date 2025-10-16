@@ -36,6 +36,7 @@ jobs:
 
         # Copy requirements and install dependencies
         COPY requirements.txt pyproject.toml setup.py ./
+        COPY test/requirements_test.txt ./test/
         RUN pip install --no-cache-dir --upgrade pip setuptools wheel numpy
         RUN pip install -r requirements.txt
         RUN pip install -r test/requirements_test.txt
