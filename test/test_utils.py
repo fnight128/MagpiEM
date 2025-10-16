@@ -196,6 +196,14 @@ def setup_test_environment() -> Dict[str, Any]:
     logs_dir = project_root / "test" / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
 
+    # Ensure test data is generated before running tests
+    try:
+        ensure_test_data_generated()
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Could not generate test data: {e}")
+        logger.warning("Tests may fail if required data files are missing")
+
     return {
         "project_root": project_root,
         "logs_dir": logs_dir,

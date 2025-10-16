@@ -164,6 +164,7 @@ cython_debug/
 .idea/
 *.zip
 *.csv
+!/test/data/small_lattice_coordinates.csv
 *.dll
 
 /test/screenshots
