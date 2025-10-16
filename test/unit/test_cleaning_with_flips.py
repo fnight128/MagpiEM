@@ -154,9 +154,15 @@ def test_cleaning_with_flips():
             cone_size=10.0,
             show_removed_particles=False,
         )
-        cpp_output_html = test_root / "logs" / "cleaning_with_flips_cpp_result.html"
-        logger.info(f"Saving C++ interactive plot to {cpp_output_html}")
-        cpp_fig.write_html(str(cpp_output_html))
+        # Only save HTML output when not running in CI
+        import os
+
+        if not os.getenv("DOCKER_CONTAINER"):
+            cpp_output_html = test_root / "logs" / "cleaning_with_flips_cpp_result.html"
+            logger.info(f"Saving C++ interactive plot to {cpp_output_html}")
+            cpp_fig.write_html(str(cpp_output_html))
+        else:
+            logger.info("Skipping HTML output generation (running in CI)")
 
         # Convert Particle objects to indices for plotting
         python_lattice_data_indices = {}
@@ -172,11 +178,12 @@ def test_cleaning_with_flips():
             cone_size=10.0,
             show_removed_particles=False,
         )
-        python_output_html = (
-            test_root / "logs" / "cleaning_with_flips_python_result.html"
-        )
-        logger.info(f"Saving Python interactive plot to {python_output_html}")
-        python_fig.write_html(str(python_output_html))
+        if not os.getenv("DOCKER_CONTAINER"):
+            python_output_html = (
+                test_root / "logs" / "cleaning_with_flips_python_result.html"
+            )
+            logger.info(f"Saving Python interactive plot to {python_output_html}")
+            python_fig.write_html(str(python_output_html))
 
         # Combined comparison plot
         combined_fig = create_lattice_plot_from_raw_data(
@@ -185,17 +192,19 @@ def test_cleaning_with_flips():
             cone_size=10.0,
             show_removed_particles=False,
         )
-        combined_output_html = (
-            test_root / "logs" / "cleaning_with_flips_combined_result.html"
-        )
-        logger.info(f"Saving combined interactive plot to {combined_output_html}")
-        combined_fig.write_html(str(combined_output_html))
+        if not os.getenv("DOCKER_CONTAINER"):
+            combined_output_html = (
+                test_root / "logs" / "cleaning_with_flips_combined_result.html"
+            )
+            logger.info(f"Saving combined interactive plot to {combined_output_html}")
+            combined_fig.write_html(str(combined_output_html))
 
         log_test_success(test_name, logger)
         logger.info("Cleaning with flips completed successfully")
-        logger.info(f"C++ interactive plot saved as: {cpp_output_html}")
-        logger.info(f"Python interactive plot saved as: {python_output_html}")
-        logger.info(f"Combined interactive plot saved as: {combined_output_html}")
+        if not os.getenv("DOCKER_CONTAINER"):
+            logger.info(f"C++ interactive plot saved as: {cpp_output_html}")
+            logger.info(f"Python interactive plot saved as: {python_output_html}")
+            logger.info(f"Combined interactive plot saved as: {combined_output_html}")
 
         # Log comparison results
         logger.info(

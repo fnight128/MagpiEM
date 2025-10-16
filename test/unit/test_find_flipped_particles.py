@@ -289,11 +289,17 @@ def create_visualization(test_tomo, flipped_particles, cpp_flipped_indices):
             fig.add_trace(cpp_flipped_trace)
 
     # Save the plot
-    output_html = (
-        Path(__file__).parent.parent / "logs" / "find_flipped_particles_result.html"
-    )
-    logger.info(f"Saving interactive plot to {output_html}")
-    fig.write_html(str(output_html))
+    # Only save HTML output when not running in CI
+    import os
+
+    if not os.getenv("DOCKER_CONTAINER"):
+        output_html = (
+            Path(__file__).parent.parent / "logs" / "find_flipped_particles_result.html"
+        )
+        logger.info(f"Saving interactive plot to {output_html}")
+        fig.write_html(str(output_html))
+    else:
+        logger.info("Skipping HTML output generation (running in CI)")
 
     return fig, output_html
 
@@ -333,7 +339,8 @@ def validate_test_results(
         f"Python and C++ results match: "
         f"{set(python_flipped_ids) == set(cpp_flipped_particles)}"
     )
-    logger.info(f"Interactive plot saved as: {output_html}")
+    if not os.getenv("DOCKER_CONTAINER"):
+        logger.info(f"Interactive plot saved as: {output_html}")
 
 
 def test_find_flipped_particles():

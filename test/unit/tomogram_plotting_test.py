@@ -73,13 +73,19 @@ def test_tomogram_plotting():
             showing_removed_particles=False,
         )
 
-        test_root = Path(__file__).parent.parent
-        html_file = test_root / "logs" / "tomogram_cone_plot.html"
-        logger.info(f"Saving interactive plot to {html_file}")
-        fig.write_html(str(html_file))
+        # Only save HTML output when not running in CI
+        import os
+
+        if not os.getenv("DOCKER_CONTAINER"):
+            test_root = Path(__file__).parent.parent
+            html_file = test_root / "logs" / "tomogram_cone_plot.html"
+            logger.info(f"Saving interactive plot to {html_file}")
+            fig.write_html(str(html_file))
+            logger.info(f"Cone plot saved as: {html_file}")
+        else:
+            logger.info("Skipping HTML output generation (running in CI)")
 
         log_test_success(test_name, logger)
-        logger.info(f"Cone plot saved as: {html_file}")
 
         assert test_tomo is not None
         assert fig is not None

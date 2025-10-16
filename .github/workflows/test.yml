@@ -70,9 +70,9 @@ jobs:
         # Copy source code
         COPY magpiem/ ./magpiem/
 
-        # Create necessary directories
-        RUN mkdir -p test/logs test/data cache past_cleaning_params && \
-            chown -R magpiem:magpiem /app
+            # Create necessary directories
+            RUN mkdir -p test/data cache past_cleaning_params && \
+                chown -R magpiem:magpiem /app
 
         ENV DOCKER_CONTAINER=true
 
@@ -102,7 +102,6 @@ jobs:
         docker run --rm \
           -v $(pwd)/test:/app/test \
           -v $(pwd)/test/data:/app/test/data \
-          -v $(pwd)/test/logs:/app/test/logs \
           magpiem:test \
           python test/run_tests.py --category unit --log-level INFO
     
@@ -112,7 +111,6 @@ jobs:
         docker run --rm \
           -v $(pwd)/test:/app/test \
           -v $(pwd)/test/data:/app/test/data \
-          -v $(pwd)/test/logs:/app/test/logs \
           magpiem:test \
           python test/run_tests.py --category integration --log-level INFO
     
@@ -120,14 +118,13 @@ jobs:
       run: |
         echo "Running end-to-end tests..."
         
-        # Start the application container
-        docker run -d --name magpiem-e2e-test \
-          -p 8050:8050 \
-          -v $(pwd)/test:/app/test \
-          -v $(pwd)/test/data:/app/test/data \
-          -v $(pwd)/test/logs:/app/test/logs \
-          magpiem:test \
-          magpiem --no-browser
+            # Start the application container
+            docker run -d --name magpiem-e2e-test \
+              -p 8050:8050 \
+              -v $(pwd)/test:/app/test \
+              -v $(pwd)/test/data:/app/test/data \
+              magpiem:test \
+              magpiem --no-browser
         
         # Wait for the application to start
         echo "Waiting for application to start..."
@@ -137,15 +134,14 @@ jobs:
         echo "Testing application health..."
         curl -f http://localhost:8050/ || exit 1
         
-        # Run e2e tests in a separate container that can access the app
-        docker run --rm \
-          --network host \
-          -v $(pwd)/test:/app/test \
-          -v $(pwd)/test/data:/app/test/data \
-          -v $(pwd)/test/logs:/app/test/logs \
-          -e DISPLAY=:99 \
-          magpiem:test \
-          xvfb-run -a python test/run_tests.py --category e2e --log-level INFO
+            # Run e2e tests in a separate container that can access the app
+            docker run --rm \
+              --network host \
+              -v $(pwd)/test:/app/test \
+              -v $(pwd)/test/data:/app/test/data \
+              -e DISPLAY=:99 \
+              magpiem:test \
+              xvfb-run -a python test/run_tests.py --category e2e --log-level INFO
         
         # Clean up
         docker stop magpiem-e2e-test

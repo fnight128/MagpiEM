@@ -755,6 +755,10 @@ def create_cone_plot_from_lattices(
 
     # Generate cone plot
     fig = test_tomo.plot_all_lattices(cone_size=3)
-    fig.write_html(filename)
+    # Only save HTML output when not running in CI
+    import os
+
+    if not os.getenv("DOCKER_CONTAINER"):
+        fig.write_html(filename)
     logger.info(f"Saved cone plot to: {filename}")
     return fig
