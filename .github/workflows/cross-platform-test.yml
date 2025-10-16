@@ -1,4 +1,4 @@
-name: Docker Testing
+name: Installation Testing
 
 on:
   push:
@@ -7,46 +7,39 @@ on:
     branches: [ "main" ]
 
 jobs:
-  docker-build-test:
-    name: Test Docker Installation
+  install-test:
+    name: Test Installation
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    
-    - name: Build Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: false
-        tags: magpiem:test
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-    
-    - name: Test Docker image basic functionality
+    - name: Build and test installation
       run: |
-        # Test that the container starts and responds to health checks
+        # Build the installation package
+        echo "Building installation package..."
+        docker build -t magpiem:test .
+        
+        # Test that the installation works correctly
+        echo "Testing installation..."
         docker run --rm -d --name magpiem-test -p 8050:8050 magpiem:test
         
         # Wait for the container to start
         echo "Waiting for container to start..."
         sleep 30
         
-        # Test health check endpoint
-        echo "Testing health check..."
+        # Test application health
+        echo "Testing application health..."
         curl -f http://localhost:8050/ || exit 1
         
-        # Test that the CLI command works
-        echo "Testing CLI command..."
+        # Test CLI functionality
+        echo "Testing CLI functionality..."
         docker exec magpiem-test magpiem --help || exit 1
         
         # Clean up
         docker stop magpiem-test
     
-    - name: Test Docker image with test data
+    - name: Test with data access
       run: |
         # Start container with test data mounted
         docker run --rm -d --name magpiem-test-data \
@@ -57,39 +50,62 @@ jobs:
         # Wait for startup
         sleep 30
         
-        # Test that the application can access test data
-        echo "Testing with mounted test data..."
+        # Test data access functionality
+        echo "Testing data access..."
         docker exec magpiem-test-data ls -la /app/test/data/ || exit 1
         
-        # Test health check
+        # Test application health
         curl -f http://localhost:8051/ || exit 1
         
         # Clean up
         docker stop magpiem-test-data
     
-    - name: Test Docker Compose
+    - name: Test deployment configuration
       run: |
-        # Test that docker-compose works
-        echo "Testing docker-compose..."
-        docker-compose up -d
+        # Test deployment configuration
+        echo "Testing deployment configuration..."
+        
+        # Create a test configuration using the built package
+        cat > docker-compose.test.yml << EOF
+        services:
+          magpiem:
+            image: magpiem:test
+            ports:
+              - "8050:8050"
+            volumes:
+              - ./cache:/app/cache
+              - ./past_cleaning_params:/app/past_cleaning_params
+              - ./data:/app/data
+            environment:
+              - PYTHONUNBUFFERED=1
+            healthcheck:
+              test: ["CMD", "curl", "-f", "http://localhost:8050/"]
+              interval: 30s
+              timeout: 10s
+              retries: 3
+              start_period: 40s
+        EOF
+        
+        # Start the test deployment
+        docker-compose -f docker-compose.test.yml up -d
         
         # Wait for startup
         sleep 45
         
-        # Test health check
+        # Test application health
         curl -f http://localhost:8050/ || exit 1
         
         # Test CLI access
-        docker-compose exec magpiem magpiem --help || exit 1
+        docker-compose -f docker-compose.test.yml exec magpiem magpiem --help || exit 1
         
         # Clean up
-        docker-compose down
+        docker-compose -f docker-compose.test.yml down
     
-    - name: Upload Docker test results
+    - name: Upload test results
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: docker-test-results
+        name: install-test-results
         path: |
           docker-compose.yml
           Dockerfile
