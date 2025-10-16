@@ -4,6 +4,7 @@ import numpy as np
 import time
 import sys
 import logging
+import pytest
 
 # Add the parent directory to the path to ensure we use the local magpiem module
 current_dir = pathlib.Path(__file__).parent.absolute()
@@ -26,6 +27,70 @@ from ..test_utils import (  # noqa: E402
 logger = logging.getLogger(__name__)
 
 ensure_test_data_generated()
+
+
+@pytest.fixture
+def c_lib():
+    """Fixture to provide the C++ library."""
+    return setup_cpp_library()
+
+
+@pytest.fixture
+def test_data():
+    """Fixture to provide test particle data."""
+    return load_particle_data()
+
+
+@pytest.fixture
+def test_cleaner():
+    """Fixture to provide test cleaner object."""
+    return Cleaner.from_user_params(*TEST_CLEANER_VALUES)
+
+
+@pytest.fixture
+def python_reference():
+    """Fixture to provide Python reference results."""
+    test_data, test_cleaner, _ = load_test_data()
+    # Run Python implementation to get reference results
+    # This would need to be implemented based on the actual test logic
+    return []  # Placeholder - needs actual implementation
+
+
+@pytest.fixture
+def min_dist(test_cleaner):
+    """Fixture to provide minimum distance parameter."""
+    return test_cleaner.dist_range[0]
+
+
+@pytest.fixture
+def max_dist(test_cleaner):
+    """Fixture to provide maximum distance parameter."""
+    return test_cleaner.dist_range[1]
+
+
+@pytest.fixture
+def min_ori(test_cleaner):
+    """Fixture to provide minimum orientation parameter."""
+    return test_cleaner.ori_range[0]
+
+
+@pytest.fixture
+def max_ori(test_cleaner):
+    """Fixture to provide maximum orientation parameter."""
+    return test_cleaner.ori_range[1]
+
+
+@pytest.fixture
+def min_curv(test_cleaner):
+    """Fixture to provide minimum curvature parameter."""
+    return test_cleaner.curv_range[0]
+
+
+@pytest.fixture
+def max_curv(test_cleaner):
+    """Fixture to provide maximum curvature parameter."""
+    return test_cleaner.curv_range[1]
+
 
 # Updated paths for test folder location
 TEST_DATA_FILE = get_test_data_path(TestConfig.TEST_DATA_STANDARD)
