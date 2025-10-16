@@ -88,7 +88,7 @@ def run_all_tests(logger):
 
 def main():
     """Main function to run tests based on command line arguments."""
-    parser = argparse.ArgumentParser(description="Run MagpiEM tests")
+    parser = argparse.ArgumentParser(description="Run tests")
     parser.add_argument(
         "--category",
         choices=["unit", "integration", "e2e", "all"],
@@ -115,7 +115,7 @@ def main():
     log_level = getattr(logging, args.log_level.upper())
     logger = setup_test_logging(level=log_level, log_file=args.log_file)
 
-    logger.info(f"Starting MagpiEM test suite - Category: {args.category}")
+    logger.info(f"Starting test suite - Category: {args.category}")
 
     # Run tests based on category
     if args.category == "unit":

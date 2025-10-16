@@ -76,14 +76,20 @@ jobs:
       run: |
         python test/run_tests.py --category integration --log-level INFO
     
-    - name: Start MagpiEM application
+    - name: Start application
       run: |
+        echo "Starting app for e2e testing..."
         if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
           python test/start_app_for_testing.py --log-level WARNING &
           echo $! > magpiem.pid
+          echo "Waiting for application to start..."
           sleep 15
+          echo "Checking if application is running..."
+          curl -f http://localhost:8050/ || echo "Application not responding yet"
         else
-          python test/start_app_for_testing.py --log-level WARNING
+          echo "Starting application in foreground on ${{ matrix.os }}"
+          python test/start_app_for_testing.py --log-level WARNING &
+          echo $! > magpiem.pid
           Start-Sleep 15
         fi
     
@@ -97,7 +103,7 @@ jobs:
       run: |
         python test/run_tests.py --category e2e --log-level INFO
     
-    - name: Stop MagpiEM application
+    - name: Stop application
       if: always()
       run: |
         if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
