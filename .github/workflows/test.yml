@@ -36,10 +36,11 @@ jobs:
 
         # Copy requirements and install dependencies
         COPY requirements.txt pyproject.toml setup.py ./
-        COPY test/ ./test/
         RUN pip install --no-cache-dir --upgrade pip setuptools wheel numpy
         RUN pip install -r requirements.txt
-        RUN pip install -r test/requirements_test.txt
+        # Install test dependencies directly
+        # You have nowhere left to run
+        RUN pip install --no-cache-dir selenium webdriver-manager pytest pytest-html requests playwright pytest-playwright
 
         # Copy source code and install package
         COPY magpiem/ ./magpiem/
@@ -66,12 +67,11 @@ jobs:
         COPY --from=builder /usr/local/bin /usr/local/bin
         COPY --from=builder /root/.cache /root/.cache
 
-        # Copy source code and test files
+        # Copy source code
         COPY magpiem/ ./magpiem/
-        COPY test/ ./test/
 
         # Create necessary directories
-        RUN mkdir -p cache past_cleaning_params && \
+        RUN mkdir -p test/logs cache past_cleaning_params && \
             chown -R magpiem:magpiem /app
 
         ENV DOCKER_CONTAINER=true
@@ -88,6 +88,7 @@ jobs:
       run: |
         echo "Running unit tests..."
         docker run --rm \
+          -v $(pwd)/test:/app/test \
           -v $(pwd)/test/logs:/app/test/logs \
           magpiem:test \
           python test/run_tests.py --category unit --log-level INFO
@@ -96,6 +97,7 @@ jobs:
       run: |
         echo "Running integration tests..."
         docker run --rm \
+          -v $(pwd)/test:/app/test \
           -v $(pwd)/test/logs:/app/test/logs \
           magpiem:test \
           python test/run_tests.py --category integration --log-level INFO
@@ -107,6 +109,7 @@ jobs:
         # Start the application container
         docker run -d --name magpiem-e2e-test \
           -p 8050:8050 \
+          -v $(pwd)/test:/app/test \
           -v $(pwd)/test/logs:/app/test/logs \
           magpiem:test \
           magpiem --no-browser
@@ -122,6 +125,7 @@ jobs:
         # Run e2e tests in a separate container that can access the app
         docker run --rm \
           --network host \
+          -v $(pwd)/test:/app/test \
           -v $(pwd)/test/logs:/app/test/logs \
           -e DISPLAY=:99 \
           magpiem:test \
