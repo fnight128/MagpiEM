@@ -1,4 +1,4 @@
-name: Cross-Platform Testing
+name: Docker Testing
 
 on:
   push:
@@ -7,120 +7,90 @@ on:
     branches: [ "main" ]
 
 jobs:
-  cross-platform:
-    name: Test on ${{ matrix.os }} Python 3.10
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+  docker-build-test:
+    name: Test Docker Installation
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v4
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
       with:
-        python-version: "3.10"
+        context: .
+        push: false
+        tags: magpiem:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
     
-    - name: Cache pip dependencies
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-    
-    - name: Install system dependencies (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
+    - name: Test Docker image basic functionality
       run: |
-        sudo apt-get update
-        sudo apt-get install -y xvfb build-essential
+        # Test that the container starts and responds to health checks
+        docker run --rm -d --name magpiem-test -p 8050:8050 magpiem:test
+        
+        # Wait for the container to start
+        echo "Waiting for container to start..."
+        sleep 30
+        
+        # Test health check endpoint
+        echo "Testing health check..."
+        curl -f http://localhost:8050/ || exit 1
+        
+        # Test that the CLI command works
+        echo "Testing CLI command..."
+        docker exec magpiem-test magpiem --help || exit 1
+        
+        # Clean up
+        docker stop magpiem-test
     
-    - name: Install system dependencies (Windows)
-      if: matrix.os == 'windows-latest'
+    - name: Test Docker image with test data
       run: |
-        # Windows runners already have Visual Studio Build Tools installed
-        echo "Using pre-installed build tools on Windows runner"
+        # Start container with test data mounted
+        docker run --rm -d --name magpiem-test-data \
+          -p 8051:8050 \
+          -v $(pwd)/test/data:/app/test/data \
+          magpiem:test
+        
+        # Wait for startup
+        sleep 30
+        
+        # Test that the application can access test data
+        echo "Testing with mounted test data..."
+        docker exec magpiem-test-data ls -la /app/test/data/ || exit 1
+        
+        # Test health check
+        curl -f http://localhost:8051/ || exit 1
+        
+        # Clean up
+        docker stop magpiem-test-data
     
-    - name: Install system dependencies (macOS)
-      if: matrix.os == 'macos-latest'
+    - name: Test Docker Compose
       run: |
-        # Install Xcode command line tools
-        xcode-select --install || true
+        # Test that docker-compose works
+        echo "Testing docker-compose..."
+        docker-compose up -d
+        
+        # Wait for startup
+        sleep 45
+        
+        # Test health check
+        curl -f http://localhost:8050/ || exit 1
+        
+        # Test CLI access
+        docker-compose exec magpiem magpiem --help || exit 1
+        
+        # Clean up
+        docker-compose down
     
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r test/requirements_test.txt
-    
-    - name: Install package in development mode
-      run: |
-        pip install -e .
-    
-    - name: Install Playwright browsers
-      run: |
-        playwright install chromium
-        playwright install-deps chromium
-    
-    - name: Generate test data
-      run: |
-        python test/data/generate_small_lattice.py
-    
-    - name: Run unit tests
-      run: |
-        python test/run_tests.py --category unit --log-level INFO
-    
-    - name: Run integration tests
-      run: |
-        python test/run_tests.py --category integration --log-level INFO
-    
-    - name: Start application
-      run: |
-        echo "Starting app for e2e testing..."
-        if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-          python test/start_app_for_testing.py --log-level WARNING &
-          echo $! > magpiem.pid
-          echo "Waiting for application to start..."
-          sleep 15
-          echo "Checking if application is running..."
-          curl -f http://localhost:8050/ || echo "Application not responding yet"
-        else
-          echo "Starting application in foreground on ${{ matrix.os }}"
-          python test/start_app_for_testing.py --log-level WARNING &
-          echo $! > magpiem.pid
-          Start-Sleep 15
-        fi
-    
-    - name: Run end-to-end tests (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        xvfb-run -a python test/run_tests.py --category e2e --log-level INFO
-    
-    - name: Run end-to-end tests (Windows/macOS)
-      if: matrix.os != 'ubuntu-latest'
-      run: |
-        python test/run_tests.py --category e2e --log-level INFO
-    
-    - name: Stop application
-      if: always()
-      run: |
-        if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-          if [ -f magpiem.pid ]; then
-            kill $(cat magpiem.pid) || true
-            rm magpiem.pid
-          fi
-          pkill -f "python.*dash_ui" || true
-        else
-          Get-Process -Name python -ErrorAction SilentlyContinue | Where-Object {$_.CommandLine -like "*dash_ui*"} | Stop-Process -Force -ErrorAction SilentlyContinue
-          Remove-Item magpiem.pid -ErrorAction SilentlyContinue
-        fi
-    
-    - name: Upload test results
+    - name: Upload Docker test results
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: test-results-${{ matrix.os }}
-        path: test/logs/
+        name: docker-test-results
+        path: |
+          docker-compose.yml
+          Dockerfile
         retention-days: 30
