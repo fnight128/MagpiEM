@@ -71,7 +71,7 @@ jobs:
         COPY magpiem/ ./magpiem/
 
         # Create necessary directories
-        RUN mkdir -p test/logs cache past_cleaning_params && \
+        RUN mkdir -p test/logs test/data cache past_cleaning_params && \
             chown -R magpiem:magpiem /app
 
         ENV DOCKER_CONTAINER=true
@@ -87,6 +87,9 @@ jobs:
     - name: Generate test data
       run: |
         echo "Generating test data..."
+        # Ensure test data directory has correct permissions
+        mkdir -p test/data
+        chmod 755 test/data
         docker run --rm \
           -v $(pwd)/test:/app/test \
           magpiem:test \
