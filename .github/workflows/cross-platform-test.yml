@@ -8,21 +8,20 @@ on:
 
 jobs:
   cross-platform:
-    name: Test on ${{ matrix.os }} Python ${{ matrix.python-version }}
+    name: Test on ${{ matrix.os }} Python 3.10
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.10
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: "3.10"
     
     - name: Cache pip dependencies
       uses: actions/cache@v4
@@ -36,13 +35,29 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y xvfb
+        sudo apt-get install -y xvfb build-essential
+    
+    - name: Install system dependencies (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        # Windows runners already have Visual Studio Build Tools installed
+        echo "Using pre-installed build tools on Windows runner"
+    
+    - name: Install system dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        # Install Xcode command line tools
+        xcode-select --install || true
     
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r test/requirements_test.txt
+    
+    - name: Install package in development mode
+      run: |
+        pip install -e .
     
     - name: Install Playwright browsers
       run: |
@@ -100,6 +115,6 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: test-results-${{ matrix.os }}-${{ matrix.python-version }}
+        name: test-results-${{ matrix.os }}
         path: test/logs/
         retention-days: 30
