@@ -92,8 +92,9 @@ jobs:
         chmod 755 test/data
         docker run --rm \
           -v $(pwd)/test:/app/test \
+          --user root \
           magpiem:test \
-          python test/data/generate_small_lattice.py
+          bash -c "chown -R magpiem:magpiem /app/test/data && su magpiem -c 'python test/data/generate_small_lattice.py'"
     
     - name: Run unit tests
       run: |
