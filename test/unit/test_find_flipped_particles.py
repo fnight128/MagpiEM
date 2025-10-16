@@ -5,15 +5,10 @@ Test for the find_flipped_particles method in the Tomogram class.
 Loads flipped data, cleans, and finds flipped particles, plotting results.
 """
 
-import sys
 import numpy as np
 from pathlib import Path
 
-# Add test utilities to path
-test_root = Path(__file__).parent.parent
-sys.path.insert(0, str(test_root))
-
-from test_utils import (  # noqa: E402
+from ..test_utils import (
     TestConfig,
     setup_test_logging,
     get_test_data_path,
@@ -21,6 +16,7 @@ from test_utils import (  # noqa: E402
     log_test_success,
     log_test_failure,
     setup_test_environment,
+    ensure_test_data_generated,
 )
 
 setup_test_environment()
@@ -36,8 +32,11 @@ from magpiem.plotting.plotting_utils import (  # noqa: E402
 
 logger = setup_test_logging()
 
-TEST_DATA_FILE = get_test_data_path("test_data_flipped.mat")
-ORIGINAL_DATA_FILE = get_test_data_path("test_data_single_lattice.mat")
+# Ensure test data is generated before running tests
+ensure_test_data_generated()
+
+TEST_DATA_FILE = get_test_data_path(TestConfig.TEST_DATA_SMALL_FLIPPED)
+ORIGINAL_DATA_FILE = get_test_data_path(TestConfig.TEST_DATA_SMALL)
 TEST_TOMO_NAME = TestConfig.TEST_TOMO_STANDARD
 TEST_CLEANER_VALUES = TestConfig.TEST_CLEANER_VALUES
 
@@ -198,40 +197,37 @@ def run_python_flip_detection(test_tomo):
 
 
 def run_cpp_flip_detection(test_tomo, test_cleaner):
-    """Run the C++ debug implementation and return results."""
-    logger.info("Running C++ debug implementation...")
+    """Run the C++ implementation and return results."""
+    logger.info("Running C++ implementation...")
 
     # Prepare raw data for C++ function
     raw_data = []
     for particle in test_tomo.all_particles:
         raw_data.append([particle.position, particle.orientation])
 
-    # Run C++ debug implementation
-    debug_lattice_data, debug_flipped_indices = debug_flip_detection_with_cpp(
+    # Run C++ implementation
+    cpp_lattice_data, cpp_flipped_indices = debug_flip_detection_with_cpp(
         raw_data, test_cleaner
     )
 
-    logger.info(f"Debug C++ found {len(debug_flipped_indices)} flipped particles")
+    logger.info(f"C++ found {len(cpp_flipped_indices)} flipped particles")
+    logger.info(f"C++ flipped indices: {cpp_flipped_indices}")
 
-    # Convert C++ indices to particle IDs
-    all_particles_list = list(test_tomo.all_particles)
-    debug_flipped_particle_ids = []
-    for idx in debug_flipped_indices:
-        debug_flipped_particle_ids.append(all_particles_list[idx].particle_id)
+    cpp_flipped_particle_ids = cpp_flipped_indices.copy()
 
-    return debug_flipped_indices, debug_flipped_particle_ids
+    return cpp_flipped_indices, cpp_flipped_particle_ids
 
 
-def compare_python_cpp_results(python_flipped_ids, debug_flipped_particle_ids):
+def compare_python_cpp_results(python_flipped_ids, cpp_flipped_ids):
     """Compare Python and C++ results to ensure they match."""
-    # Python and C++ debug should give identical results
-    assert set(python_flipped_ids) == set(debug_flipped_particle_ids), (
-        f"Python and Debug C++ results don't match: "
-        f"Python={set(python_flipped_ids)}, Debug C++={set(debug_flipped_particle_ids)}"
+    # Python and C++ should give identical results
+    assert set(python_flipped_ids) == set(cpp_flipped_ids), (
+        f"Python and C++ results don't match: "
+        f"Python={set(python_flipped_ids)}, C++={set(cpp_flipped_ids)}"
     )
 
 
-def create_visualization(test_tomo, flipped_particles, debug_flipped_indices):
+def create_visualization(test_tomo, flipped_particles, cpp_flipped_indices):
     """Create and save the visualization plot."""
     logger.info("Visualising...")
 
@@ -266,34 +262,36 @@ def create_visualization(test_tomo, flipped_particles, debug_flipped_indices):
             python_flipped_trace.name = "Python Flipped Particles"
             fig.add_trace(python_flipped_trace)
 
-    # Add Debug C++ flipped particles in blue
-    if debug_flipped_indices:
-        debug_flipped_positions = []
-        debug_flipped_orientations = []
+    # Add C++ flipped particles in blue
+    if cpp_flipped_indices:
+        cpp_flipped_positions = []
+        cpp_flipped_orientations = []
         all_particles_list = list(test_tomo.all_particles)
 
-        for idx in debug_flipped_indices:
+        for idx in cpp_flipped_indices:
             particle = all_particles_list[idx]
-            debug_flipped_positions.append(particle.position)
-            debug_flipped_orientations.append(particle.orientation)
+            cpp_flipped_positions.append(particle.position)
+            cpp_flipped_orientations.append(particle.orientation)
 
-        if debug_flipped_positions:
-            debug_flipped_positions = np.array(debug_flipped_positions)
-            debug_flipped_orientations = np.array(debug_flipped_orientations)
+        if cpp_flipped_positions:
+            cpp_flipped_positions = np.array(cpp_flipped_positions)
+            cpp_flipped_orientations = np.array(cpp_flipped_orientations)
 
-            debug_flipped_trace = create_cone_traces(
-                positions=debug_flipped_positions,
-                orientations=debug_flipped_orientations,
+            cpp_flipped_trace = create_cone_traces(
+                positions=cpp_flipped_positions,
+                orientations=cpp_flipped_orientations,
                 cone_size=0.8,
                 colour="blue",
                 opacity=0.5,
-                lattice_id=-2,  # Dummy ID for Debug C++ flipped particles
+                lattice_id=-2,  # Dummy ID for C++ flipped particles
             )
-            debug_flipped_trace.name = "Debug C++ Flipped Particles"
-            fig.add_trace(debug_flipped_trace)
+            cpp_flipped_trace.name = "C++ Flipped Particles"
+            fig.add_trace(cpp_flipped_trace)
 
     # Save the plot
-    output_html = test_root / "logs" / "find_flipped_particles_result.html"
+    output_html = (
+        Path(__file__).parent.parent / "logs" / "find_flipped_particles_result.html"
+    )
     logger.info(f"Saving interactive plot to {output_html}")
     fig.write_html(str(output_html))
 
@@ -305,9 +303,9 @@ def validate_test_results(
     output_html,
     flipped_particles,
     total_particles,
-    debug_flipped_indices,
+    cpp_flipped_indices,
     python_flipped_ids,
-    debug_flipped_particle_ids,
+    cpp_flipped_particles,
 ):
     """Validate final test results and log summary."""
     # Basic assertions
@@ -328,12 +326,12 @@ def validate_test_results(
         f"Python flipped particles: {flipped_count} ({flipped_percentage:.1f}%)"
     )
     logger.info(
-        f"Debug C++ flipped particles: {len(debug_flipped_indices)} "
-        f"({len(debug_flipped_indices) / total_particles * 100:.1f}%)"
+        f"C++ flipped particles: {len(cpp_flipped_indices)} "
+        f"({len(cpp_flipped_indices) / total_particles * 100:.1f}%)"
     )
     logger.info(
-        f"Python and Debug C++ results match: "
-        f"{set(python_flipped_ids) == set(debug_flipped_particle_ids)}"
+        f"Python and C++ results match: "
+        f"{set(python_flipped_ids) == set(cpp_flipped_particles)}"
     )
     logger.info(f"Interactive plot saved as: {output_html}")
 
@@ -367,13 +365,13 @@ def test_find_flipped_particles():
             )
 
         # Run C++ flip detection
-        debug_flipped_indices, debug_flipped_particle_ids = run_cpp_flip_detection(
+        cpp_flipped_indices, cpp_flipped_particle_ids = run_cpp_flip_detection(
             test_tomo, test_cleaner
         )
 
         # Create visualization
         fig, output_html = create_visualization(
-            test_tomo, flipped_particles, debug_flipped_indices
+            test_tomo, flipped_particles, cpp_flipped_indices
         )
 
         # Validate both implementations using common validation function
@@ -382,12 +380,12 @@ def test_find_flipped_particles():
                 python_flipped_particle_ids, actually_flipped, "Python"
             )
             validate_flip_detection_results(
-                debug_flipped_particle_ids, actually_flipped, "C++"
+                cpp_flipped_particle_ids, actually_flipped, "C++"
             )
 
         # Compare Python and C++ results
         compare_python_cpp_results(
-            python_flipped_particle_ids, debug_flipped_particle_ids
+            python_flipped_particle_ids, cpp_flipped_particle_ids
         )
 
         # Validate final results
@@ -396,9 +394,9 @@ def test_find_flipped_particles():
             output_html,
             flipped_particles,
             len(test_tomo.all_particles),
-            debug_flipped_indices,
+            cpp_flipped_indices,
             python_flipped_particle_ids,
-            debug_flipped_particle_ids,
+            cpp_flipped_particle_ids,
         )
 
         log_test_success(test_name, logger)
@@ -410,4 +408,4 @@ def test_find_flipped_particles():
 
 if __name__ == "__main__":
     test_find_flipped_particles()
-    print("Test completed successfully!")
+    logger.info("Test completed successfully!")

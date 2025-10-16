@@ -6,23 +6,24 @@ Loads test_data_flipped.mat and runs cleaning with allow_flips enabled,
 saving the result as an HTML file for inspection.
 """
 
-import sys
 from pathlib import Path
 
-# Add test utilities to path
-test_root = Path(__file__).parent.parent
-sys.path.insert(0, str(test_root))
-
-from test_utils import (  # noqa: E402
+from ..test_utils import (
     TestConfig,
     setup_test_logging,
     log_test_start,
     log_test_success,
     log_test_failure,
     setup_test_environment,
+    ensure_test_data_generated,
+    get_test_data_path,
 )
 
 setup_test_environment()
+
+# Get test root for file paths
+test_root = Path(__file__).parent.parent
+
 from magpiem.io.io_utils import (  # noqa: E402
     read_single_tomogram,
     read_emc_tomogram_raw_data,
@@ -39,7 +40,10 @@ from magpiem.plotting.plotting_utils import (  # noqa: E402
 
 logger = setup_test_logging()
 
-FLIPPED_DATA_FILE = test_root / "data" / "test_data_flipped.mat"
+# Ensure test data is generated before running tests
+ensure_test_data_generated()
+
+FLIPPED_DATA_FILE = get_test_data_path(TestConfig.TEST_DATA_SMALL_FLIPPED)
 TEST_TOMO_NAME = TestConfig.TEST_TOMO_STANDARD
 TEST_CLEANER_VALUES = TestConfig.TEST_CLEANER_VALUES
 
@@ -104,7 +108,7 @@ def test_cleaning_with_flips():
         test_tomo.lattices[1] = test_tomo.all_particles
 
         # Run Python cleaning
-        test_tomo.clean_particles()
+        test_tomo.autoclean()
         python_lattice_data = {
             lattice_id: list(particles)
             for lattice_id, particles in test_tomo.lattices.items()
@@ -116,7 +120,7 @@ def test_cleaning_with_flips():
         # Run Python flip detection
         python_flipped_particles = test_tomo.find_flipped_particles()
         python_flipped_indices = [
-            test_tomo.all_particles.index(p) for p in python_flipped_particles
+            particle.particle_id for particle in python_flipped_particles
         ]
         logger.info(
             f"Python flip detection completed. Found "
@@ -154,10 +158,17 @@ def test_cleaning_with_flips():
         logger.info(f"Saving C++ interactive plot to {cpp_output_html}")
         cpp_fig.write_html(str(cpp_output_html))
 
+        # Convert Particle objects to indices for plotting
+        python_lattice_data_indices = {}
+        for lattice_id, particles in python_lattice_data.items():
+            python_lattice_data_indices[lattice_id] = [
+                particle.particle_id for particle in particles
+            ]
+
         # Python cleaning plot
         python_fig = create_lattice_plot_from_raw_data(
             tomogram_raw_data=tomo_raw_data,
-            lattice_data=python_lattice_data,
+            lattice_data=python_lattice_data_indices,
             cone_size=10.0,
             show_removed_particles=False,
         )
@@ -199,12 +210,14 @@ def test_cleaning_with_flips():
             f"Flipped particles match: {set(cpp_flipped_indices) == set(python_flipped_indices)}"
         )
 
+        # All particles should be assigned to lattice 1 as flips are allowed
+        assert len(cpp_lattice_data) == 1
+        assert len(python_lattice_data) == 1
+
         # Basic assertions
         assert cpp_fig is not None
         assert python_fig is not None
         assert combined_fig is not None
-        assert len(cpp_lattice_data) > 1
-        assert len(python_lattice_data) > 1
         assert cpp_output_html.exists()
         assert python_output_html.exists()
         assert combined_output_html.exists()
@@ -216,4 +229,4 @@ def test_cleaning_with_flips():
 
 if __name__ == "__main__":
     test_cleaning_with_flips()
-    print("Test completed successfully!")
+    logger.info("Test completed successfully!")

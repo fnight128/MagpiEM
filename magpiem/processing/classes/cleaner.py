@@ -20,7 +20,7 @@ class Cleaner:
     ori_range: tuple
     curv_range: tuple
     allow_flips: bool
-    flipped_ori_range: tuple
+    flipped_ori_range: tuple | None
 
     def __init__(
         self,
@@ -62,7 +62,9 @@ class Cleaner:
         dist_range = Cleaner.dist_range(target_dist, dist_tol)
         ori_range = Cleaner.ang_range_dotprod(target_ori, ori_tol)
         curv_range = Cleaner.ang_range_dotprod(target_curv, curv_tol)
-        flipped_ori_range = (-x for x in reversed(ori_range)) if allow_flips else 0
+        flipped_ori_range = (
+            tuple(-x for x in reversed(ori_range)) if allow_flips else None
+        )
         return Cleaner(
             cc_thresh,
             min_neigh,

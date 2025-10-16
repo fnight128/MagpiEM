@@ -3,14 +3,9 @@
 Simple test to ensure Tomogram class is able to instantiate, run cleaning, and produce a plot
 """
 
-import sys
 from pathlib import Path
 
-# Add test utilities to path
-test_root = Path(__file__).parent.parent
-sys.path.insert(0, str(test_root))
-
-from test_utils import (  # noqa: E402
+from ..test_utils import (
     TestConfig,
     setup_test_logging,
     get_test_data_path,
@@ -18,6 +13,7 @@ from test_utils import (  # noqa: E402
     log_test_success,
     log_test_failure,
     setup_test_environment,
+    ensure_test_data_generated,
 )
 
 setup_test_environment()
@@ -27,7 +23,9 @@ from magpiem.processing.classes.cleaner import Cleaner  # noqa: E402
 
 logger = setup_test_logging()
 
-TEST_DATA_FILE = get_test_data_path(TestConfig.TEST_DATA_LARGE)
+ensure_test_data_generated()
+
+TEST_DATA_FILE = get_test_data_path(TestConfig.TEST_DATA_STANDARD)
 TEST_TOMO_NAME = TestConfig.TEST_TOMO_STANDARD
 TEST_CLEANER_VALUES = TestConfig.TEST_CLEANER_VALUES
 
@@ -81,7 +79,7 @@ def test_tomogram_plotting():
         fig.write_html(str(html_file))
 
         log_test_success(test_name, logger)
-        logger.info(f"✓ Cone plot saved as: {html_file}")
+        logger.info(f"Cone plot saved as: {html_file}")
 
         assert test_tomo is not None
         assert fig is not None
@@ -94,4 +92,4 @@ def test_tomogram_plotting():
 
 if __name__ == "__main__":
     test_tomogram_plotting()
-    print("✓ Test completed successfully!")
+    logger.info("Test completed successfully!")

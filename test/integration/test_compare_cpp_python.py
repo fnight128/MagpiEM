@@ -4,6 +4,7 @@ import numpy as np
 import time
 import sys
 import logging
+import pytest
 
 # Add the parent directory to the path to ensure we use the local magpiem module
 current_dir = pathlib.Path(__file__).parent.absolute()
@@ -17,13 +18,81 @@ from magpiem.processing.cpp_integration import (  # noqa: E402
     setup_cpp_library,
     clean_tomo_with_cpp,
 )  # noqa: E402
-from test.test_utils import TestConfig, get_test_data_path  # noqa: E402
+from ..test_utils import (  # noqa: E402
+    TestConfig,
+    get_test_data_path,
+    ensure_test_data_generated,
+)
 
-# Set up logging
 logger = logging.getLogger(__name__)
 
+ensure_test_data_generated()
+
+
+@pytest.fixture
+def c_lib():
+    """Fixture to provide the C++ library."""
+    return setup_cpp_library()
+
+
+@pytest.fixture
+def test_data():
+    """Fixture to provide test particle data."""
+    return load_particle_data()
+
+
+@pytest.fixture
+def test_cleaner():
+    """Fixture to provide test cleaner object."""
+    return Cleaner.from_user_params(*TEST_CLEANER_VALUES)
+
+
+@pytest.fixture
+def python_reference(test_data, test_cleaner):
+    """Fixture to provide Python reference results."""
+    # Calculate Python reference
+    reference_dict, _ = calculate_python_reference(test_data, test_cleaner)
+    return reference_dict
+
+
+@pytest.fixture
+def min_dist(test_cleaner):
+    """Fixture to provide minimum distance parameter."""
+    return test_cleaner.dist_range[0]
+
+
+@pytest.fixture
+def max_dist(test_cleaner):
+    """Fixture to provide maximum distance parameter."""
+    return test_cleaner.dist_range[1]
+
+
+@pytest.fixture
+def min_ori(test_cleaner):
+    """Fixture to provide minimum orientation parameter."""
+    return test_cleaner.ori_range[0]
+
+
+@pytest.fixture
+def max_ori(test_cleaner):
+    """Fixture to provide maximum orientation parameter."""
+    return test_cleaner.ori_range[1]
+
+
+@pytest.fixture
+def min_curv(test_cleaner):
+    """Fixture to provide minimum curvature parameter."""
+    return test_cleaner.curv_range[0]
+
+
+@pytest.fixture
+def max_curv(test_cleaner):
+    """Fixture to provide maximum curvature parameter."""
+    return test_cleaner.curv_range[1]
+
+
 # Updated paths for test folder location
-TEST_DATA_FILE = get_test_data_path(TestConfig.TEST_DATA_LARGE)
+TEST_DATA_FILE = get_test_data_path(TestConfig.TEST_DATA_STANDARD)
 TEST_TOMO_NAME = TestConfig.TEST_TOMO_STANDARD
 # appropriate values for test tomogram
 TEST_CLEANER_VALUES = TestConfig.TEST_CLEANER_VALUES
@@ -150,7 +219,7 @@ def test_cpp_distance_only(
     min_dist: float,
     max_dist: float,
     python_reference: list[int],
-) -> tuple[list[int], float]:
+):
     """Test C++ distance-only neighbour finding"""
 
     def distance_test(c_lib, c_array, num_particles, results_array, min_dist, max_dist):
@@ -161,11 +230,11 @@ def test_cpp_distance_only(
         for i in range(num_particles):
             results_array[i] = results[i]
 
-    return run_cpp_test(
+    run_cpp_test(
         c_lib,
         test_data,
         "1: Distance-only neighbour finding",
-        python_reference,
+        python_reference["initial"],
         distance_test,
         min_dist,
         max_dist,
@@ -180,7 +249,7 @@ def test_cpp_orientation_only(
     min_ori: float,
     max_ori: float,
     python_reference: list[int],
-) -> tuple[list[int], float]:
+):
     """Test C++ orientation filtering alone (after distance filtering)"""
 
     def orientation_test(
@@ -205,11 +274,11 @@ def test_cpp_orientation_only(
         for i in range(num_particles):
             results_array[i] = results[i]
 
-    return run_cpp_test(
+    run_cpp_test(
         c_lib,
         test_data,
         "2: Orientation filtering",
-        python_reference,
+        python_reference["orientation"],
         orientation_test,
         min_dist,
         max_dist,
@@ -226,7 +295,7 @@ def test_cpp_curvature_only(
     min_curv: float,
     max_curv: float,
     python_reference: list[int],
-) -> tuple[list[int], float]:
+):
     """Test C++ curvature filtering alone (after distance filtering)"""
 
     def curvature_test(
@@ -251,11 +320,11 @@ def test_cpp_curvature_only(
         for i in range(num_particles):
             results_array[i] = results[i]
 
-    return run_cpp_test(
+    run_cpp_test(
         c_lib,
         test_data,
         "3: Curvature filtering",
-        python_reference,
+        python_reference["curvature"],
         curvature_test,
         min_dist,
         max_dist,
@@ -268,7 +337,7 @@ def test_cpp_full_pipeline(
     test_data: np.ndarray,
     test_cleaner: Cleaner,
     python_reference: list[int],
-) -> tuple[list[int], float]:
+):
     """Test C++ full pipeline"""
     logger.info("TEST 4: Full pipeline")
 
@@ -279,10 +348,7 @@ def test_cpp_full_pipeline(
         pos = particle[:3]  # x, y, z
         orient = particle[3:]  # rx, ry, rz
         tomogram_raw_data.append([pos, orient])
-
-    start_time = time.time()
     lattice_assignments = clean_tomo_with_cpp(tomogram_raw_data, test_cleaner)
-    test_time = time.time() - start_time
 
     # Convert lattice assignments back to list format for comparison
     counts_cpp = [0] * len(test_data)
@@ -291,9 +357,9 @@ def test_cpp_full_pipeline(
             counts_cpp[particle_idx] = lattice_id
 
     # Use lattice-specific verification
-    verify_lattice_assignments(python_reference, counts_cpp, "Full pipeline", test_data)
-
-    return counts_cpp, test_time
+    verify_lattice_assignments(
+        python_reference["lattice"], counts_cpp, "Full pipeline", test_data
+    )
 
 
 def calculate_python_reference(
@@ -424,9 +490,6 @@ def verify_lattice_assignments(
     cpp_group_sets = set(frozenset(group) for group in cpp_groups.values())
 
     logger.debug("      Generating cone plots for debugging...")
-    cpp_fig = create_cone_plot_from_lattices(
-        test_data, cpp_lattices, "C++ Lattice Assignments", "cpp_lattices.html"
-    )
 
     if python_group_sets == cpp_group_sets:
         logger.info(f"PASSED:  {test_name}")
@@ -438,25 +501,6 @@ def verify_lattice_assignments(
         logger.warning(
             f"   C++: {len(cpp_group_sets)} lattices, {len(cpp_unassigned)} unassigned"
         )
-
-        # Generate cone plots for debugging if test_data is provided
-        if test_data is not None:
-            logger.debug("      Generating cone plots for debugging...")
-            cpp_fig = create_cone_plot_from_lattices(
-                test_data, cpp_lattices, "C++ Lattice Assignments", "cpp_lattices.html"
-            )
-            test_tomo = setup_test_tomogram()
-            test_tomo.autoclean()
-            for lattice in test_tomo.lattices:
-                if lattice == 0:
-                    continue
-                logger.debug(f"Lattice {lattice}")
-                cpp_fig.add_trace(
-                    test_tomo.lattice_trace(
-                        lattice, cone_size=-1, colour="#000000", opacity=1.0
-                    )
-                )
-            cpp_fig.write_html("combined_lattices.html")
 
         # Find differences with meaningful comparisons
         python_only = python_group_sets - cpp_group_sets
@@ -714,75 +758,3 @@ def create_cone_plot_from_lattices(
     fig.write_html(filename)
     logger.info(f"Saved cone plot to: {filename}")
     return fig
-
-
-def main() -> None:
-    """Main test function"""
-    logger.info("Running C++ vs Python particle filtering tests...")
-
-    # Setup
-    c_lib = setup_cpp_library()
-    test_data, test_cleaner, params_tuple = load_test_data()
-    (
-        min_dist,
-        max_dist,
-        min_ori,
-        max_ori,
-        min_curv,
-        max_curv,
-        min_lattice_size,
-        min_neighbours,
-    ) = params_tuple
-
-    # Calculate Python reference results first
-    python_reference, python_time = calculate_python_reference(test_data, test_cleaner)
-
-    # Run C++ tests and validate against Python reference
-    distance_counts_cpp, cpp_distance_time = test_cpp_distance_only(
-        c_lib, test_data, min_dist, max_dist, python_reference["initial"]
-    )
-    orientation_counts_cpp, cpp_orientation_time = test_cpp_orientation_only(
-        c_lib,
-        test_data,
-        min_dist,
-        max_dist,
-        min_ori,
-        max_ori,
-        python_reference["orientation"],
-    )
-    curvature_counts_cpp, cpp_curvature_time = test_cpp_curvature_only(
-        c_lib,
-        test_data,
-        min_dist,
-        max_dist,
-        min_curv,
-        max_curv,
-        python_reference["curvature"],
-    )
-
-    # Now run full pipeline lattice assignment (strict)
-    full_counts_cpp, cpp_full_time = test_cpp_full_pipeline(
-        test_data, test_cleaner, python_reference["lattice"]
-    )
-
-    # Display performance results
-    compare_results(
-        cpp_distance_time,
-        cpp_orientation_time,
-        cpp_curvature_time,
-        cpp_full_time,
-        python_time,
-    )
-
-    logger.info("\nPASS All tests completed successfully!")
-
-
-if __name__ == "__main__":
-    # Configure logging when running directly
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s"
-    )
-    # Override logger level to DEBUG for more detailed output
-    logger.setLevel(logging.DEBUG)
-
-    main()

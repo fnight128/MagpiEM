@@ -153,20 +153,20 @@ cython_debug/
 
 # Cryo-EM Inputs/Outputs
 *.mat
+!/test/data/test_data.mat
 *.em
 *.star
 *.mod
 
-*.yml
-*.yaml
-!.pre-commit-config.yaml
-!docker-compose.yml
 *.html
 
 #PyCharm
 .idea/
 *.zip
 *.csv
+!/test/data/small_lattice_coordinates.csv
 *.dll
+
 /test/screenshots
 /cache
+/past_cleaning_params
