@@ -24,47 +24,6 @@ logger = logging.getLogger(__name__)
 X_180_ROTATION_MATRIX = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
 
 
-def em_format(particle) -> list:
-    """
-    Format particle data into a list
-    formatted for .em files
-
-    Parameters
-    ----------
-    particle : Particle
-        Particle to format
-
-    Returns
-    -------
-    list
-        List formatted for .em file
-
-    """
-    rx, ry, rz = particle.direction
-    # PlaceObject uses "zxz" euler angles, but saved in the order "zzx"
-    rotation_matrix = np.array([[0, 0, rx], [0, 0, ry], [0, 0, rz]])
-    euler = R.from_matrix(rotation_matrix).as_euler("xzx", degrees=True)
-    euler_formatted = [euler[0], euler[2], euler[1]]
-    return [
-        particle.cc_score,
-        0.0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        *particle.position,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        *euler_formatted,
-        1,
-    ]
-
-
 def purge_blank_tomos(mat_dict: dict, blank_tomos: set) -> dict:
     """
     Recursively purge all mention of blank tomograms from dict.
