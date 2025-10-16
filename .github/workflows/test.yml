@@ -87,7 +87,10 @@ jobs:
     - name: Generate test data
       run: |
         echo "Generating test data..."
-        python test/data/generate_small_lattice.py
+        docker run --rm \
+          -v $(pwd)/test:/app/test \
+          magpiem:test \
+          python test/data/generate_small_lattice.py
     
     - name: Run unit tests
       run: |
